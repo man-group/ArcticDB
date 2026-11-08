@@ -957,7 +957,10 @@ class Library:
 
     Arctic libraries support concurrent writes and reads to multiple symbols as well as concurrent reads to a single
     symbol. However, concurrent writers to a single symbol are not supported other than for primitives that
-    explicitly state support for single-symbol concurrent writes.
+    explicitly state support for single-symbol concurrent writes. Two overlapping writes to a symbol can take the same
+    version number, and then only the last one is kept. Writes that do not overlap are safe, from any number of
+    processes or `Library` instances. A read can be up to `VersionMap.ReloadInterval` (2 s by default) behind another
+    instance's writes.
     """
 
     def __init__(self, arctic_instance_description: str, nvs: NativeVersionStore):

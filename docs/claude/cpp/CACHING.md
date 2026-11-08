@@ -62,6 +62,14 @@ check_reload(store, stream_id, load_strategy)
             └─► load_via_ref_key() from storage
 ```
 
+Paths that build a new version on the latest one, or pin it, call `check_reload_and_confirm_head` instead: the write
+paths (through `get_next_version_id_and_optionally_latest_undeleted_version` and its batch form), `snapshot`,
+`add_to_snapshot`, and the symbol list's conflict resolution (`batch_check_latest_id_and_status`). When
+`check_reload` would return a fresh cached entry, it first reads the VERSION_REF (one GET) and keeps the entry only if
+its head is unchanged. Otherwise it calls `storage_reload`. Without this, a write within the interval after another
+`Library` wrote the symbol built on the cached head and reused the other write's version id, and that version was
+dropped from the chain. `VersionMap.ConfirmHeadBeforeWrite=0` turns this off.
+
 ## Configuration
 
 ### VersionMap.ReloadInterval
@@ -270,6 +278,7 @@ def reader_process(uri, lib_name, symbol, cache_interval_ns):
 | Function | Purpose |
 |----------|---------|
 | `check_reload()` | Main cache check and reload logic |
+| `check_reload_and_confirm_head()` | `check_reload` that confirms a fresh cached head with one VERSION_REF read, for writes and snapshots |
 | `has_cached_entry()` | Validates cache freshness |
 | `storage_reload()` | Loads version chain from storage |
 | `flush()` | Clears entire cache |

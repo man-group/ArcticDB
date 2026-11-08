@@ -73,7 +73,8 @@ inline std::shared_ptr<std::unordered_map<StreamId, SymbolStatus>> batch_check_l
     submit_tasks_for_range(
             *symbols,
             [store, version_map, &load_strategy](auto& symbol) {
-                return async::submit_io_task(CheckReloadTask{store, version_map, symbol, load_strategy});
+                // Settles the symbol list's conflicts, so must see another client's latest version
+                return async::submit_io_task(CheckReloadTask{store, version_map, symbol, load_strategy, true});
             },
             [output, mutex](const auto& id, const std::shared_ptr<VersionMapEntry>& entry) {
                 auto index_key = entry->get_first_index(false).first;
@@ -133,9 +134,12 @@ inline std::shared_ptr<std::unordered_map<StreamId, MaybeDeletedAtomKey>> batch_
     return output;
 }
 
+/**
+ * @param confirm_head see VersionMapImpl::check_reload_and_confirm_head
+ */
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_version(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::vector<StreamId>& stream_ids, bool include_deleted
+        const std::vector<StreamId>& stream_ids, bool include_deleted, bool confirm_head = false
 ) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
     const LoadStrategy load_strategy{
@@ -146,8 +150,9 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
 
     submit_tasks_for_range(
             stream_ids,
-            [store, version_map, &load_strategy](auto& stream_id) {
-                return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy});
+            [store, version_map, &load_strategy, confirm_head](auto& stream_id) {
+                return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy, confirm_head}
+                );
             },
             [output, include_deleted, mutex](auto id, auto entry) {
                 auto [index_key, deleted] = entry->get_first_index(include_deleted);
@@ -198,7 +203,7 @@ batch_get_next_version_id_and_optionally_latest_undeleted_version_async(
                 LoadType::LATEST,
                 get_latest_undeleted_version ? LoadObjective::UNDELETED_ONLY : LoadObjective::INCLUDE_DELETED
         };
-        vector_fut.push_back(async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy})
+        vector_fut.push_back(async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy, true})
                                      .thenValue([](auto entry) { return populate_update_info(*entry); }));
     }
     return vector_fut;

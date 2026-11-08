@@ -564,6 +564,30 @@ class VersionMapImpl {
     }
 
     /**
+     * Like check_reload, but a cached entry is returned only after one ref key read confirms that its head is still
+     * the symbol's head. For callers that build a new version on the latest one, or pin it: another client may have
+     * written since the entry was cached, and building on the cached head would reuse that client's version id.
+     */
+    std::shared_ptr<VersionMapEntry> check_reload_and_confirm_head(
+            std::shared_ptr<Store> store, const StreamId& stream_id, const LoadStrategy& load_strategy,
+            const char* function
+    ) {
+        const bool confirm_head = ConfigsMap::instance()->get_int("VersionMap.ConfirmHeadBeforeWrite", 1);
+        if (!confirm_head)
+            return check_reload(store, stream_id, load_strategy, function);
+
+        if (has_cached_entry(stream_id, load_strategy)) {
+            auto entry = get_entry(stream_id);
+            VersionMapEntry ref_entry(stream_id);
+            read_symbol_ref(store, stream_id, ref_entry);
+            if (ref_entry.head_ == entry->head_)
+                return entry;
+            ARCTICDB_DEBUG(log::version(), "Cached head for {} is not the head in storage, reloading", stream_id);
+        }
+        return storage_reload(store, stream_id, load_strategy);
+    }
+
+    /**
      * Returns the second undeleted index (after the write).
      */
     std::optional<AtomKey> do_write(

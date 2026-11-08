@@ -619,7 +619,7 @@ void PythonVersionStore::snapshot(
                 snap_name
         );
 
-        auto sym_index_map = batch_get_latest_version(store(), version_map(), filtered_symbols, false);
+        auto sym_index_map = batch_get_latest_version(store(), version_map(), filtered_symbols, false, true);
         index_keys = utils::values(*sym_index_map);
     } else {
         auto batch_result = batch_get_specific_version(

@@ -51,7 +51,7 @@ inline version_store::UpdateInfo get_next_version_id_and_optionally_latest_undel
             LoadType::LATEST,
             get_latest_undeleted_version ? LoadObjective::UNDELETED_ONLY : LoadObjective::INCLUDE_DELETED
     };
-    auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
+    auto entry = version_map->check_reload_and_confirm_head(store, stream_id, load_strategy, __FUNCTION__);
     return populate_update_info(*entry);
 }
 

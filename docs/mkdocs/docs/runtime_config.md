@@ -53,9 +53,15 @@ Configuration options are read once when the `Library` instance is created, and 
 
 ArcticDB library instances maintain a short-lived cache containing what it believes is the latest version for every encountered symbol.  This cache is invalidated after 2 seconds by default.
 
-As a result of this caching, it is theoretically possible for two independent library instances to disagree as to what the latest version of a symbol is for a short period of time.
+As a result of this caching, a read from one library instance can return an older version than another instance has just written, for up to this interval.
+
+Modifying operations (`write`, `append`, `update`, `delete_data_in_range`, `write_metadata`, their batch variants) and `snapshot` don't rely on it: they read the symbol's version reference from storage to confirm the latest version before building on it, which costs one small read per symbol. See [`VersionMap.ConfirmHeadBeforeWrite`](#versionmapconfirmheadbeforewrite).
 
 This caching is designed to reduce load on storage - if this is not a concern it can be safely disabled by setting this option to `0`.
+
+### VersionMap.ConfirmHeadBeforeWrite
+
+Default `1`. With `0`, modifying operations and `snapshot` use a cached latest version younger than `VersionMap.ReloadInterval` without checking storage, as in versions before this option was added. A write made shortly after another library instance wrote the same symbol can then build on an older version and take the same version number as the other write, replacing it in the version chain.
 
 Other than this, there is no client-side caching in ArcticDB.
 

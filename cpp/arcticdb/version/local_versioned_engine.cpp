@@ -2267,10 +2267,10 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
                 std::back_inserter(latest_ids),
                 [&sym_versions](const auto& key) { return sym_versions.find(key) == std::end(sym_versions); }
         );
-        latest_versions = batch_get_latest_version(store(), version_map(), latest_ids, false);
+        latest_versions = batch_get_latest_version(store(), version_map(), latest_ids, false, true);
     } else {
         specific_versions = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
-        latest_versions = batch_get_latest_version(store(), version_map(), stream_ids, false);
+        latest_versions = batch_get_latest_version(store(), version_map(), stream_ids, false, true);
     }
 
     return std::make_pair(specific_versions, latest_versions);

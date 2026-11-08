@@ -115,17 +115,21 @@ struct CheckReloadTask : async::BaseTask {
     const std::shared_ptr<VersionMap> version_map_;
     const StreamId stream_id_;
     const LoadStrategy load_strategy_;
+    const bool confirm_head_;
 
     CheckReloadTask(
             std::shared_ptr<Store> store, std::shared_ptr<VersionMap> version_map, StreamId stream_id,
-            LoadStrategy load_strategy
+            LoadStrategy load_strategy, bool confirm_head = false
     ) :
         store_(std::move(store)),
         version_map_(std::move(version_map)),
         stream_id_(std::move(stream_id)),
-        load_strategy_(load_strategy) {}
+        load_strategy_(load_strategy),
+        confirm_head_(confirm_head) {}
 
     std::shared_ptr<VersionMapEntry> operator()() const {
+        if (confirm_head_)
+            return version_map_->check_reload_and_confirm_head(store_, stream_id_, load_strategy_, __FUNCTION__);
         return version_map_->check_reload(store_, stream_id_, load_strategy_, __FUNCTION__);
     }
 };
@@ -208,7 +212,8 @@ struct WriteAndPrunePreviousTask : async::BaseTask {
         key_(std::move(key)),
         maybe_prev_(std::move(maybe_prev)) {}
 
-    folly::Future<std::vector<AtomKey>> operator()() {
+    // Not a Future: a Future-returning task that throws breaks its promise, hiding the exception
+    std::vector<AtomKey> operator()() {
         ScopedLock lock(version_map_->get_lock_object(key_.id()));
         return version_map_->write_and_prune_previous(store_, key_, maybe_prev_);
     }

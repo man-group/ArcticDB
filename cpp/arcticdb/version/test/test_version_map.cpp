@@ -544,6 +544,38 @@ TEST(VersionMap, FixRefKeyTombstones) {
     ASSERT_EQ(valid, false);
 }
 
+TEST(VersionMap, ConfirmHeadSeesAnotherClientsWriteWithinReloadInterval) {
+    ScopedConfig fresh("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    const LoadStrategy latest{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+    auto client_a = std::make_shared<VersionMap>();
+    auto client_b = std::make_shared<VersionMap>();
+    client_b->write_version(store, atom_key_with_version(id, 0, 1), std::nullopt);
+    client_a->write_version(store, atom_key_with_version(id, 1, 2), std::nullopt);
+
+    ASSERT_EQ(client_b->check_reload(store, id, latest, __FUNCTION__)->get_first_index(false).first->version_id(), 0);
+    auto entry = client_b->check_reload_and_confirm_head(store, id, latest, __FUNCTION__);
+    ASSERT_EQ(entry->get_first_index(false).first->version_id(), 1);
+    ASSERT_EQ(get_next_version_id_and_optionally_latest_undeleted_version(store, client_b, id).next_version_id_, 2);
+}
+
+TEST(VersionMap, NonIncreasingVersionOnPruneRaisesFromTask) {
+    ScopedConfig fresh("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+    auto client_a = std::make_shared<VersionMap>();
+    auto client_b = std::make_shared<VersionMap>();
+    client_b->write_version(store, atom_key_with_version(id, 0, 1), std::nullopt);
+    client_a->write_version(store, atom_key_with_version(id, 1, 2), std::nullopt);
+
+    // B's cache holds only the latest version, so pruning loads the chain and finds version 1 already written
+    auto fut = async::submit_io_task(
+            WriteAndPrunePreviousTask{store, client_b, atom_key_with_version(id, 1, 3), std::nullopt}
+    );
+    ASSERT_THROW(std::move(fut).get(), ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>);
+}
+
 TEST(VersionMap, RewriteVersionKeys) {
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test_rewrite_version_keys"};

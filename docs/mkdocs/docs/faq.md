@@ -150,7 +150,9 @@ ArcticDB support for streaming data is on our roadmap for the coming months
 
 Without a centralised server, ArcticDB does not support transactions. Instead, ArcticDB supports concurrent writers across symbols - **but not to a single symbol** (unless "staging the writes"). It is up to the writer to ensure that clients do not concurrently modify a single symbol.
 
-In the case of concurrent writers to a single symbol, the behaviour will be *last-writer-wins*. Data is not lost per se, but only the version of the *last-writer* will be accessible through the version chain.
+In the case of concurrent writers to a single symbol, the behaviour will be *last-writer-wins*. Two writers that overlap can build on the same version and take the same version number, and only the *last-writer*'s version stays in the version chain. The other writer's change is not in it, and its data is no longer readable.
+
+Writes that do not overlap are safe, even from different processes or `Library` instances: each write, append, update, range delete, metadata write and snapshot checks the symbol's latest version in storage before it builds on it. Reads may be up to [`VersionMap.ReloadInterval`](runtime_config.md#versionmapreloadinterval) (2 seconds by default) behind another `Library`'s writes.
 
 To reiterate, ArcticDB supports concurrent writers to multiple symbols, even within a single library.
 
