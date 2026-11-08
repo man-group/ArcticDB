@@ -20,8 +20,8 @@ inline VariantKey get_test_key(const std::string& name, entity::KeyType key_type
     return builder.build(name, key_type);
 }
 
-inline Segment get_test_segment() {
-    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+inline Segment get_test_segment(size_t num_rows = 10) {
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, num_rows, 0).segment_;
     auto codec_opts = proto::encoding::VariantCodec();
     return encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
 }
