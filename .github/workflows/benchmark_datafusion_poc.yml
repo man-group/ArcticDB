@@ -20,11 +20,20 @@
 #
 # Like `benchmark_real_io_ab.yml`, this deliberately does NOT collect. Results
 # leave as GitHub artifacts (7 days) and nothing is written to any results
-# library, and nothing touches real AWS S3 (the S3 storage is the local stack).
+# library. S3 is the local stack, except for the `aws-same-region` and
+# `aws-cross-region` profiles (ticket 65): those read a real bucket under a
+# per-run prefix that the `aws cleanup` job deletes, and `create:REGION` makes a
+# temporary cross-region bucket that it deletes too.
 #
-# COST: one on-demand m6i.4xlarge in eu-west-1 is $0.856/h, m6i.2xlarge $0.428/h.
-# The box is rented only after both builds succeed; the pilot is ~10-15 box
-# minutes (~$0.1), a full suite 1-2 h (~$1-1.7). GitHub-hosted builds are free.
+# COST: on-demand eu-west-1 m6i.4xlarge $0.856/h, m6i.2xlarge $0.428/h (m6a and
+# c6a are AMD alternatives for a second instance family). The box is rented only
+# after both builds succeed; the pilot is ~10-15 box minutes (~$0.1), a full suite
+# 1-2 h (~$1-1.7). GitHub-hosted builds are free. A real cross-region profile
+# also pays S3 transfer out of the bucket's region (~$0.02/GB).
+#
+# Several boxes: dispatch the same suite, poc_ref and instance_type once per box
+# with one `group` label; the PoC's `python -m bench.telemetry group LABEL` gives
+# box-to-box confidence intervals.
 name: EXPERIMENT DataFusion SQL PoC benchmarks
 
 on:
@@ -50,15 +59,21 @@ on:
           every engine, with MINMAX column stats on the ArcticDB libraries.
           `h2o_1e7` is h2o groupby (with and without NAs) and join at 1e7 on LMDB
           (dispatch it with instance_type m6i.4xlarge, the published c6id.4xlarge's 16 vCPU).
+          `check6_shippable` is the gate with `join_enumeration` off; `tpch_sf1_default_layout`
+          is cps 127, no stats, `join_enumeration` off; `check6_aws` is the gate's configuration
+          on real S3 (aws-same-region gated, aws-cross-region reported).
         type: choice
-        options: [tpch_sf01_lmdb_pilot, tpch_sf1, tpch_sf1_lmdb_cs, asof, qb, check6_gate, h2o_1e7]
+        options: [tpch_sf01_lmdb_pilot, tpch_sf1, tpch_sf1_lmdb_cs, asof, qb, check6_gate, h2o_1e7,
+                  check6_shippable, tpch_sf1_default_layout, check6_aws]
         default: tpch_sf01_lmdb_pilot
       storages:
         description: Comma-separated `lmdb,s3`. Empty keeps the suite's default.
         type: string
         default: ''
       profiles:
-        description: Comma-separated S3 profiles (`none,same-region,cross-region`). Empty keeps the suite's default.
+        description: >-
+          Comma-separated S3 profiles (`none,same-region,cross-region` on the local stack;
+          `aws-same-region,aws-cross-region` on real S3). Empty keeps the suite's default.
         type: string
         default: ''
       rounds:
@@ -70,13 +85,38 @@ on:
         type: string
         default: ''
       instance_type:
-        description: One of m6i.xlarge, m6i.2xlarge, m6i.4xlarge. Compare numbers only within one instance type.
+        description: >-
+          m6i.xlarge, m6i.2xlarge or m6i.4xlarge (Intel), or m6a.2xlarge, m6a.4xlarge, c6a.2xlarge,
+          c6a.4xlarge (AMD). Compare numbers only within one instance type.
         type: string
         default: m6i.4xlarge
       market_type:
         description: "`spot` or empty for on-demand. Timing runs should stay on-demand: an interruption loses the run."
         type: string
         default: ''
+      settings:
+        description: Comma-separated TPC-H session settings (`join_enumeration=false`), added to the suite's. Empty keeps the suite's.
+        type: string
+        default: ''
+      group:
+        description: A label shared by dispatches that are one sample of boxes (`check6-m6i-a`). Empty for a one-off run.
+        type: string
+        default: ''
+      flamegraph:
+        description: >-
+          Comma-separated TPC-H queries (`1,12,11,13,4`) to record with `perf` after the suite, on LMDB,
+          for lib.sql and DataFusion-Parquet; SVGs go to a `poc-flamegraphs-*` artifact. Builds
+          arcticdb_ext with its symbol table. Empty for none.
+        type: string
+        default: ''
+      aws_same_bucket:
+        description: The eu-west-1 bucket for `aws-same-region`. The run uses and deletes a per-run prefix in it.
+        type: string
+        default: arcticdb-ci-test-bucket-02
+      aws_cross_bucket:
+        description: "`BUCKET:REGION` for `aws-cross-region`, or `create:REGION` for a temporary bucket the run deletes."
+        type: string
+        default: 'create:us-east-1'
 
 permissions:
   contents: read
@@ -93,6 +133,7 @@ env:
   RUNNER_AMI: ami-0936679d3002e5be3
   RUST_TOOLCHAIN: "1.99.1"   # >= 1.95; the toolchain the PoC is built with locally
   TPCHGEN_VERSION: "4.0.0"
+  INFERNO_VERSION: "0.12.8"   # perf script -> flame graph SVG, only with the `flamegraph` input
   MATURIN_SPEC: "maturin>=1.10,<2"
   MANYLINUX_IMAGE: quay.io/pypa/manylinux_2_28_x86_64
   DEV_IMAGE: ghcr.io/man-group/arcticdb-dev:latest
@@ -108,29 +149,53 @@ jobs:
     timeout-minutes: 10
     outputs:
       sha: ${{ steps.sha.outputs.sha }}
+      # `BUCKET:REGION:PREFIX` per real-S3 profile the run reads; empty when it reads none
+      aws_same: ${{ steps.aws.outputs.same }}
+      aws_cross: ${{ steps.aws.outputs.cross }}
+      # `BUCKET:REGION` of a bucket this run created and `aws cleanup` deletes
+      aws_created: ${{ steps.aws.outputs.created }}
     steps:
       - name: check the inputs
         env:
+          SUITE: ${{ inputs.suite }}
           INSTANCE_TYPE: ${{ inputs.instance_type }}
           MARKET_TYPE: ${{ inputs.market_type }}
           STORAGES: ${{ inputs.storages }}
           PROFILES: ${{ inputs.profiles }}
           ROUNDS: ${{ inputs.rounds }}
           RUNS: ${{ inputs.runs }}
+          SETTINGS: ${{ inputs.settings }}
+          GROUP: ${{ inputs.group }}
+          FLAMEGRAPH: ${{ inputs.flamegraph }}
+          AWS_SAME_BUCKET: ${{ inputs.aws_same_bucket }}
+          AWS_CROSS_BUCKET: ${{ inputs.aws_cross_bucket }}
         run: |
           case "$INSTANCE_TYPE" in
-            m6i.xlarge|m6i.2xlarge|m6i.4xlarge) ;;
-            *) echo "::error::instance_type $INSTANCE_TYPE is not one of m6i.xlarge, m6i.2xlarge, m6i.4xlarge"; exit 1 ;;
+            m6i.xlarge|m6i.2xlarge|m6i.4xlarge|m6a.2xlarge|m6a.4xlarge|c6a.2xlarge|c6a.4xlarge) ;;
+            *) echo "::error::instance_type $INSTANCE_TYPE is not an allowed m6i, m6a or c6a size"; exit 1 ;;
           esac
           case "$MARKET_TYPE" in
             ''|spot) ;;
             *) echo "::error::market_type must be empty (on-demand) or spot"; exit 1 ;;
           esac
           [[ -z "$STORAGES" || "$STORAGES" =~ ^(lmdb|s3)(,(lmdb|s3))*$ ]] || { echo "::error::bad storages"; exit 1; }
-          [[ -z "$PROFILES" || "$PROFILES" =~ ^(none|same-region|cross-region)(,(none|same-region|cross-region))*$ ]] \
-            || { echo "::error::bad profiles"; exit 1; }
+          p='(none|same-region|cross-region|aws-same-region|aws-cross-region)'
+          [[ -z "$PROFILES" || "$PROFILES" =~ ^$p(,$p)*$ ]] || { echo "::error::bad profiles"; exit 1; }
           [[ -z "$ROUNDS" || "$ROUNDS" =~ ^[1-9][0-9]?$ ]] || { echo "::error::rounds must be 1-99"; exit 1; }
           [[ -z "$RUNS" || "$RUNS" =~ ^[1-9][0-9]?$ ]] || { echo "::error::runs must be 1-99"; exit 1; }
+          kv='[a-z_.]+=[A-Za-z0-9_.-]+'
+          [[ -z "$SETTINGS" || "$SETTINGS" =~ ^$kv(,$kv)*$ ]] || { echo "::error::settings must be KEY=VALUE,..."; exit 1; }
+          [[ -z "$GROUP" || "$GROUP" =~ ^[A-Za-z0-9_.-]{1,40}$ ]] || { echo "::error::group must be 1-40 of [A-Za-z0-9_.-]"; exit 1; }
+          [[ -z "$FLAMEGRAPH" || "$FLAMEGRAPH" =~ ^([1-9]|1[0-9]|2[0-3])(,([1-9]|1[0-9]|2[0-3]))*$ ]] \
+            || { echo "::error::flamegraph must be TPC-H query numbers, e.g. 1,12"; exit 1; }
+          tpch() { [[ "$SUITE" == tpch_* || "$SUITE" == check6_* ]]; }
+          if [ -n "$SETTINGS$FLAMEGRAPH" ] && ! tpch; then
+            echo "::error::settings and flamegraph are TPC-H only; $SUITE is not"; exit 1
+          fi
+          [[ "$AWS_SAME_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || { echo "::error::bad aws_same_bucket"; exit 1; }
+          [[ "$AWS_CROSS_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]:[a-z]{2}-[a-z]+-[0-9]$ ]] \
+            || { echo "::error::aws_cross_bucket must be BUCKET:REGION or create:REGION"; exit 1; }
+          [[ "$AWS_CROSS_BUCKET" != *:eu-west-1 ]] || { echo "::error::aws_cross_bucket must not be in eu-west-1, the box's region"; exit 1; }
 
       - name: check out the PoC
         uses: actions/checkout@v4
@@ -153,6 +218,9 @@ jobs:
           PROFILES: ${{ inputs.profiles }}
           ROUNDS: ${{ inputs.rounds }}
           RUNS: ${{ inputs.runs }}
+          SETTINGS: ${{ inputs.settings }}
+          GROUP: ${{ inputs.group }}
+          FLAMEGRAPH: ${{ inputs.flamegraph }}
         run: |
           test -f rust/arcticdb_sql/bench/ec2_driver.py \
             || { echo "::error::$POC_REF has no rust/arcticdb_sql/bench/ec2_driver.py"; exit 1; }
@@ -165,7 +233,59 @@ jobs:
             echo "- box: \`$INSTANCE_TYPE\` ${MARKET_TYPE:-on-demand}, AMI \`$RUNNER_AMI\`, eu-west-1"
             d='suite default'
             echo "- storages \`${STORAGES:-$d}\`, profiles \`${PROFILES:-$d}\`, rounds \`${ROUNDS:-$d}\`, runs \`${RUNS:-$d}\`"
+            echo "- settings \`${SETTINGS:-$d}\`, group \`${GROUP:-none}\`, flame graphs \`${FLAMEGRAPH:-none}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Real S3 (ticket 65), only when the run reads an `aws-*` profile: the box has no
+      # instance role, so the engines get the CI's S3 key. This step checks, before
+      # anything is built or rented, that the key can write, read (path-style, as
+      # DataFusion's `register_s3` does) and delete under the run's prefix in each
+      # bucket, and creates the temporary cross-region bucket for `create:REGION`.
+      # `aws cleanup` deletes the prefix, and that bucket, whatever happens.
+      - name: real S3
+        id: aws
+        env:
+          SUITE: ${{ inputs.suite }}
+          STORAGES: ${{ inputs.storages }}
+          PROFILES: ${{ inputs.profiles }}
+          AWS_SAME_BUCKET: ${{ inputs.aws_same_bucket }}
+          AWS_CROSS_BUCKET: ${{ inputs.aws_cross_bucket }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+          PREFIX: dfpoc-bench/${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          want=$PROFILES
+          if [ -z "$want" ] && [ "$SUITE" = check6_aws ]; then want=aws-same-region,aws-cross-region; fi
+          if [ -n "$STORAGES" ] && [[ ",$STORAGES," != *,s3,* ]]; then want=''; fi
+          if [[ ",$want," != *,aws-* ]]; then echo "no real-S3 profile"; exit 0; fi
+          aws configure set default.s3.addressing_style path
+          probe() {   # $1 bucket, $2 region
+            local key="$PREFIX/_plan_probe" url="https://s3.$2.amazonaws.com"
+            echo probe > /tmp/probe
+            aws s3api put-object --endpoint-url "$url" --region "$2" --bucket "$1" --key "$key" --body /tmp/probe > /dev/null
+            aws s3api get-object --endpoint-url "$url" --region "$2" --bucket "$1" --key "$key" /tmp/probe.back > /dev/null
+            aws s3api delete-object --endpoint-url "$url" --region "$2" --bucket "$1" --key "$key"
+            echo "s3://$1/$PREFIX ($2): write, read and delete ok"
+          }
+          if [[ ",$want," == *,aws-same-region,* ]]; then
+            probe "$AWS_SAME_BUCKET" eu-west-1
+            printf 'same=%s:eu-west-1:%s\n' "$AWS_SAME_BUCKET" "$PREFIX" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ ",$want," == *,aws-cross-region,* ]]; then
+            bucket=${AWS_CROSS_BUCKET%%:*} region=${AWS_CROSS_BUCKET##*:}
+            if [ "$bucket" = create ]; then
+              bucket="arcticdb-dfpoc-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+              cfg=(); [ "$region" = us-east-1 ] || cfg=(--create-bucket-configuration "LocationConstraint=$region")
+              aws s3api create-bucket --region "$region" --bucket "$bucket" ${cfg[@]+"${cfg[@]}"} > /dev/null
+              # recorded first, so `aws cleanup` removes the bucket even if the probe fails
+              printf 'created=%s:%s\n' "$bucket" "$region" >> "$GITHUB_OUTPUT"
+              echo "created s3://$bucket in $region"
+            fi
+            probe "$bucket" "$region"
+            printf 'cross=%s:%s:%s\n' "$bucket" "$region" "$PREFIX" >> "$GITHUB_OUTPUT"
+          fi
 
   # ~6 s; the same manylinux image `benchmark_winds.yml` builds with.
   cibw_docker_image:
@@ -205,7 +325,9 @@ jobs:
       VCPKG_MAN_NUGET_TOKEN: ${{ secrets.VCPKG_MAN_NUGET_TOKEN }}
       CMAKE_C_COMPILER_LAUNCHER: sccache
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
-      ARCTIC_CMAKE_PRESET: linux-release
+      # With flame graphs, `benchmark_commit_ab.yml`'s preset that keeps the
+      # extension's symbol table (see `keep the C++ symbols` there); same -O3 code.
+      ARCTIC_CMAKE_PRESET: ${{ inputs.flamegraph != '' && 'linux-release-symbols' || 'linux-release' }}
       ARCTICDB_BUILD_DIR: /tmp/cpp_build
       CIBW_BUILD: cp311-manylinux_x86_64
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
@@ -268,6 +390,30 @@ jobs:
         with:
           python-version: '3.14'   # host interpreter that runs cibuildwheel
 
+      # Copied from `benchmark_commit_ab.yml`: a user preset that inherits
+      # linux-release with ARCTICDB_KEEP_DEBUG_SYMBOLS=ON, in the same build
+      # directory, so the sccache bucket still hits.
+      - name: keep the C++ symbols in the extension
+        if: inputs.flamegraph != ''
+        run: |
+          cat > cpp/CMakeUserPresets.json <<'JSON'
+          {
+            "version": 3,
+            "configurePresets": [
+              {
+                "name": "linux-release-symbols",
+                "inherits": "linux-release",
+                "binaryDir": "${sourceDir}/out/linux-release-build",
+                "cacheVariables": {
+                  "ARCTICDB_KEEP_DEBUG_SYMBOLS": "ON"
+                }
+              }
+            ]
+          }
+          JSON
+          mkdir -p "$ARCTICDB_BUILD_DIR/linux-release-build"
+          ln -sfn linux-release-build "$ARCTICDB_BUILD_DIR/linux-release-symbols-build"
+
       - name: build the wheel
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
@@ -275,6 +421,23 @@ jobs:
         run: |
           python -m pip install pipx --retries 3 --timeout 180
           python -m pipx run "cibuildwheel==$CIBW_VERSION"
+          ls -l wheelhouse
+
+      # perf names frames from `.symtab`; the DWARF is only size, so drop it and
+      # repack (`wheel pack` rewrites RECORD). Fails if no symbol table is left.
+      - name: drop the DWARF, keep the symbol table
+        if: inputs.flamegraph != ''
+        run: |
+          set -euo pipefail
+          python -m pip install wheel --retries 3 --timeout 180
+          wheel=$(ls wheelhouse/*.whl)
+          rm -rf /tmp/unpacked && mkdir -p /tmp/unpacked
+          python -m wheel unpack "$wheel" -d /tmp/unpacked
+          so=$(find /tmp/unpacked -name 'arcticdb_ext*.so' | head -1)
+          objcopy --strip-debug "$so"
+          readelf -SW "$so" | grep -q '\.symtab' || { echo "::error::$(basename "$so") has no .symtab"; exit 1; }
+          rm "$wheel"
+          python -m wheel pack /tmp/unpacked/* -d wheelhouse
           ls -l wheelhouse
 
       - uses: actions/upload-artifact@v4
@@ -317,10 +480,12 @@ jobs:
           path: poc
 
       - name: build in manylinux_2_28
+        env:
+          FLAMEGRAPH: ${{ inputs.flamegraph }}
         run: |
           mkdir -p out/bin out/dist out/cargo
           docker run --rm \
-            -e RUST_TOOLCHAIN -e TPCHGEN_VERSION -e MATURIN_SPEC \
+            -e RUST_TOOLCHAIN -e TPCHGEN_VERSION -e MATURIN_SPEC -e INFERNO_VERSION -e FLAMEGRAPH \
             -e CARGO_HOME=/w/out/cargo -e CARGO_TARGET_DIR=/w/target \
             -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
             -v "$GITHUB_WORKSPACE:/w" -w /w "$MANYLINUX_IMAGE" bash -euo pipefail -c '
@@ -336,6 +501,7 @@ jobs:
               $PY -m maturin build --release --locked -i "$PY" --compatibility manylinux_2_28 --out /w/out/dist
               cargo install --locked --root /w/out "tpchgen-cli@$TPCHGEN_VERSION"
               /w/out/bin/tpchgen-cli --version
+              if [ -n "$FLAMEGRAPH" ]; then cargo install --locked --root /w/out "inferno@$INFERNO_VERSION"; fi
             '
 
       # Everything the box needs from the PoC tree besides the two wheels: the
@@ -351,6 +517,9 @@ jobs:
           cp -r "$df/benchmarks/sql_benchmarks" stage/datafusion/benchmarks/
           tar -C poc -cf - --exclude=target --exclude=__pycache__ rust/arcticdb_sql | tar -C stage/src -xf -
           cp out/bin/tpchgen-cli stage/bin/
+          for tool in inferno-collapse-perf inferno-flamegraph; do
+            if [ -x "out/bin/$tool" ]; then cp "out/bin/$tool" stage/bin/; fi
+          done
           cp out/dist/*.whl stage/
           ls -l stage stage/bin
           du -sh stage
@@ -406,6 +575,7 @@ jobs:
             echo "nproc $(nproc), $(grep MemTotal /proc/meminfo)"
             df -h "$GITHUB_WORKSPACE" /var/lib/docker 2>/dev/null || df -h
             docker version --format 'docker {{.Server.Version}}'
+            echo "perf_event_paranoid $(cat /proc/sys/kernel/perf_event_paranoid 2>/dev/null || echo unknown)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/download-artifact@v8
@@ -431,8 +601,15 @@ jobs:
           PROFILES: ${{ inputs.profiles }}
           ROUNDS: ${{ inputs.rounds }}
           RUNS: ${{ inputs.runs }}
+          SETTINGS: ${{ inputs.settings }}
+          FLAMEGRAPH: ${{ inputs.flamegraph }}
           GH_TOKEN: ${{ github.token }}
           LIVE_EVENTS_INTERVAL: '60'
+          # Real S3 (the `real S3` plan step): the targets, and the CI key only when there is one
+          DFPOC_AWS_S3_SAME_REGION: ${{ needs.plan.outputs.aws_same }}
+          DFPOC_AWS_S3_CROSS_REGION: ${{ needs.plan.outputs.aws_cross }}
+          AWS_ACCESS_KEY_ID: ${{ (needs.plan.outputs.aws_same != '' || needs.plan.outputs.aws_cross != '') && secrets.AWS_S3_ACCESS_KEY || '' }}
+          AWS_SECRET_ACCESS_KEY: ${{ (needs.plan.outputs.aws_same != '' || needs.plan.outputs.aws_cross != '') && secrets.AWS_S3_SECRET_KEY || '' }}
         run: |
           set -euo pipefail
           mkdir -p "$WORK/out" "$WORK/data"
@@ -450,8 +627,20 @@ jobs:
           [ -n "$PROFILES" ] && args+=(--profiles "$PROFILES")
           [ -n "$ROUNDS" ] && args+=(--rounds "$ROUNDS")
           [ -n "$RUNS" ] && args+=(--runs "$RUNS")
+          if [ -n "$SETTINGS" ]; then
+            IFS=, read -ra settings <<< "$SETTINGS"
+            for s in "${settings[@]}"; do args+=(--setting "$s"); done
+          fi
           cd /work/src/rust/arcticdb_sql
-          /venv/bin/python -m bench.ec2_driver "${args[@]}"
+          rc=0
+          /venv/bin/python -m bench.ec2_driver "${args[@]}" || rc=$?
+          # After the timed suite, so it never perturbs a timing; never fails the run.
+          if [ -n "$FLAMEGRAPH" ]; then
+            dnf install -y -q perf > /dev/null || dnf install -y -q --enablerepo='*' perf > /dev/null || true
+            /venv/bin/python -m bench.perf_flamegraph --out-dir /work/out --data-dir /work/data \
+              --queries "$FLAMEGRAPH" --tools-dir /work/bin || echo "flame graphs failed (ignored)"
+          fi
+          exit $rc
           SH
           # Live per-query events (rust/arcticdb_sql/bench/TELEMETRY.md in the PoC):
           # the driver appends DFPOC_EVENT lines to out/events.jsonl, and every
@@ -481,13 +670,19 @@ jobs:
           ( while sleep "$LIVE_EVENTS_INTERVAL"; do live_post ''; done ) &
           poster=$!
 
+          extra=()
+          if [ -n "${DFPOC_AWS_S3_SAME_REGION:-}${DFPOC_AWS_S3_CROSS_REGION:-}" ]; then
+            extra+=(-e DFPOC_AWS_S3_SAME_REGION -e DFPOC_AWS_S3_CROSS_REGION -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
+          fi
+          # What `perf record` needs in the container and no more (benchmark_worker.yml, gha 74)
+          if [ -n "${FLAMEGRAPH:-}" ]; then extra+=(--cap-add PERFMON --cap-add SYS_ADMIN); fi
           rc=0
           docker run --rm --network host \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$WORK:/work" \
-            -e SUITE -e STORAGES -e PROFILES -e ROUNDS -e RUNS -e DOCKER_CLI_URL \
+            -e SUITE -e STORAGES -e PROFILES -e ROUNDS -e RUNS -e SETTINGS -e FLAMEGRAPH -e DOCKER_CLI_URL \
             -e DFPOC_EVENTS_FILE=/work/out/events.jsonl \
-            "$DEV_IMAGE" bash /work/run.sh || rc=$?
+            ${extra[@]+"${extra[@]}"} "$DEV_IMAGE" bash /work/run.sh || rc=$?
           kill "$poster" 2> /dev/null || true
           wait "$poster" 2> /dev/null || true
           live_post "\"status\":\"completed\",\"conclusion\":\"neutral\","
@@ -499,7 +694,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: poc-results-${{ inputs.suite }}-${{ inputs.instance_type }}
-          path: ${{ env.WORK }}/out/
+          path: |
+            ${{ env.WORK }}/out/
+            !${{ env.WORK }}/out/flamegraphs/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: upload the flame graphs
+        if: always() && inputs.flamegraph != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc-flamegraphs-${{ inputs.suite }}-${{ inputs.instance_type }}
+          path: ${{ env.WORK }}/out/flamegraphs/
           if-no-files-found: warn
           retention-days: 7
 
@@ -516,6 +722,47 @@ jobs:
         run: |
           echo "::error::No EC2 runner arrived (start: ${START_RESULT}). A start that died after launch can orphan an instance: look for one tagged RunId=${RUN_ID}."
           exit 1
+
+  # Deletes the run's prefix in every real-S3 bucket, and the bucket it created,
+  # on a GitHub-hosted runner, whatever happened to the box. A failure here can
+  # leave data or a bucket behind: look for `dfpoc-bench/<run id>-*` prefixes and
+  # `arcticdb-dfpoc-<run id>-*` buckets. The weekly `scheduled_cleanup.yml`
+  # empties the CI test bucket anyway.
+  aws_cleanup:
+    name: aws cleanup
+    needs: [plan, bench]
+    if: always() && (needs.plan.outputs.aws_same != '' || needs.plan.outputs.aws_cross != '' || needs.plan.outputs.aws_created != '')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      SAME: ${{ needs.plan.outputs.aws_same }}
+      CROSS: ${{ needs.plan.outputs.aws_cross }}
+      CREATED: ${{ needs.plan.outputs.aws_created }}
+      PREFIX: dfpoc-bench/${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: delete the run's objects and bucket
+        run: |
+          set -uo pipefail
+          rc=0
+          for target in "$SAME" "$CROSS"; do
+            [ -n "$target" ] || continue
+            IFS=: read -r bucket region prefix <<< "$target"
+            [ "$prefix" = "$PREFIX" ] || { echo "::error::refusing to delete $prefix, not this run's prefix"; rc=1; continue; }
+            if aws s3 rm --region "$region" --recursive --only-show-errors "s3://$bucket/$prefix/"; then
+              echo "deleted s3://$bucket/$prefix/"
+            else
+              rc=1
+            fi
+          done
+          if [ -n "$CREATED" ]; then
+            IFS=: read -r bucket region <<< "$CREATED"
+            [[ "$bucket" == "arcticdb-dfpoc-$GITHUB_RUN_ID-"* ]] || { echo "::error::refusing to delete $bucket"; exit 1; }
+            if aws s3 rb --region "$region" --force "s3://$bucket"; then echo "deleted bucket s3://$bucket"; else rc=1; fi
+          fi
+          [ $rc -eq 0 ] || echo "::error::cleanup incomplete: see above for what is left"
+          exit $rc
 
   # `if: always()`, not `!cancelled()`: a cancelled run is exactly when a
   # forgotten instance costs money. The window this cannot cover is a cancel
