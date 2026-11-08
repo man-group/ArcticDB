@@ -247,11 +247,16 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Catches setup errors before ~25 min of builds and a rented box (run 42413378578 found
-      # DuckDB's httpfs missing after 50 min): in the bench image, with the suite's Python
-      # packages installed as `run the suite` installs them, the PoC's `bench.preflight`
-      # imports the driver, resolves the suite and its inputs, and checks the packages
-      # (httpfs when the suite reads S3). The PoC's own builds are stubbed there.
-      - name: preflight the suite in the bench image
+      # DuckDB's httpfs missing after 50 min): with the suite's Python packages installed as
+      # `run the suite` installs them, on the bench's Python (cp311, the wheel's), the PoC's
+      # `bench.preflight` imports the driver, resolves the suite and its inputs, and checks the
+      # packages (httpfs when the suite reads S3). The PoC's own builds are stubbed. On the
+      # runner, not in the bench image: pulling that image took 16 min on a cold host.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: preflight the suite
         env:
           SUITE: ${{ inputs.suite }}
           STORAGES: ${{ inputs.storages }}
@@ -273,16 +278,14 @@ jobs:
             IFS=, read -ra settings <<< "$SETTINGS"
             for s in "${settings[@]}"; do args+=(--setting "$s"); done
           fi
-          docker pull -q "$DEV_IMAGE"
+          cd rust/arcticdb_sql
+          python -m venv /tmp/preflight-venv
+          py=/tmp/preflight-venv/bin/python
           # The [test] extra from the PoC's pyproject, plus boto3 and arcticdb's pandas and numpy
-          docker run --rm -v "$PWD/rust/arcticdb_sql:/src:ro" -w /src -e PYTHONDONTWRITEBYTECODE=1 "$DEV_IMAGE" bash -c '
-            set -euo pipefail
-            python -m venv /venv
-            deps=$(/venv/bin/python -c "import tomllib; print(\"\n\".join(tomllib.load(open(\"pyproject.toml\", \"rb\"))[\"project\"][\"optional-dependencies\"][\"test\"]))")
-            mapfile -t deps <<< "$deps"
-            /venv/bin/python -m pip install -q --upgrade pip
-            /venv/bin/python -m pip install -q "${deps[@]}" boto3 pandas numpy
-            /venv/bin/python -m bench.preflight "$@"' _ "${args[@]}"
+          mapfile -t deps < <("$py" -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["test"]))')
+          "$py" -m pip install -q --upgrade pip
+          "$py" -m pip install -q "${deps[@]}" boto3 pandas numpy
+          PYTHONDONTWRITEBYTECODE=1 "$py" -m bench.preflight "${args[@]}"
 
       # Real S3 (ticket 65), only when the run reads an `aws-*` profile: the box has no
       # instance role, so the engines get the CI's S3 key. This step checks, before
