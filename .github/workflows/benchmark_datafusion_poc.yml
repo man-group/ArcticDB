@@ -535,6 +535,20 @@ jobs:
         with:
           python-version: '3.14'   # host interpreter that runs cibuildwheel
 
+      # vcpkg's S3 asset-cache fallback (`X_VCPKG_ASSET_SOURCES`, an `aws s3 cp` x-script) runs
+      # inside the manylinux container, which has no `aws` (exit 127 when GitHub releases 504ed,
+      # runs 42476921761, 42476929001). The snapshot's own before-all, with awscli installed first.
+      - name: aws CLI in the build container
+        run: |
+          set -euo pipefail
+          before=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["cibuildwheel"]["linux"]["before-all"])')
+          {
+            echo 'CIBW_BEFORE_ALL_LINUX<<CIBW_EOF'
+            echo 'yum install -y -q awscli || echo "awscli not installed; the S3 asset cache is unavailable"'
+            printf '%s\n' "$before"
+            echo 'CIBW_EOF'
+          } | tee -a "$GITHUB_ENV"
+
       # Copied from `benchmark_commit_ab.yml`: a user preset that inherits
       # linux-release with ARCTICDB_KEEP_DEBUG_SYMBOLS=ON, in the same build
       # directory, so the sccache bucket still hits.
