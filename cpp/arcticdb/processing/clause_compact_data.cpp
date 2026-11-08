@@ -9,7 +9,10 @@
 #include <arcticdb/processing/clause.hpp>
 
 #include <cstdint>
+#include <map>
+#include <numeric>
 #include <set>
+#include <tuple>
 
 #include <arcticdb/column_store/column_reslicer.hpp>
 #include <arcticdb/column_store/segment_reslicer.hpp>
@@ -147,31 +150,49 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
         return std::tie(left.col_range().first, left.row_range().first) <
                std::tie(right.col_range().first, right.row_range().first);
     });
-    std::vector<std::vector<size_t>> res;
-    std::vector<size_t> current;
-    auto row_range = retained_processing_row_ranges.cbegin();
+    const std::vector<RowRange> output_row_ranges(
+            retained_processing_row_ranges.cbegin(), retained_processing_row_ranges.cend()
+    );
+    auto output_row_range_idx = [&output_row_ranges](const RowRange& row_range) -> size_t {
+        auto it = std::ranges::upper_bound(output_row_ranges, row_range.first, {}, [](const RowRange& output_range) {
+            return output_range.first;
+        });
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                it != output_row_ranges.cbegin() && std::prev(it)->contains(row_range.first),
+                "CompactDataClause could not find output row range for row range {}",
+                row_range
+        );
+        return std::distance(output_row_ranges.cbegin(), std::prev(it));
+    };
+    // Row-slices in the same output row range may be column-sliced differently, e.g. if columns_per_segment was
+    // changed between writes. Such output row ranges are processed as one unit spanning all of the columns.
     // Use first element of col_range rather than full col range equality so that it works with dynamic schema where
     // number of columns in each row slice can be different
-    auto col_range_start = ranges_and_keys.front().col_range().first;
-    for (const auto& [idx, range_and_key] : folly::enumerate(ranges_and_keys)) {
-        if (range_and_key.col_range().first == col_range_start) {
-            if (row_range->contains(range_and_key.row_range().first)) {
-                current.emplace_back(idx);
-            } else {
-                res.emplace_back(std::move(current));
-                current = std::vector<size_t>{idx};
-                ++row_range;
-            }
-        } else {
-            // Moving to the next column slice
-            res.emplace_back(std::move(current));
-            current = std::vector<size_t>{idx};
-            col_range_start = range_and_key.col_range().first;
-            row_range = retained_processing_row_ranges.cbegin();
-        }
+    std::vector<std::map<size_t, std::set<size_t>>> col_starts_by_row_slice(output_row_ranges.size());
+    for (const auto& range_and_key : ranges_and_keys) {
+        col_starts_by_row_slice[output_row_range_idx(range_and_key.row_range())][range_and_key.row_range().first]
+                .insert(range_and_key.col_range().first);
     }
-    if (!current.empty()) {
-        res.emplace_back(std::move(current));
+    std::vector<bool> mixed_column_slicing(output_row_ranges.size(), false);
+    for (const auto& [idx, col_starts] : folly::enumerate(col_starts_by_row_slice)) {
+        mixed_column_slicing[idx] = std::ranges::any_of(col_starts, [&col_starts](const auto& row_slice_col_starts) {
+            return row_slice_col_starts.second != col_starts.cbegin()->second;
+        });
+    }
+    // Keyed on (mixed column slicing, column slice start, output row range index), with column slice start 0 for
+    // mixed column slicing
+    std::map<std::tuple<bool, size_t, size_t>, std::vector<size_t>> groups;
+    for (const auto& [idx, range_and_key] : folly::enumerate(ranges_and_keys)) {
+        const auto row_range_idx = output_row_range_idx(range_and_key.row_range());
+        const auto key = mixed_column_slicing[row_range_idx]
+                                 ? std::make_tuple(true, size_t{0}, row_range_idx)
+                                 : std::make_tuple(false, range_and_key.col_range().first, row_range_idx);
+        groups[key].emplace_back(idx);
+    }
+    std::vector<std::vector<size_t>> res;
+    res.reserve(groups.size());
+    for (auto& [key, indexes] : groups) {
+        res.emplace_back(std::move(indexes));
     }
     log::version().debug("CompactDataClause processing {} data keys in {} batches", ranges_and_keys.size(), res.size());
     return res;
@@ -188,6 +209,11 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
             *component_manager_, entity_ids
     );
     auto col_range_start = proc.col_ranges_->front()->first;
+    if (std::ranges::any_of(*proc.col_ranges_, [col_range_start](const std::shared_ptr<ColRange>& col_range) {
+            return col_range->first != col_range_start;
+        })) {
+        return process_mixed_column_slicing(std::move(proc));
+    }
     log::version().debug(
             "CompactDataClause processing {} segments with starting column {} and with row ranges spanning [{:d}, "
             "{:d}]",
@@ -200,7 +226,13 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     // Presence of frame implies we are doing inline compaction in append. The second condition means we are processing
     // the last row-slice of the existing data, and so it must be combined with the frame
     if (frame_ && frame_->offset == proc.row_ranges_->back()->second) {
-        add_segment_from_frame(proc, col_range_start, segments);
+        add_segment_from_frame(
+                ColRange{
+                        col_range_start,
+                        dynamic_schema_ ? frame_->desc().field_count() : proc.col_ranges_->front()->second
+                },
+                segments
+        );
     }
 
     SegmentReslicer reslicer{max_rows_per_segment_};
@@ -233,9 +265,104 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     return push_entities(*component_manager_, std::move(proc));
 }
 
-void CompactDataClause::add_segment_from_frame(
-        const ProcessingUnit& proc, size_t col_range_start, std::vector<SegmentInMemory>& segments
-) const {
+namespace {
+// Builds a segment holding the index column(s) and data columns [begin, end) (excluding the index) of segment, moving
+// the columns out of segment so that SegmentReslicer can free them as it goes. The index column(s) are moved only on
+// the last use, and copied otherwise.
+SegmentInMemory take_columns(SegmentInMemory& segment, size_t begin, size_t end, bool last_use) {
+    const auto& desc = segment.descriptor();
+    const auto index_field_count = desc.index().field_count();
+    const auto row_count = segment.row_count();
+    SegmentInMemory res;
+    res.attach_descriptor(
+            std::make_shared<StreamDescriptor>(desc.segment_desc_, std::make_shared<FieldCollection>(), desc.stream_id_)
+    );
+    for (size_t idx = 0; idx < index_field_count; ++idx) {
+        auto column = last_use ? std::move(segment.columns().at(idx))
+                               : std::make_shared<Column>(segment.column(static_cast<position_t>(idx)).clone());
+        res.add_column(segment.field(idx), column);
+    }
+    for (size_t idx = index_field_count + begin; idx < index_field_count + end; ++idx) {
+        res.add_column(segment.field(idx), std::move(segment.columns().at(idx)));
+    }
+    res.set_string_pool(segment.string_pool_ptr());
+    res.set_row_id(static_cast<ssize_t>(row_count) - 1);
+    return res;
+}
+} // namespace
+
+std::vector<EntityId> CompactDataClause::process_mixed_column_slicing(ProcessingUnit&& proc) const {
+    // Only static schema data can reach here. Stock writers never column-slice dynamic schema data.
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            !dynamic_schema_, "CompactDataClause cannot combine differently column-sliced data with dynamic schema"
+    );
+    const auto num_segments = proc.segments_->size();
+    // Output column slices are the common refinement of the input column slices, so every input segment splits into
+    // whole output column slices
+    std::set<size_t> boundaries;
+    for (const auto& col_range : *proc.col_ranges_) {
+        boundaries.insert(col_range->first);
+        boundaries.insert(col_range->second);
+    }
+    const std::vector<size_t> col_starts(boundaries.cbegin(), boundaries.cend());
+    std::vector<size_t> order(num_segments);
+    std::iota(order.begin(), order.end(), 0);
+    std::ranges::sort(order, [&proc](size_t left, size_t right) {
+        return std::tie(proc.row_ranges_->at(left)->first, proc.col_ranges_->at(left)->first) <
+               std::tie(proc.row_ranges_->at(right)->first, proc.col_ranges_->at(right)->first);
+    });
+    const auto row_range_start = proc.row_ranges_->at(order.front())->first;
+    const auto row_range_end = proc.row_ranges_->at(order.back())->second;
+    log::version().debug(
+            "CompactDataClause processing {} differently column-sliced segments with row ranges spanning [{:d}, {:d}] "
+            "into {} column slices",
+            num_segments,
+            row_range_start,
+            row_range_end,
+            col_starts.size() - 1
+    );
+    std::vector<std::vector<SegmentInMemory>> segments_by_output_col_slice(col_starts.size() - 1);
+    for (auto idx : order) {
+        auto segment = std::move(proc.segments_->at(idx));
+        const auto& col_range = *proc.col_ranges_->at(idx);
+        auto output_idx = static_cast<size_t>(
+                std::distance(col_starts.cbegin(), std::ranges::lower_bound(col_starts, col_range.first))
+        );
+        for (auto start = col_range.first; start < col_range.second; ++output_idx) {
+            const auto end = col_starts.at(output_idx + 1);
+            segments_by_output_col_slice.at(output_idx)
+                    .emplace_back(take_columns(
+                            *segment, start - col_range.first, end - col_range.first, end == col_range.second
+                    ));
+            start = end;
+        }
+    }
+    std::vector<std::shared_ptr<SegmentInMemory>> segment_ptrs;
+    std::vector<std::shared_ptr<RowRange>> row_ranges;
+    std::vector<std::shared_ptr<ColRange>> col_ranges;
+    for (auto&& [output_idx, segments] : folly::enumerate(segments_by_output_col_slice)) {
+        const ColRange col_range{col_starts.at(output_idx), col_starts.at(output_idx + 1)};
+        if (frame_ && frame_->offset == row_range_end) {
+            add_segment_from_frame(col_range, segments);
+        }
+        SegmentReslicer reslicer{max_rows_per_segment_};
+        auto resliced = reslicer.reslice_segments(std::move(segments));
+        auto row_start = row_range_start;
+        for (auto& segment : resliced) {
+            row_ranges.emplace_back(std::make_shared<RowRange>(row_start, row_start + segment.row_count()));
+            col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
+            row_start += segment.row_count();
+            segment_ptrs.emplace_back(std::make_shared<SegmentInMemory>(std::move(segment)));
+        }
+    }
+    proc.set_segments(std::move(segment_ptrs));
+    proc.set_row_ranges(std::move(row_ranges));
+    proc.set_col_ranges(std::move(col_ranges));
+    return push_entities(*component_manager_, std::move(proc));
+}
+
+void CompactDataClause::add_segment_from_frame(const ColRange& col_range, std::vector<SegmentInMemory>& segments)
+        const {
     uint64_t total_rows_without_frame = std::accumulate(
             segments.cbegin(),
             segments.cend(),
@@ -259,10 +386,7 @@ void CompactDataClause::add_segment_from_frame(
     // - If no compaction of existing data is needed, there is no obvious set of entity ids to call
     //   CompactDataClause::process with to slice+write the frame
     const SpecificSlicer slicer{
-            {RowRange{frame_->offset, frame_->offset + (row_count - total_rows_without_frame)}},
-            {ColRange{
-                    col_range_start, dynamic_schema_ ? frame_->desc().field_count() : proc.col_ranges_->front()->second
-            }}
+            {RowRange{frame_->offset, frame_->offset + (row_count - total_rows_without_frame)}}, {col_range}
     };
     // There is a check in SpecificSlicer that exactly 1 slice will be produced in this case
     auto frame_slice = slicer(*frame_)[0];

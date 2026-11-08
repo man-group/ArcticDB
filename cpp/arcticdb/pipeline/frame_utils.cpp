@@ -7,6 +7,10 @@
  */
 
 #include <arcticdb/pipeline/frame_utils.hpp>
+
+#include <algorithm>
+#include <limits>
+
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 
@@ -164,9 +168,13 @@ size_t get_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys) 
 std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::PipelineContext>& context) {
     // count rows
     std::size_t row_count = 0ULL;
+    // slice_and_keys_ is ordered by column slice, so when row-slices are column-sliced differently (e.g. after changing
+    // columns_per_segment) the first entry need not hold the first row
+    std::size_t offset = std::numeric_limits<std::size_t>::max();
     for (auto s = 0u; s < context->slice_and_keys_.size(); ++s) {
         if (context->fetch_index_[s]) {
             row_count += context->slice_and_keys_[s].slice_.row_range.diff();
+            offset = std::min(offset, context->slice_and_keys_[s].slice_.row_range.first);
             ARCTICDB_DEBUG(log::version(), "Adding {} rows", context->slice_and_keys_[s].slice_.row_range.diff());
         } else {
             ARCTICDB_DEBUG(
@@ -177,17 +185,25 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
         }
     }
 
-    std::size_t offset = row_count ? context->slice_and_keys_[0].slice_.row_range.first : 0ULL;
+    if (row_count == 0) {
+        offset = 0ULL;
+    }
     ARCTICDB_DEBUG(log::version(), "Got offset {} and row_count {}", offset, row_count);
     return std::make_pair(offset, row_count);
 }
 
 std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::PipelineContext>& context) {
-    std::vector<size_t> output;
-    output.reserve(context->slice_and_keys_.size());
+    std::vector<pipelines::RowRange> row_ranges;
+    row_ranges.reserve(context->slice_and_keys_.size());
     for (auto s = 0u; s < context->slice_and_keys_.size(); ++s) {
         if (context->fetch_index_[s])
-            output.emplace_back(context->slice_and_keys_[s].slice_.row_range.diff());
+            row_ranges.emplace_back(context->slice_and_keys_[s].slice_.row_range);
+    }
+    std::ranges::sort(row_ranges, {}, [](const pipelines::RowRange& row_range) { return row_range.first; });
+    std::vector<size_t> output;
+    output.reserve(row_ranges.size());
+    for (const auto& row_range : row_ranges) {
+        output.emplace_back(row_range.diff());
     }
     return output;
 }

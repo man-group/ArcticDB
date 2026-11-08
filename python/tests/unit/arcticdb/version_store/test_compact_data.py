@@ -16,7 +16,8 @@ import pytest
 
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import CompactDataInfo
-from arcticdb import WritePayload
+from arcticdb import LibraryOptions, WritePayload
+from arcticdb.options import ModifiableLibraryOption
 from arcticdb.exceptions import (
     ArcticNativeException,
     UserInputException,
@@ -466,6 +467,93 @@ def test_compact_data_column_filtered_read(in_memory_store_factory, clear_query_
     generic_compact_data_test(lib, sym)
     assert_frame_equal(expected_col_a, lib.read(sym, columns=["col_a"]).data)
     assert_frame_equal(expected_col_bc, lib.read(sym, columns=["col_b", "col_c"]).data)
+
+
+def _mixed_cps_df(start, num_rows, base):
+    return pd.DataFrame(
+        {
+            "f0": np.arange(num_rows, dtype=np.float64) + base,
+            "i1": np.arange(num_rows, dtype=np.int64) + base,
+            "s2": [f"s{base + i}" for i in range(num_rows)],
+            "f3": np.arange(num_rows, dtype=np.float64) + base + 3,
+            "s4": [f"t{(base + i) % 3}" for i in range(num_rows)],
+            "i5": np.arange(num_rows, dtype=np.int64) - base,
+        },
+        index=pd.date_range(start, periods=num_rows, freq="h"),
+    )
+
+
+def _write_with_cps_changes(ac, lib_name, cps_and_num_rows, rows_per_segment):
+    """Write then append, changing columns_per_segment before each operation so that row-slices are column-sliced
+    differently."""
+    lib = ac.create_library(
+        lib_name, LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=cps_and_num_rows[0][0])
+    )
+    sym = "sym"
+    parts = []
+    start = pd.Timestamp("2024-01-01")
+    for idx, (cps, num_rows) in enumerate(cps_and_num_rows):
+        ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, cps)
+        lib = ac[lib_name]
+        part = _mixed_cps_df(start, num_rows, 1000 * idx)
+        start = part.index[-1] + pd.Timedelta(hours=1)
+        parts.append(part)
+        if idx == 0:
+            lib.write(sym, part)
+        else:
+            lib.append(sym, part)
+    return lib, sym, pd.concat(parts)
+
+
+def _check_index_tiles_rows_and_columns(lib, sym, num_columns):
+    index = lib._nvs.read_index(sym)
+    for _, row_slice in index.groupby(["start_row", "end_row"]):
+        col_ranges = sorted(zip(row_slice["start_col"], row_slice["end_col"]))
+        assert col_ranges[0][0] == 1
+        assert col_ranges[-1][1] == num_columns + 1
+        for (_, end), (start, _) in zip(col_ranges, col_ranges[1:]):
+            assert end == start
+
+
+def _check_all_reads(lib, sym, expected):
+    assert_frame_equal(lib.read(sym).data, expected, check_freq=False)
+    for columns in [[c] for c in expected.columns] + [["i1", "s4"], ["f0", "f3", "i5"]]:
+        assert_frame_equal(lib.read(sym, columns=columns).data, expected[columns], check_freq=False)
+
+
+CPS_CHANGES_FOR_COMPACTION = [
+    [(127, 15), (4, 15), (1, 15)],
+    [(1, 15), (4, 15)],
+    [(4, 7), (1, 8), (4, 9)],
+    [(2, 12), (3, 12), (2, 5)],
+]
+
+
+@pytest.mark.parametrize("cps_and_num_rows", CPS_CHANGES_FOR_COMPACTION)
+@pytest.mark.parametrize("rows_per_segment", [5, 10, 40])
+def test_compact_data_after_changing_columns_per_segment(lmdb_storage, lib_name, cps_and_num_rows, rows_per_segment):
+    ac = lmdb_storage.create_arctic()
+    lib, sym, expected = _write_with_cps_changes(ac, lib_name, cps_and_num_rows, rows_per_segment)
+    _check_all_reads(lib, sym, expected)
+    lib.compact_data(sym, rows_per_segment=rows_per_segment)
+    _check_index_tiles_rows_and_columns(lib, sym, len(expected.columns))
+    _check_all_reads(lib, sym, expected)
+    index = lib._nvs.read_index(sym)
+    row_counts = index["end_row"] - index["start_row"]
+    assert row_counts.min() >= min(min_rows_per_segment(rows_per_segment), len(expected))
+    assert row_counts.max() <= max_rows_per_segment(rows_per_segment)
+    assert not lib.compact_data_explain_plan(sym, rows_per_segment=rows_per_segment).will_do_work
+
+
+@pytest.mark.parametrize("cps_and_num_rows", CPS_CHANGES_FOR_COMPACTION)
+def test_append_compact_data_after_changing_columns_per_segment(lmdb_storage, lib_name, cps_and_num_rows):
+    ac = lmdb_storage.create_arctic()
+    lib, sym, expected = _write_with_cps_changes(ac, lib_name, cps_and_num_rows, 10)
+    to_append = _mixed_cps_df(expected.index[-1] + pd.Timedelta(hours=1), 3, 9000)
+    lib.append(sym, to_append, compact_data=True)
+    expected = pd.concat([expected, to_append])
+    _check_index_tiles_rows_and_columns(lib, sym, len(expected.columns))
+    _check_all_reads(lib, sym, expected)
 
 
 @pytest.mark.parametrize(

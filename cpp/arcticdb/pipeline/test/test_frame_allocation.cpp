@@ -113,3 +113,27 @@ TEST(OutputFrame, AllocateMixedNumpyArrow) {
     ASSERT_EQ(frame.column(1).num_blocks(), 3);
     ASSERT_EQ(frame.column(2).num_blocks(), 1);
 }
+
+TEST(OutputFrame, OffsetAndRowCountWithDifferentlyColumnSlicedRowSlices) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    // Column-projected read after columns_per_segment changed from 1 to 4 between writes: slice_and_keys_ is ordered by
+    // column slice, so the later rows (in column slice [1, 5)) come before the earlier rows (in column slice [2, 3))
+    auto context = std::make_shared<PipelineContext>();
+    context->slice_and_keys_.emplace_back(SliceAndKey{FrameSlice{{1, 5}, {20, 30}}, AtomKey{}});
+    context->slice_and_keys_.emplace_back(SliceAndKey{FrameSlice{{1, 5}, {30, 35}}, AtomKey{}});
+    context->slice_and_keys_.emplace_back(SliceAndKey{FrameSlice{{2, 3}, {0, 10}}, AtomKey{}});
+    context->slice_and_keys_.emplace_back(SliceAndKey{FrameSlice{{2, 3}, {10, 20}}, AtomKey{}});
+    for (auto i = 0; i < 4; ++i) {
+        context->fetch_index_.set_bit(i);
+    }
+
+    const auto [offset, row_count] = offset_and_row_count(context);
+    ASSERT_EQ(offset, 0);
+    ASSERT_EQ(row_count, 35);
+    ASSERT_EQ(output_block_row_counts(context), (std::vector<size_t>{10, 10, 10, 5}));
+    ASSERT_EQ(context->first_row(), 0);
+    ASSERT_EQ(context->last_row(), 35);
+    ASSERT_EQ(context->calc_rows(), 35);
+}

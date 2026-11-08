@@ -15,6 +15,7 @@
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <algorithm>
 #include <memory>
 
 namespace arcticdb::pipelines {
@@ -137,21 +138,26 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
     PipelineContextRow operator[](size_t num) { return PipelineContextRow{shared_from_this(), num}; }
 
+    // slice_and_keys_ is ordered by column slice. Row-slices can be column-sliced differently (e.g. after changing
+    // columns_per_segment, or with bucketize_dynamic), so the first and last entries need not hold the first and last
+    // rows
     size_t last_row() const {
         if (slice_and_keys_.empty()) {
             return 0;
-        } else {
-            if (bucketize_dynamic_) {
-                return ranges::max(
-                               slice_and_keys_, {}, [](const auto& sk) { return sk.slice_.row_range.second; }
-                ).slice_.row_range.second;
-            } else {
-                return slice_and_keys_.rbegin()->slice_.row_range.second;
-            }
         }
+        return std::ranges::max_element(
+                       slice_and_keys_, {}, [](const auto& sk) { return sk.slice_.row_range.second; }
+        )->slice_.row_range.second;
     }
 
-    size_t first_row() const { return slice_and_keys_.empty() ? 0 : slice_and_keys_.begin()->slice_.row_range.first; }
+    size_t first_row() const {
+        if (slice_and_keys_.empty()) {
+            return 0;
+        }
+        return std::ranges::min_element(
+                       slice_and_keys_, {}, [](const auto& sk) { return sk.slice_.row_range.first; }
+        )->slice_.row_range.first;
+    }
 
     size_t calc_rows() const { return last_row() - first_row(); }
 
@@ -176,7 +182,12 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         if (slice_and_keys_.empty())
             return unspecified_range();
 
-        return IndexRange{slice_and_keys_.begin()->key().start_index(), slice_and_keys_.rbegin()->key().end_index()};
+        const auto first =
+                std::ranges::min_element(slice_and_keys_, {}, [](const auto& sk) { return sk.slice_.row_range.first; });
+        const auto last = std::ranges::max_element(slice_and_keys_, {}, [](const auto& sk) {
+            return sk.slice_.row_range.second;
+        });
+        return IndexRange{first->key().start_index(), last->key().end_index()};
     }
 
     friend void swap(PipelineContext& left, PipelineContext& right) noexcept {
