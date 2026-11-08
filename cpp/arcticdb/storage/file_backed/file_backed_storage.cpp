@@ -164,11 +164,6 @@ std::string FileBackedStorage::name() const { return fmt::format("file_backed_st
 void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     // TODO: The conversion to file name needs careful vetting.
     std::string maybe_safe_file_name_for_key = to_tokenized_key(key_seg.variant_key());
-    if (maybe_safe_file_name_for_key.find('\0') != std::string::npos) {
-        throw std::runtime_error(
-                fmt::format("to_tokenized_key generated invalid file name! key: {}", key_seg.variant_key())
-        );
-    }
     Segment& seg = *key_seg.segment_ptr();
     // bool is_overwrite = std::holds_alternative<RefKey>(key_seg.variant_key());
     // TODO: With bucketizer, may have to create new directories with O_CREAT. Essential to set the directory

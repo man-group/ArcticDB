@@ -63,6 +63,15 @@ class FileBackedStorage : public ::testing::Test {
     std::optional<storage::file_backed::FileBackedStorage> storage_;
 };
 
+bool segments_are_identical(const Segment& x, const Segment& y) {
+    BufferView x_buffer = x.buffer();
+    BufferView y_buffer = y.buffer();
+    return x_buffer.bytes() == y_buffer.bytes() && std::ranges::equal(
+                                                           std::span<uint8_t>(x_buffer.data(), x_buffer.bytes()),
+                                                           std::span<uint8_t>(y_buffer.data(), y_buffer.bytes())
+                                                   );
+}
+
 TEST_F(FileBackedStorage, WritesAreVisibleAndReadable) {
     Segment segment{storage::get_test_segment()};
     const std::string symbol{"symbol"};
@@ -72,18 +81,37 @@ TEST_F(FileBackedStorage, WritesAreVisibleAndReadable) {
 
     auto result = storage().read(entity::VariantKey{key}, {});
     ASSERT_EQ(std::get<StringId>(result.atom_key().id()), symbol);
-    ASSERT_TRUE(result.has_segment());
-
-    BufferView original_buffer = segment.buffer();
-    BufferView read_buffer = result.segment().buffer();
-    ASSERT_EQ(original_buffer.bytes(), read_buffer.bytes());
-    ASSERT_TRUE(std::ranges::equal(
-            std::span<uint8_t>(original_buffer.data(), original_buffer.bytes()),
-            std::span<uint8_t>(read_buffer.data(), read_buffer.bytes())
-    ));
+    ASSERT_TRUE(segments_are_identical(segment, result.segment()));
 }
 
-// Test if key writes clash? I'd really like a C++ test which reproduces what just happened. Namely,
-// all my writes overwrote the same path because the file name contained a null byte early on.
+TEST_F(FileBackedStorage, KeysDoNotCollide) {
+    // An early bug in file path generation led to files being overwritten. Write a few different segments
+    // to four files and then try to reread them and match them to original data.
+    const std::array<Segment, 4> segments{
+            storage::get_test_segment(10),
+            storage::get_test_segment(20),
+            storage::get_test_segment(30),
+            storage::get_test_segment(40)
+    };
+    const std::array<entity::KeyType, 4> key_types = {
+            entity::KeyType::TABLE_DATA,
+            entity::KeyType::TABLE_INDEX,
+            entity::KeyType::VERSION,
+            entity::KeyType::VERSION_REF
+    };
+    const std::string symbol{"symbol"};
+    for (size_t i = 0; i < key_types.size(); ++i) {
+        auto key = arcticdb::atom_key_builder().content_hash(i).build(symbol, key_types[i]);
+        storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segments[i].clone()));
+    }
+
+    for (size_t i = 0; i < key_types.size(); ++i) {
+        auto key = arcticdb::atom_key_builder().content_hash(i).build(symbol, key_types[i]);
+        ASSERT_TRUE(exists_in_store(storage(), symbol));
+
+        auto result = storage().read(entity::VariantKey{key}, {});
+        ASSERT_TRUE(segments_are_identical(segments[i], result.segment()));
+    }
+}
 
 } // namespace
