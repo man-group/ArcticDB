@@ -156,7 +156,7 @@ jobs:
     name: plan
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     outputs:
       sha: ${{ steps.sha.outputs.sha }}
       # `BUCKET:REGION:PREFIX` per real-S3 profile the run reads; empty when it reads none
@@ -245,6 +245,44 @@ jobs:
             echo "- storages \`${STORAGES:-$d}\`, profiles \`${PROFILES:-$d}\`, rounds \`${ROUNDS:-$d}\`, runs \`${RUNS:-$d}\`"
             echo "- settings \`${SETTINGS:-$d}\`, group \`${GROUP:-none}\`, flame graphs \`${FLAMEGRAPH:-none}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Catches setup errors before ~25 min of builds and a rented box (run 42413378578 found
+      # DuckDB's httpfs missing after 50 min): in the bench image, with the suite's Python
+      # packages installed as `run the suite` installs them, the PoC's `bench.preflight`
+      # imports the driver, resolves the suite and its inputs, and checks the packages
+      # (httpfs when the suite reads S3). The PoC's own builds are stubbed there.
+      - name: preflight the suite in the bench image
+        env:
+          SUITE: ${{ inputs.suite }}
+          STORAGES: ${{ inputs.storages }}
+          PROFILES: ${{ inputs.profiles }}
+          ROUNDS: ${{ inputs.rounds }}
+          RUNS: ${{ inputs.runs }}
+          SETTINGS: ${{ inputs.settings }}
+        run: |
+          set -euo pipefail
+          if [ ! -f rust/arcticdb_sql/bench/preflight.py ]; then
+            echo "::warning::this PoC snapshot has no bench/preflight.py; preflight skipped"; exit 0
+          fi
+          args=(--suite "$SUITE")
+          [ -n "$STORAGES" ] && args+=(--storages "$STORAGES")
+          [ -n "$PROFILES" ] && args+=(--profiles "$PROFILES")
+          [ -n "$ROUNDS" ] && args+=(--rounds "$ROUNDS")
+          [ -n "$RUNS" ] && args+=(--runs "$RUNS")
+          if [ -n "$SETTINGS" ]; then
+            IFS=, read -ra settings <<< "$SETTINGS"
+            for s in "${settings[@]}"; do args+=(--setting "$s"); done
+          fi
+          docker pull -q "$DEV_IMAGE"
+          # The [test] extra from the PoC's pyproject, plus boto3 and arcticdb's pandas and numpy
+          docker run --rm -v "$PWD/rust/arcticdb_sql:/src:ro" -w /src -e PYTHONDONTWRITEBYTECODE=1 "$DEV_IMAGE" bash -c '
+            set -euo pipefail
+            python -m venv /venv
+            deps=$(/venv/bin/python -c "import tomllib; print(\"\n\".join(tomllib.load(open(\"pyproject.toml\", \"rb\"))[\"project\"][\"optional-dependencies\"][\"test\"]))")
+            mapfile -t deps <<< "$deps"
+            /venv/bin/python -m pip install -q --upgrade pip
+            /venv/bin/python -m pip install -q "${deps[@]}" boto3 pandas numpy
+            /venv/bin/python -m bench.preflight "$@"' _ "${args[@]}"
 
       # Real S3 (ticket 65), only when the run reads an `aws-*` profile: the box has no
       # instance role, so the engines get the CI's S3 key. This step checks, before
