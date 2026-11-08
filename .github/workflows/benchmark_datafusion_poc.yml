@@ -384,6 +384,14 @@ jobs:
     if: needs.start.result == 'success' && needs.start.outputs.label != ''
     runs-on: ${{ needs.start.outputs.label }}
     timeout-minutes: 180   # never above ~180: a longer timeout is a blank cheque on a stuck box
+    # checks: write lets `run the suite` post the driver's per-query events to a
+    # `dfpoc-live-<run id>` check run while it runs (job logs appear only when a
+    # job ends). A job-level block replaces the workflow's, so restate the rest.
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+      checks: write
     defaults:
       run: {shell: bash}
     env:
@@ -423,6 +431,8 @@ jobs:
           PROFILES: ${{ inputs.profiles }}
           ROUNDS: ${{ inputs.rounds }}
           RUNS: ${{ inputs.runs }}
+          GH_TOKEN: ${{ github.token }}
+          LIVE_EVENTS_INTERVAL: '60'
         run: |
           set -euo pipefail
           mkdir -p "$WORK/out" "$WORK/data"
@@ -443,12 +453,44 @@ jobs:
           cd /work/src/rust/arcticdb_sql
           /venv/bin/python -m bench.ec2_driver "${args[@]}"
           SH
+          # Live per-query events (rust/arcticdb_sql/bench/TELEMETRY.md in the PoC):
+          # the driver appends DFPOC_EVENT lines to out/events.jsonl, and every
+          # LIVE_EVENTS_INTERVAL seconds the first line (the start event) and the
+          # latest ~58 KB go to a check run's text, which the PoC's telemetry
+          # watcher reads. Best effort: a failed post never fails the step.
+          events="$WORK/out/events.jsonl"
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          live_post() {   # $1: extra top-level JSON fields, each followed by a comma
+            [ -n "$cr" ] || return 0
+            local text=''
+            if [ -s "$events" ]; then
+              text=$( { head -n 1 "$events"; tail -c 58000 "$events" | tail -n +2; } \
+                | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk 'NR > 1 { printf "\\n" } { printf "%s", $0 }' )
+            fi
+            printf '{%s"output":{"title":"DataFusion PoC live events","summary":"DFPOC_EVENT lines: the first, then the latest","text":"%s"}}' "$1" "$text" \
+              | curl -fsS -m 20 -X PATCH -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                  "$api/check-runs/$cr" --data @- > /dev/null \
+              || echo "live events: post failed (ignored)"
+          }
+          cr=''
+          created=$(curl -fsS -m 20 -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                      "$api/check-runs" \
+                      -d "{\"name\":\"dfpoc-live-$GITHUB_RUN_ID\",\"head_sha\":\"$GITHUB_SHA\",\"status\":\"in_progress\"}") || created=''
+          if [[ $created =~ \"id\":\ *([0-9]+) ]]; then cr=${BASH_REMATCH[1]}; fi   # the first "id" is the check run's
+          echo "live events check run: ${cr:-none}"
+          ( while sleep "$LIVE_EVENTS_INTERVAL"; do live_post ''; done ) &
+          poster=$!
+
           rc=0
           docker run --rm --network host \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$WORK:/work" \
             -e SUITE -e STORAGES -e PROFILES -e ROUNDS -e RUNS -e DOCKER_CLI_URL \
+            -e DFPOC_EVENTS_FILE=/work/out/events.jsonl \
             "$DEV_IMAGE" bash /work/run.sh || rc=$?
+          kill "$poster" 2> /dev/null || true
+          wait "$poster" 2> /dev/null || true
+          live_post "\"status\":\"completed\",\"conclusion\":\"neutral\","
           if [ -f "$WORK/out/summary.md" ]; then cat "$WORK/out/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
           exit $rc
 
