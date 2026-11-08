@@ -6,13 +6,15 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <bits/ranges_algo.h>
 #include <gtest/gtest.h>
 
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/util/clock.hpp>
 
+#include <fmt/format.h>
+
+#include <algorithm>
 #include <filesystem>
 
 namespace fs = std::filesystem;
@@ -21,53 +23,47 @@ using namespace arcticdb;
 namespace {
 
 // TODO: This really needs a good home.
-class TempDirFixture : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-        tmp_dir_ =
+class TempDir {
+  public:
+    TempDir(const ::testing::TestInfo& info) {
+        temp_path_ =
                 fs::temp_directory_path() /
                 fmt::format(
-                        "arcticdb_{}_{}_{}", info->test_suite_name(), info->name(), util::SysClock::nanos_since_epoch()
+                        "arcticdb_{}_{}_{}", info.test_suite_name(), info.name(), util::SysClock::nanos_since_epoch()
                 );
-        fs::remove_all(tmp_dir_);
-        fs::create_directories(tmp_dir_);
+        fs::remove_all(temp_path_);
+        fs::create_directories(temp_path_);
     }
 
-    void TearDown() override { fs::remove_all(tmp_dir_); }
+    ~TempDir() { fs::remove_all(temp_path_); }
 
-    const fs::path& dir() const noexcept { return tmp_dir_; }
+    const fs::path& get() const noexcept { return temp_path_; }
 
-    fs::path tmp_dir_;
+  private:
+    fs::path temp_path_;
 };
 
-class FileBackedStorageF : public TempDirFixture {
+class FileBackedStorage : public ::testing::Test {
   public:
-    void SetUp() override {
-        TempDirFixture::SetUp();
-
+    FileBackedStorage() : temp_dir_(*::testing::UnitTest::GetInstance()->current_test_info()) {
         arcticdb::proto::file_storage::Config cfg;
-
-        cfg.set_dir_path(dir().generic_string());
+        cfg.set_dir_path(temp_dir_.get().generic_string());
         // TODO: Rename the variable as use_mock_os_apis. It's okay to use actual storage, we just inject failures.
         cfg.set_use_mock_storage_for_testing(true);
 
-        // I copied the delim from elsewhere. Seems odd. The default is '.'.
+        // I copied the delim from elsewhere. I don't get it. The default is '.'.
         arcticdb::storage::LibraryPath library_path("test_lib", '/');
         storage_.emplace(library_path, storage::OpenMode::DELETE, cfg);
-    }
-    void TearDown() override {
-        storage_.reset();
-        TempDirFixture::TearDown();
     }
 
     storage::file_backed::FileBackedStorage& storage() { return *storage_; }
 
   private:
+    TempDir temp_dir_;
     std::optional<storage::file_backed::FileBackedStorage> storage_;
 };
 
-TEST_F(FileBackedStorageF, WritesAreVisibleAndReadable) {
+TEST_F(FileBackedStorage, WritesAreVisibleAndReadable) {
     Segment segment{storage::get_test_segment()};
     const std::string symbol{"symbol"};
     auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
