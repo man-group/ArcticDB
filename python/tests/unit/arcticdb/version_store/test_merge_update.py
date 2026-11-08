@@ -5858,6 +5858,32 @@ def test_string_encoding_error_reports_source_row(lmdb_library_factory, sparse_t
         lib.merge("sym", source, strategy=strategy)
 
 
+@pytest.mark.parametrize("timeseries", [True, False], ids=["timeseries", "rowrange"])
+@pytest.mark.parametrize(
+    "strategy",
+    [MergeStrategy("update", "do_nothing"), MergeStrategy("update", "insert")],
+    ids=["update", "update_insert"],
+)
+def test_merge_source_with_fortran_styled_columns_work(lmdb_library, timeseries, strategy):
+    """A DataFrame built from a 2D numpy array stores its columns in Fortran style."""
+    lib = lmdb_library
+    index = pd.date_range("2024-01-01", periods=4, name="ts") if timeseries else None
+    target = pd.DataFrame({"a": [0, 1, 2, 3], "b": [10, 11, 12, 13]}, index=index)
+    lib.write("sym", target)
+    source_index = pd.DatetimeIndex(["2024-01-02", "2024-01-05"], name="ts") if timeseries else None
+    source = pd.DataFrame(np.array([[1, 100], [7, 200]]), columns=["a", "b"], index=source_index)
+    assert not source["b"].to_numpy().flags["C_CONTIGUOUS"]
+    lib.merge("sym", source, strategy=strategy, on=None if timeseries else ["a"])
+    expected_index = pd.date_range("2024-01-01", periods=4, name="ts") if timeseries else None
+    expected = pd.DataFrame({"a": [0, 1, 2, 3], "b": [10, 100, 12, 13]}, index=expected_index)
+    if normalize_merge_action(strategy.not_matched_by_target) == MergeAction.INSERT:
+        inserted_index = pd.DatetimeIndex(["2024-01-05"], name="ts") if timeseries else None
+        expected = pd.concat([expected, pd.DataFrame({"a": [7], "b": [200]}, index=inserted_index)])
+        if not timeseries:
+            expected = expected.reset_index(drop=True)
+    assert_frame_equal(lib.read("sym").data, expected)
+
+
 @pytest.mark.parametrize("sparse_target", [False, True], ids=["dense_target", "sparse_target"])
 def test_rowrange_update_insert_keeps_matching_string_column(arrow_library, sparse_target):
     """The columns used for matching keep the target values when matched rows are updated. With match_na=True the
