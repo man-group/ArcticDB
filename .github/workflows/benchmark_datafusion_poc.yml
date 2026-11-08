@@ -10,8 +10,14 @@
 # workflow on this branch already uses. Logs here are public, so nothing below
 # prints the source.
 #
-#   plan ─┬─ wheel (cibuildwheel, cp311) ─┬─ start ─ bench ─ stop
-#         └─ crate (maturin, 2_28)  ──────┘
+#   plan ─ reuse ─┬─ wheel (cibuildwheel, cp311) ─┬─ start ─ bench ─ stop
+#                 └─ crate (maturin, 2_28)  ──────┘
+#
+# `reuse builds` skips the wheel or the crate when an unexpired artifact of an
+# earlier dispatch on this branch has the same key (the snapshot sha, the
+# flamegraph variant, the build image digests and the build jobs' parsed YAML),
+# and the bench job then downloads that run's artifact. The bench job checks
+# each artifact's key file against this run's key before installing anything.
 #
 # The box runs `rust/arcticdb_sql/bench/ec2_driver.py` inside the dev image with
 # `docker run --network host`, so the SeaweedFS + Toxiproxy stack it starts
@@ -117,6 +123,10 @@ on:
         description: "`BUCKET:REGION` for `aws-cross-region`, or `create:REGION` for a temporary bucket the run deletes."
         type: string
         default: 'create:us-east-1'
+      rebuild:
+        description: Build the wheel and the crate even when an earlier run of this snapshot left them (`reuse builds`).
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -297,6 +307,103 @@ jobs:
       cibuildwheel_ver: "3.1.4"   # keep in sync with benchmark_winds.yml
       force_update: false
 
+  # Keys each build and looks for an earlier run's artifact with that key. Every
+  # failure here is a miss, which builds as before: an image digest that does not
+  # resolve makes the key unique to this run. Artifacts are kept 7 days and are
+  # not re-uploaded on a hit, so a snapshot rebuilds a week after its first build.
+  reuse:
+    name: reuse builds
+    needs: [plan, cibw_docker_image]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      wheel_key: ${{ steps.k.outputs.wheel_key }}
+      wheel_name: ${{ steps.k.outputs.wheel_name }}
+      wheel_run: ${{ steps.k.outputs.wheel_run }}
+      crate_key: ${{ steps.k.outputs.crate_key }}
+      crate_name: ${{ steps.k.outputs.crate_name }}
+      crate_run: ${{ steps.k.outputs.crate_run }}
+      cibw_ref: ${{ steps.k.outputs.cibw_ref }}
+      manylinux_ref: ${{ steps.k.outputs.manylinux_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: .github/workflows/benchmark_datafusion_poc.yml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: key the builds and look for them
+        id: k
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POC_SHA: ${{ needs.plan.outputs.sha }}
+          FLAMEGRAPH: ${{ inputs.flamegraph != '' && '1' || '0' }}
+          CIBW_TAG: ${{ needs.cibw_docker_image.outputs.tag }}
+          REBUILD: ${{ inputs.rebuild }}
+          WORKFLOW_FILE: .github/workflows/benchmark_datafusion_poc.yml
+        run: |
+          set -euo pipefail
+          [[ "$POC_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::plan gave no full sha"; exit 1; }
+          echo "$GH_TOKEN" | docker login ghcr.io -u token --password-stdin > /dev/null 2>&1 || true
+          pin() {   # IMAGE -> IMAGE@sha256:<digest of its manifest>, or IMAGE when it does not resolve
+            if docker buildx imagetools inspect --raw "$1" > /tmp/manifest 2> /dev/null && [ -s /tmp/manifest ]; then
+              echo "$1@sha256:$(sha256sum /tmp/manifest | cut -d' ' -f1)"
+            else
+              echo "$1"
+            fi
+          }
+          # sha256 of the named jobs and env entries as parsed YAML, so a comment edit keeps the key;
+          # the whole file when that fails
+          recipe() {
+            python3 - "$WORKFLOW_FILE" "$@" <<'PY' 2> /dev/null || sha256sum "$WORKFLOW_FILE" | cut -d' ' -f1
+          import hashlib, json, sys, yaml
+          doc = yaml.safe_load(open(sys.argv[1]))
+          part = {n: doc["jobs"][n[5:]] if n.startswith("jobs.") else doc["env"][n[4:]] for n in sys.argv[2:]}
+          print(hashlib.sha256(json.dumps(part, sort_keys=True).encode()).hexdigest())
+          PY
+          }
+          unique="unpinned=$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+          cibw_ref=$(pin "$CIBW_TAG")
+          manylinux_ref=$(pin "$MANYLINUX_IMAGE")
+          wheel_key="v1 poc=$POC_SHA flamegraph=$FLAMEGRAPH image=$cibw_ref recipe=$(recipe jobs.wheel jobs.cibw_docker_image)"
+          [[ "$cibw_ref" == *@sha256:* ]] || wheel_key+=" $unique"
+          crate_key="v1 poc=$POC_SHA flamegraph=$FLAMEGRAPH image=$manylinux_ref recipe=$(recipe jobs.crate \
+            env.RUST_TOOLCHAIN env.TPCHGEN_VERSION env.INFERNO_VERSION env.MATURIN_SPEC env.MANYLINUX_IMAGE)"
+          [[ "$manylinux_ref" == *@sha256:* ]] || crate_key+=" $unique"
+          name() { echo "$1-$(printf '%s' "$2" | sha256sum | cut -c1-24)"; }
+          wheel_name=$(name poc-wheel "$wheel_key")
+          crate_name=$(name poc-crate "$crate_key")
+          # The newest unexpired artifact NAME from a dispatch of this workflow on this branch
+          # of this repository; empty when there is none or the API fails.
+          find_run() {
+            [ "$REBUILD" != true ] || return 0
+            local ids id what
+            ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$1&per_page=100" \
+                  | jq -r --arg b "$GITHUB_REF_NAME" '[.artifacts[] | select((.expired | not)
+                      and .name == $ARGS.positional[0]
+                      and .workflow_run.head_repository_id == .workflow_run.repository_id
+                      and .workflow_run.head_branch == $b)] | sort_by(.created_at) | reverse | .[].workflow_run.id' \
+                      --args "$1") || return 0
+            for id in $ids; do
+              what=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" --jq '.path + " " + .event') || continue
+              if [ "$what" = "$WORKFLOW_FILE workflow_dispatch" ]; then echo "$id"; return 0; fi
+            done
+          }
+          wheel_run=$(find_run "$wheel_name")
+          crate_run=$(find_run "$crate_name")
+          {
+            echo "wheel_key=$wheel_key"; echo "wheel_name=$wheel_name"; echo "wheel_run=$wheel_run"
+            echo "crate_key=$crate_key"; echo "crate_name=$crate_name"; echo "crate_run=$crate_run"
+            echo "cibw_ref=$cibw_ref"; echo "manylinux_ref=$manylinux_ref"
+          } | tee -a "$GITHUB_OUTPUT"
+          how() { if [ -n "$1" ]; then echo "reused from [$1]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$1)"; else echo built; fi; }
+          {
+            echo "- wheel \`$wheel_name\`: $(how "$wheel_run")"
+            echo "- crate \`$crate_name\`: $(how "$crate_run")"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Copied from `benchmark_commit_ab.yml`'s `build`, minus the symbol table and
   # DWARF split (no profiling here): checkout from arctic-winds at the planned
   # sha, plain `linux-release` into `/tmp/cpp_build`, which is the directory and
@@ -304,8 +411,8 @@ jobs:
   # own C++ (`cpp/arcticdb/sql_api`) misses the cache.
   wheel:
     name: build arcticdb wheel
-    needs: [plan, cibw_docker_image]
-    if: github.event_name == 'workflow_dispatch'
+    needs: [plan, cibw_docker_image, reuse]
+    if: github.event_name == 'workflow_dispatch' && needs.reuse.outputs.wheel_run == ''
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     defaults:
@@ -380,7 +487,7 @@ jobs:
 
       - name: pull the cibuildwheel manylinux image
         env:
-          IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          IMAGE: ${{ needs.reuse.outputs.cibw_ref }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           docker login ghcr.io -u token -p "$GHCR_TOKEN"
@@ -416,7 +523,7 @@ jobs:
 
       - name: build the wheel
         env:
-          CIBW_MANYLINUX_X86_64_IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          CIBW_MANYLINUX_X86_64_IMAGE: ${{ needs.reuse.outputs.cibw_ref }}
           CIBW_VERSION: ${{ needs.cibw_docker_image.outputs.cibuildwheel_ver }}
         run: |
           python -m pip install pipx --retries 3 --timeout 180
@@ -440,10 +547,17 @@ jobs:
           python -m wheel pack /tmp/unpacked/* -d wheelhouse
           ls -l wheelhouse
 
+      - name: record the build key
+        env:
+          KEY: ${{ needs.reuse.outputs.wheel_key }}
+        run: printf '%s\n' "$KEY" > wheelhouse/wheel-build-key.txt
+
       - uses: actions/upload-artifact@v4
         with:
-          name: poc-wheel-arcticdb
-          path: wheelhouse/*.whl
+          name: ${{ needs.reuse.outputs.wheel_name }}
+          path: |
+            wheelhouse/*.whl
+            wheelhouse/wheel-build-key.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -453,11 +567,12 @@ jobs:
   # table from a PyCapsule at runtime), so it builds beside the wheel, not after
   # it. bindgen reads `cpp/arcticdb/sql_api/adb_read_api.h`, hence the full
   # checkout and clang-devel. No actions/cache: a DataFusion target dir is
-  # gigabytes, and this repository's cache quota is shared with master's CI.
+  # gigabytes, and this repository's cache quota is shared with master's CI;
+  # `reuse builds` skips the job instead when the snapshot is unchanged.
   crate:
     name: build arcticdb_sql and tpchgen-cli
-    needs: [plan]
-    if: github.event_name == 'workflow_dispatch'
+    needs: [plan, reuse]
+    if: github.event_name == 'workflow_dispatch' && needs.reuse.outputs.crate_run == ''
     runs-on: ubuntu-22.04
     timeout-minutes: 75
     defaults:
@@ -482,13 +597,14 @@ jobs:
       - name: build in manylinux_2_28
         env:
           FLAMEGRAPH: ${{ inputs.flamegraph }}
+          IMAGE: ${{ needs.reuse.outputs.manylinux_ref }}
         run: |
           mkdir -p out/bin out/dist out/cargo
           docker run --rm \
             -e RUST_TOOLCHAIN -e TPCHGEN_VERSION -e MATURIN_SPEC -e INFERNO_VERSION -e FLAMEGRAPH \
             -e CARGO_HOME=/w/out/cargo -e CARGO_TARGET_DIR=/w/target \
             -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
-            -v "$GITHUB_WORKSPACE:/w" -w /w "$MANYLINUX_IMAGE" bash -euo pipefail -c '
+            -v "$GITHUB_WORKSPACE:/w" -w /w "$IMAGE" bash -euo pipefail -c '
               dnf install -y -q clang-devel >/dev/null
               export LIBCLANG_PATH=$(dirname "$(find /usr/lib64 -name "libclang.so*" | head -1)")
               curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs \
@@ -509,6 +625,8 @@ jobs:
       # (cargo's own checkout of the git dependency), which bench.perf_tpch and
       # bench.perf_asof read.
       - name: stage the bench inputs
+        env:
+          KEY: ${{ needs.reuse.outputs.crate_key }}
         run: |
           set -euo pipefail
           df=$(find out/cargo/git/checkouts -mindepth 2 -maxdepth 2 -path '*/datafusion-*/*' -type d | head -1)
@@ -521,12 +639,13 @@ jobs:
             if [ -x "out/bin/$tool" ]; then cp "out/bin/$tool" stage/bin/; fi
           done
           cp out/dist/*.whl stage/
+          printf '%s\n' "$KEY" > stage/crate-build-key.txt
           ls -l stage stage/bin
           du -sh stage
 
       - uses: actions/upload-artifact@v4
         with:
-          name: poc-bench-inputs
+          name: ${{ needs.reuse.outputs.crate_name }}
           path: stage/
           if-no-files-found: error
           retention-days: 7
@@ -534,8 +653,14 @@ jobs:
   # The box is rented only once both builds have succeeded.
   start:
     name: start runner
-    needs: [plan, wheel, crate]
-    if: github.event_name == 'workflow_dispatch'
+    needs: [plan, reuse, wheel, crate]
+    # A build skipped by `reuse builds` counts as built; `!cancelled()` because a
+    # skipped need otherwise skips this job.
+    if: >-
+      !cancelled() && github.event_name == 'workflow_dispatch'
+      && needs.plan.result == 'success' && needs.reuse.result == 'success'
+      && (needs.wheel.result == 'success' || (needs.wheel.result == 'skipped' && needs.reuse.outputs.wheel_run != ''))
+      && (needs.crate.result == 'success' || (needs.crate.result == 'skipped' && needs.reuse.outputs.crate_run != ''))
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
@@ -546,11 +671,12 @@ jobs:
 
   bench:
     name: bench ${{ inputs.suite }}
-    needs: [plan, start]
+    needs: [plan, reuse, start]
     # `ec2_runner_jobs.yml` sets `continue-on-error: true` on start, so a failed
     # start arrives green with an empty label; without this guard the job queues
     # against a label no runner ever claims.
-    if: needs.start.result == 'success' && needs.start.outputs.label != ''
+    # `!cancelled()`: a wheel or crate skipped by `reuse builds` would otherwise skip it.
+    if: "!cancelled() && needs.start.result == 'success' && needs.start.outputs.label != ''"
     runs-on: ${{ needs.start.outputs.label }}
     timeout-minutes: 180   # never above ~180: a longer timeout is a blank cheque on a stuck box
     # checks: write lets `run the suite` post the driver's per-query events to a
@@ -578,15 +704,31 @@ jobs:
             echo "perf_event_paranoid $(cat /proc/sys/kernel/perf_event_paranoid 2>/dev/null || echo unknown)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # From this run, or from the earlier run `reuse builds` found (a token is
+      # what makes download-artifact read another run).
       - uses: actions/download-artifact@v8
         with:
-          name: poc-wheel-arcticdb
+          name: ${{ needs.reuse.outputs.wheel_name }}
           path: ${{ env.WORK }}/wheels
+          run-id: ${{ needs.reuse.outputs.wheel_run }}
+          github-token: ${{ needs.reuse.outputs.wheel_run != '' && github.token || '' }}
 
       - uses: actions/download-artifact@v8
         with:
-          name: poc-bench-inputs
+          name: ${{ needs.reuse.outputs.crate_name }}
           path: ${{ env.WORK }}
+          run-id: ${{ needs.reuse.outputs.crate_run }}
+          github-token: ${{ needs.reuse.outputs.crate_run != '' && github.token || '' }}
+
+      - name: check the builds are this run's
+        env:
+          WHEEL_KEY: ${{ needs.reuse.outputs.wheel_key }}
+          CRATE_KEY: ${{ needs.reuse.outputs.crate_key }}
+        run: |
+          set -euo pipefail
+          [ "$(cat "$WORK/wheels/wheel-build-key.txt")" = "$WHEEL_KEY" ] || { echo "::error::the wheel artifact has another key"; exit 1; }
+          [ "$(cat "$WORK/crate-build-key.txt")" = "$CRATE_KEY" ] || { echo "::error::the crate artifact has another key"; exit 1; }
+          echo "wheel and crate keys match"
 
       - name: pull the images
         run: |
