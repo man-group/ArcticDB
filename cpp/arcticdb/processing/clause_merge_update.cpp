@@ -18,6 +18,7 @@
 #include <arcticdb/column_store/column_reslicer.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <ankerl/unordered_dense.h>
+#include <boost/container/small_vector.hpp>
 #include <boost/regex.hpp>
 
 #include <optional>
@@ -1082,7 +1083,7 @@ struct HashedSource {
     /// The columns to match, the comparator of map_ refers to them
     std::vector<ColumnWithSparseIndex> columns_;
     /// Maps each distinct row to all absolute source rows with the same values
-    ankerl::unordered_dense::map<Key, std::vector<size_t>, Hasher, Comparator> map_;
+    ankerl::unordered_dense::map<Key, boost::container::small_vector<size_t, 1>, Hasher, Comparator> map_;
 };
 
 MergeUpdateClause::MergeUpdateClause(
@@ -1729,7 +1730,7 @@ MergeUpdateClause::MatchRecord::MatchRecord(
             if (it == source_map.end()) {
                 continue;
             }
-            const std::vector<size_t>& matching_source_rows = it->second;
+            const boost::container::small_vector<size_t, 1>& matching_source_rows = it->second;
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     !strategy.update() || matching_source_rows.size() == 1,
                     "Multiple source rows match the same target row {}. Final value is ambiguous. Source rows: {}",
