@@ -1650,7 +1650,7 @@ std::vector<std::string> describe(const VersionMapEntry& entry) {
 
 std::vector<AtomKeyPacked> version_keys(const VersionMapEntry& entry) {
     std::vector<AtomKeyPacked> out;
-    std::copy_if(entry.keys_.begin(), entry.keys_.end(), std::back_inserter(out), [](const auto& k) {
+    std::ranges::copy_if(entry.keys_, std::back_inserter(out), [](const auto& k) {
         return k.type() == KeyType::VERSION;
     });
     return out;
@@ -1884,7 +1884,9 @@ TEST(VersionMapRevalidation, LatestLoadOfPartialEntryStillUsesRefAlone) {
     auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_LATEST_INCLUDE_DELETED, __FUNCTION__);
     EXPECT_EQ(clients.store->reads(KeyType::VERSION_REF), 1);
     EXPECT_EQ(clients.store->reads(KeyType::VERSION), 0);
-    EXPECT_EQ(entry->get_first_index(true).first->version_id(), 6);
+    const auto latest = entry->get_first_index(true).first;
+    ASSERT_TRUE(latest.has_value());
+    EXPECT_EQ(latest->version_id(), 6);
 }
 
 TEST(VersionMapRevalidation, MergedEntryNotCoveringLoadReloadsChain) {
@@ -1893,8 +1895,9 @@ TEST(VersionMapRevalidation, MergedEntryNotCoveringLoadReloadsChain) {
 
     ScopedConfig stale("VersionMap.ReloadInterval", 0);
     auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_LATEST_UNDELETED, __FUNCTION__);
-    ASSERT_TRUE(entry->get_first_index(false).first.has_value());
-    EXPECT_EQ(entry->get_first_index(false).first->version_id(), 4);
+    const auto latest = entry->get_first_index(false).first;
+    ASSERT_TRUE(latest.has_value());
+    EXPECT_EQ(latest->version_id(), 4);
 }
 
 TEST(VersionMapRevalidation, TransientFailureWalkingNewVersionKeysIsRetried) {
@@ -2047,7 +2050,7 @@ TEST(VersionMapRevalidation, FailedMutationLeavesNoPhantomState) {
                          store,
                          {atom_key_with_version(id, 3, 0)},
                          id,
-                         version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__)
+                         version_map->check_reload(store, id, LOAD_ALL, "write_tombstones_version_write_fails")
                  );
              }},
     };

@@ -47,7 +47,7 @@ struct CachedChain {
     bool fully_loaded;
 };
 
-enum class RefKeyLoad { LOADED, HEAD_UNCHANGED, REACHED_CACHED_HEAD };
+enum class RefKeyLoad : uint8_t { LOADED, HEAD_UNCHANGED, REACHED_CACHED_HEAD };
 
 template<class Clock = util::SysClock>
 class VersionMapImpl {
