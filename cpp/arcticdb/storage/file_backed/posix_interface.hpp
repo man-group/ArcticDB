@@ -33,6 +33,7 @@ class PosixInterface {
     virtual struct dirent* readdir(DIR* dirp) = 0;
     // TODO: This is unused. So far I have been using explicit calls to close() for fds. Not sure yet.
     virtual int closedir(DIR* dirp) = 0;
+    virtual int unlink(const char* pathname) = 0;
 };
 
 } // namespace arcticdb::storage::file_backed
