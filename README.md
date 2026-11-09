@@ -74,57 +74,57 @@ We have tested against the following S3 backends:
 Install ArcticDB:
 
 ```bash
-$ pip install arcticdb
+pip install arcticdb
 ```
 or using conda-forge
 ```bash
-$ conda install -c conda-forge arcticdb
+conda install -c conda-forge arcticdb
 ```
 
 Import ArcticDB:
 
 ```Python
->>> import arcticdb as adb
+import arcticdb as adb
 ```
 
 Create an instance on your S3 storage (with or without explicit credentials):
 
 ```Python
 # Leave AWS to derive credential information
->>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?aws_auth=true')
+ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?aws_auth=true')
 
 # Manually specify creds
->>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA')
+ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA')
 ```
 
 Or create an instance on your local disk:
 
 ```Python
->>> ac = adb.Arctic("lmdb:///<path>")
+ac = adb.Arctic("lmdb:///<path>")
 ```
 
 Create your first library and list the libraries in the instance:
 
 ```Python
->>> ac.create_library('travel_data')
->>> ac.list_libraries()
+ac.create_library('travel_data')
+ac.list_libraries()
 ```
 
 Create a test dataframe:
 ```Python
->>> import numpy as np
->>> import pandas as pd
->>> NUM_COLUMNS=10
->>> NUM_ROWS=100_000
->>> df = pd.DataFrame(np.random.randint(0,100,size=(NUM_ROWS, NUM_COLUMNS)), columns=[f"COL_{i}" for i in range(NUM_COLUMNS)], index=pd.date_range('2000', periods=NUM_ROWS, freq='h'))
+import numpy as np
+import pandas as pd
+NUM_COLUMNS=10
+NUM_ROWS=100_000
+df = pd.DataFrame(np.random.randint(0,100,size=(NUM_ROWS, NUM_COLUMNS)), columns=[f"COL_{i}" for i in range(NUM_COLUMNS)], index=pd.date_range('2000', periods=NUM_ROWS, freq='h'))
 ```
 
 Get the library, write some data to it, and read it back:
 
 ```Python
->>> lib = ac['travel_data']
->>> lib.write("my_data", df)
->>> data = lib.read("my_data")
+lib = ac['travel_data']
+lib.write("my_data", df)
+data = lib.read("my_data")
 ```
 
 To find out more about working with data, visit our [docs](https://docs.arcticdb.io)
