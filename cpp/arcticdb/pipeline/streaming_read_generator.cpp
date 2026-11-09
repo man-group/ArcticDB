@@ -24,13 +24,12 @@ StreamingReadGenerator::StreamingReadGenerator(
     read_options_(read_options),
     prefetch_rows_(prefetch_rows),
     handler_data_(handler_data) {
-    // TODO: Call this lazily rather than eagerly
-    ensure_index_information();
     log::version().debug("StreamingReadGenerator initialised");
 }
 
 ReadResult StreamingReadGenerator::read_result() {
     py::gil_scoped_release release_gil;
+    log::version().debug("StreamingReadGenerator::read_result() called");
     ensure_index_information();
     VersionedItem versioned_item{to_atom(index_information_->index_.first)};
     const auto& tsd = index_information_->index_.second.index_descriptor();
@@ -42,33 +41,6 @@ ReadResult StreamingReadGenerator::read_result() {
             {},
             {},
             tsd.sorted()};
-}
-
-void StreamingReadGenerator::ensure_index_information() {
-    // TODO: Make this a std::call_once
-    if (index_information_) {
-        return;
-    }
-    // TODO: This is definitely the wrong place to be releasing the GIL
-    py::gil_scoped_release release_gil;
-    auto opt_versioned_item = engine_->get_version_to_read(stream_id_, version_query_);
-    // TODO: Check this is the same exception type as the regular read path
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-            opt_versioned_item.has_value(), "TODO: Copy message from regular read path"
-    );
-    // TODO: Does fetch_index_and_column_stats always return IndexInformation? If so, change API
-    index_information_ = std::get<std::shared_ptr<IndexInformation>>(
-            fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get()
-    );
-    // TODO: Get rid of this clone
-    pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
-    for (const auto& slice_and_key : isr) {
-        // TODO: Check this works with column slicing
-        if (!row_ranges_.empty() && slice_and_key.slice().rows().first < row_ranges_.back().second) {
-            break;
-        }
-        row_ranges_.emplace_back(slice_and_key.slice().rows());
-    }
 }
 
 std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
@@ -98,5 +70,30 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
             std::move(read_version_output.frame_and_descriptor_)
     );
     return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
+}
+
+void StreamingReadGenerator::ensure_index_information() {
+    // TODO: Make this a std::call_once
+    if (index_information_) {
+        return;
+    }
+    auto opt_versioned_item = engine_->get_version_to_read(stream_id_, version_query_);
+    // TODO: Check this is the same exception type as the regular read path
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+            opt_versioned_item.has_value(), "TODO: Copy message from regular read path"
+    );
+    // TODO: Does fetch_index_and_column_stats always return IndexInformation? If so, change API
+    index_information_ = std::get<std::shared_ptr<IndexInformation>>(
+            fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get()
+    );
+    // TODO: Get rid of this clone
+    pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
+    for (const auto& slice_and_key : isr) {
+        // TODO: Check this works with column slicing
+        if (!row_ranges_.empty() && slice_and_key.slice().rows().first < row_ranges_.back().second) {
+            break;
+        }
+        row_ranges_.emplace_back(slice_and_key.slice().rows());
+    }
 }
 } // namespace arcticdb::version_store
