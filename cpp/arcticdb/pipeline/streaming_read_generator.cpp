@@ -28,7 +28,23 @@ StreamingReadGenerator::StreamingReadGenerator(
     log::version().debug("StreamingReadGenerator initialised");
 }
 
+ReadResult StreamingReadGenerator::read_result() {
+    py::gil_scoped_release release_gil;
+    ensure_index_information();
+    VersionedItem versioned_item{to_atom(index_information_->index_.first)};
+    const auto& tsd = index_information_->index_.second.index_descriptor();
+    return {versioned_item,
+            ArrowOutputFrame{},
+            read_options_.output_format_for_frame(),
+            tsd.normalization(),
+            tsd.user_metadata(),
+            {},
+            {},
+            tsd.sorted()};
+}
+
 void StreamingReadGenerator::ensure_index_information() {
+    // TODO: Make this a std::call_once
     if (index_information_) {
         return;
     }

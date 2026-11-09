@@ -216,7 +216,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("column_stats_seg") = nullptr);
 
     // TODO: Find a sensible place for this
-    py::class_<StreamingReadGenerator, std::shared_ptr<StreamingReadGenerator>>(version, "StreamingReadGenerator");
+    py::class_<StreamingReadGenerator, std::shared_ptr<StreamingReadGenerator>>(version, "StreamingReadGenerator")
+            .def(
+                    "read_result",
+                    [&](StreamingReadGenerator& self) { return adapt_read_df(self.read_result(), nullptr); },
+                    py::call_guard<SingleThreadMutexHolder>(),
+                    // TODO: Better description
+                    "Read the specified version of the dataframe from the store"
+            );
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())

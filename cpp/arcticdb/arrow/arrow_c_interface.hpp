@@ -52,7 +52,7 @@ struct RecordBatchData {
 };
 
 struct ArrowOutputFrame {
-    ArrowOutputFrame() = default;
+    ArrowOutputFrame();
     ~ArrowOutputFrame();
 
     ARCTICDB_MOVE_ONLY_OUT_OF_LINE(ArrowOutputFrame);

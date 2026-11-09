@@ -271,32 +271,31 @@ class VersionedItem:
 
 # TODO: Move this somewhere else
 class StreamingReadGenerator:
-    def __init__(self, versioned_item: VersionedItem):
-        self._data = versioned_item.data
-        versioned_item.data = None
-        self._versioned_item = versioned_item
-        slice_lengths = [series.shape[0] for series in self._data.get_columns()[0].get_chunks()]
-        self._slice_boundaries = [0]
-        for slice_length in slice_lengths:
-            self._slice_boundaries.append(self._slice_boundaries[-1] + slice_length)
-        self._curr = 0
-        print("here")
+    def __init__(self, nvs, generator_impl):
+        self._nvs = nvs
+        self._generator_impl = generator_impl
+        self._read_result = None
+        self._versioned_item = None
 
     def versioned_item(self):
+        if self._read_result is None:
+            self._read_result = ReadResult(*self._generator_impl.read_result())
+            self._versioned_item = VersionedItem(
+                symbol=self._read_result.version.symbol,
+                library=self._nvs._library.library_path,
+                data=None,
+                version=self._read_result.version.version,
+                metadata=denormalize_user_metadata(self._read_result.udm, self._nvs._normalizer),
+                host=self._nvs.env,
+                timestamp=self._read_result.version.timestamp,
+            )
         return self._versioned_item
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self._curr == len(self._slice_boundaries) - 1:
-            raise StopIteration
-        res = self._data.slice(
-            self._slice_boundaries[self._curr],
-            self._slice_boundaries[self._curr + 1] - self._slice_boundaries[self._curr],
-        )
-        self._curr += 1
-        return res
+        return None
 
 
 @dataclass
@@ -2635,10 +2634,10 @@ class NativeVersionStore:
         )
 
         generator = self.version_store.read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
+        return StreamingReadGenerator(self, generator)
 
-        read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        vit = self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
-        return StreamingReadGenerator(vit)
+        # read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
+        # vit = self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
 
     def rename_columns_arrow_compat(
         self,

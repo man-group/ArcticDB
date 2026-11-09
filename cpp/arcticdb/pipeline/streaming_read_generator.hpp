@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <optional>
 
+#include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
@@ -27,6 +28,8 @@ class StreamingReadGenerator {
             const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
             std::optional<uint64_t> prefetch_rows, std::shared_ptr<std::any> handler_data
     );
+
+    ReadResult read_result();
 
   private:
     void ensure_index_information();
