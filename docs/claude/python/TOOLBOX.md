@@ -147,6 +147,9 @@ df = tool.segment_in_memory_to_dataframe(segment)
 # Append data to the APPEND_DATA linked list (for testing)
 df = pd.DataFrame({"a": [1, 2, 3]})
 tool.append_incomplete("my_symbol", df, validate_index=False)
+
+# Arrow input (pa.Table or pl.DataFrame); index_column=True treats the first column as the timeseries index
+tool.append_incomplete("my_symbol", table, validate_index=True, index_column=True)
 ```
 
 ### Overwrite Append Data

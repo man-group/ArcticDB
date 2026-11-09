@@ -6,8 +6,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import pandas as pd
 import numpy as np
+import polars as pl
+import pyarrow as pa
 import pytest
 
+from arcticdb.options import OutputFormat
 from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb.version_store._normalization import denormalize_dataframe
 from arcticdb_ext.storage import KeyType
@@ -504,3 +507,22 @@ def test_segment_in_memory_to_read_result(lmdb_version_store_v1, sym):
 
     expected_df = lib_tool.read_to_dataframe(tdata_key)
     assert_frame_equal(expected_df, denormalize_dataframe(read_result))
+
+
+@pytest.mark.parametrize("input_format", ["pyarrow", "polars"])
+def test_append_incomplete_arrow(lmdb_version_store_v1, input_format):
+    lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    table_0 = pa.table({"ts": pd.date_range("2025-01-01", periods=2), "col": [1, 2]})
+    table_1 = pa.table({"ts": pd.date_range("2025-01-03", periods=2), "col": [3, 4]})
+    for table in [table_0, table_1]:
+        data = table if input_format == "pyarrow" else pl.from_arrow(table)
+        lib_tool.append_incomplete(sym, data, validate_index=True, index_column=True)
+
+    expected = pa.table({"ts": pd.date_range("2025-01-01", periods=4), "col": [1, 2, 3, 4]})
+    received = lib.read(sym, incomplete=True, date_range=(None, None), output_format=OutputFormat.PYARROW).data
+    assert expected.equals(received)
+
+    lib.compact_incomplete(sym, append=False, convert_int_to_float=False)
+    assert expected.equals(lib.read(sym, output_format=OutputFormat.PYARROW).data)

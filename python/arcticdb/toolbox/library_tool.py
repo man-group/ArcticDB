@@ -225,14 +225,30 @@ class LibraryTool(LibraryToolImpl):
         new_df = old_df.astype({column: to_type})
         return self.overwrite_append_data_with_dataframe(key, new_df)
 
-    def append_incomplete(self, symbol: str, df: pd.DataFrame, validate_index: bool = False):
+    def append_incomplete(
+        self,
+        symbol: str,
+        df: Union[pd.DataFrame, "pa.Table", "pl.DataFrame"],
+        validate_index: bool = False,
+        index_column: bool = False,
+    ):
         """
         Appends the given dataframe to the APPEND_DATA key linked list. Useful for testing, as staging segments through
         either the V1 or V2 API only creates APPEND_DATA keys, not the APPEND_REF key or the linked-list structure that
         # streaming data does.
+
+        Parameters
+        ----------
+        validate_index : bool, default=False
+            If True, raise if the timeseries index is not sorted in ascending order.
+        index_column : bool, default=False
+            Only applicable when df is a PyArrow Table or Polars DataFrame. If True, the first column is treated as the
+            timeseries index.
         """
         dynamic_strings = self._nvs._resolve_dynamic_strings({})
-        _, item, norm_meta = self._nvs._try_normalize(symbol, df, None, False, dynamic_strings, None)
+        _, item, norm_meta = self._nvs._try_normalize(
+            symbol, df, None, False, dynamic_strings, None, index_column=index_column
+        )
         self._nvs.version_store.append_incomplete(symbol, item, norm_meta, None, validate_index)
 
     def write_segment_in_memory(self, symbol: str, segment: SegmentInMemory, slicing: Slicing):
