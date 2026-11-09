@@ -554,9 +554,11 @@ TEST(VersionMap, ConfirmHeadSeesAnotherClientsWriteWithinReloadInterval) {
     client_b->write_version(store, atom_key_with_version(id, 0, 1), std::nullopt);
     client_a->write_version(store, atom_key_with_version(id, 1, 2), std::nullopt);
 
-    ASSERT_EQ(client_b->check_reload(store, id, latest, __FUNCTION__)->get_first_index(false).first->version_id(), 0);
+    ASSERT_EQ(
+            client_b->check_reload(store, id, latest, __FUNCTION__)->get_indexes<AtomKey>(false).front().version_id(), 0
+    );
     auto entry = client_b->check_reload_and_confirm_head(store, id, latest, __FUNCTION__);
-    ASSERT_EQ(entry->get_first_index(false).first->version_id(), 1);
+    ASSERT_EQ(entry->get_indexes<AtomKey>(false).front().version_id(), 1);
     ASSERT_EQ(get_next_version_id_and_optionally_latest_undeleted_version(store, client_b, id).next_version_id_, 2);
 }
 

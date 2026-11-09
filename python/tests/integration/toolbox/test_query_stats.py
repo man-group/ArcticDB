@@ -253,7 +253,7 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     #                 "total_time_ms": 34
     #             },
     #             "VERSION_REF": {
-    #                 "count": 4,
+    #                 "count": 5,
     #                 "size_bytes": 1262,
     #                 "total_time_ms": 66
     #             }
@@ -302,7 +302,7 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     assert storage_operations["S3_GetObject"]["TABLE_DATA"]["count"] == 2
     assert storage_operations["S3_GetObject"]["TABLE_INDEX"]["count"] == 2
     assert storage_operations["S3_GetObject"]["VERSION"]["count"] == 2
-    assert storage_operations["S3_GetObject"]["VERSION_REF"]["count"] == 4
+    assert storage_operations["S3_GetObject"]["VERSION_REF"]["count"] == 5
 
     for key in expected_get_keys:
         stats_entry = storage_operations["S3_GetObject"][key]
