@@ -44,6 +44,7 @@ ReadResult StreamingReadGenerator::read_result() {
 }
 
 std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
+    // TODO: Consider thread-safety of this
     py::gil_scoped_release release_gil;
     ensure_index_information();
     if (idx_ >= row_ranges_.size()) {
@@ -73,7 +74,7 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
 }
 
 void StreamingReadGenerator::ensure_index_information() {
-    // TODO: Make this a std::call_once
+    // TODO: Consider thread-safety of this
     if (index_information_) {
         return;
     }
