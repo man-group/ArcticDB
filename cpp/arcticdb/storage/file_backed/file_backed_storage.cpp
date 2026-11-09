@@ -319,15 +319,39 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
 void FileBackedStorage::do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) {
     throw std::runtime_error("do_write_if_none() not implemented");
 }
-void FileBackedStorage::do_update(KeySegmentPair& key_seg [[maybe_unused]], UpdateOpts opts [[maybe_unused]]) {
-    throw std::runtime_error("do_update() not implemented");
+
+void FileBackedStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
+    if (!opts.upsert_ && !do_key_exists(key_seg.variant_key())) {
+        // TODO: S3 implementations skip this check altogether according to s3::detail::do_update_impl().
+        // The weird thing is that this doesn't fit with my mental model. I know that lib.update(upsert=True) is
+        // necessary.
+        throw KeyNotFoundException(
+                key_seg.variant_key(),
+                fmt::format("do_update called with upsert=false on non-existent key: {}", key_seg.variant_key())
+        );
+    }
+
+    return do_write(key_seg);
 }
+
 void FileBackedStorage::do_read(
         VariantKey&& variant_key [[maybe_unused]], const ReadVisitor& visitor [[maybe_unused]],
         ReadKeyOpts opts [[maybe_unused]]
 ) {
-    throw std::runtime_error("do_read with visitor not implemented");
+    // TODO: Factor out common implementation with other do_read().
+    std::shared_ptr<Buffer> buffer;
+    try {
+        const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
+        const fs::path dest_path =
+                storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
+        File file(*posix_, storage_dir_, dest_path, O_RDONLY | O_CLOEXEC, 0);
+        buffer = file.read_all();
+    } catch (const std::system_error& e) {
+        throw KeyNotFoundException(variant_key);
+    }
+    visitor(variant_key, Segment::from_buffer(buffer));
 }
+
 KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     std::shared_ptr<Buffer> buffer;
     try {
