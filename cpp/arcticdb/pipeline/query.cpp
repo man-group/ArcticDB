@@ -65,7 +65,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
     bool last_end_index_wrapped = false;
     if constexpr (std::is_same_v<IdxType, stream::TimeseriesIndex>) {
         last_end_index_wrapped =
-                is_end_index_wrapped(end_idx_col.template scalar_at<timestamp>(container.size() - 1).value());
+                is_end_index_wrapped(*(end_index_col_begin + static_cast<ssize_t>(container.size() - 1)));
     }
     if (dynamic_schema && !column_groups && !last_end_index_wrapped) {
         const auto range_start = std::get<timestamp>(rg.start_);

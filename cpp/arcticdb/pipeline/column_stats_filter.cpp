@@ -565,7 +565,9 @@ pipelines::RowRange row_window_of_interest(
             if (!surviving.get_bit(row)) {
                 continue;
             }
-            const IndexRange slice_index_range = segment_index_range(*(start_index_it + row), *(end_index_it + row));
+            const IndexRange slice_index_range = segment_index_range(
+                    *(start_index_it + static_cast<ssize_t>(row)), *(end_index_it + static_cast<ssize_t>(row))
+            );
             if (is_slice_in_index_range(slice_index_range, date_filter, true)) {
                 extend_to(row);
             }
