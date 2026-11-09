@@ -45,7 +45,7 @@ from arcticdb.util.test import (
     equals,
     assert_null_string,
 )
-from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
+from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_ONE, IS_NUMPY_TWO
 
 pytestmark = pytest.mark.pipeline
 
@@ -2373,6 +2373,8 @@ COMPARISON_OPERATORS = [operator.eq, operator.ne, operator.lt, operator.le, oper
 def test_filter_python_float_literal_comparison(
     lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, dtype, literal
 ):
+    if IS_NUMPY_ONE and dtype is np.float32 and literal == 1e300:
+        pytest.skip("NumPy 1 value-based casting compares an out-of-float32-range literal in float64")
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_python_float_literal_comparison"
@@ -2413,6 +2415,5 @@ def test_filter_python_float_and_numpy_float64_literals_in_one_query(
     lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[(q.d == 0.05) ^ (q.d == np.float64(0.05))]
-    expected = df[(df["d"] == 0.05) ^ (df["d"] == np.float64(0.05))]
-    assert len(expected) == 1
+    expected = df.iloc[[0]]
     assert_frame_equal(expected, lib.read(symbol, query_builder=q).data)
