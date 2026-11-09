@@ -342,13 +342,47 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
     return {std::move(variant_key), Segment::from_buffer(buffer)};
 }
 
-void FileBackedStorage::do_remove(VariantKey&& variant_key [[maybe_unused]], RemoveOpts opts [[maybe_unused]]) {
-    throw std::runtime_error("do_remove() not implemented");
+void FileBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
+    const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
+    const fs::path dest_path =
+            storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
+    int res = posix_->unlink(dest_path.c_str());
+    if (res) {
+        if (errno == ENOENT) {
+            if (!opts.ignores_missing_key_)
+                throw KeyNotFoundException(variant_key);
+            else
+                log::storage().warn("Failed to delete segment for key {}", variant_key_view(variant_key));
+        }
+        // TODO: Should we retry on some of the errors? e.g. EBUSY should be ignored -> silly rename.
+    }
 }
+
 void FileBackedStorage::do_remove(
         std::span<VariantKey> variant_keys [[maybe_unused]], RemoveOpts opts [[maybe_unused]]
 ) {
-    throw std::runtime_error("do_remove() not implemented");
+    // TODO: Factor out and reuse this code
+    std::vector<VariantKey> failed_deletes;
+    for (const VariantKey& variant_key : variant_keys) {
+        const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
+        const fs::path dest_path =
+                storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
+        int res = posix_->unlink(dest_path.c_str());
+        if (res) {
+            if (errno == ENOENT) {
+                if (!opts.ignores_missing_key_)
+                    failed_deletes.emplace_back(variant_key);
+                else
+                    log::storage().warn("Failed to delete segment for key {}", variant_key_view(variant_key));
+            }
+            // TODO: Should we retry on some of the errors? e.g. EBUSY should be ignored -> silly rename.
+            //       I think the real bug here is that we just report back that the key is *missing*. It may exist
+            //       and we just be failing to delete. That needs to be reported.
+        }
+    }
+
+    if (!failed_deletes.empty())
+        throw KeyNotFoundException(std::move(failed_deletes));
 }
 
 bool FileBackedStorage::do_key_exists(const VariantKey& key) {
