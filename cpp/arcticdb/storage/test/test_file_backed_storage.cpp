@@ -78,7 +78,7 @@ TEST_F(FileBackedStorage, WritesAreVisibleAndReadable) {
     const std::string symbol{"symbol"};
     auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
     storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
-    ASSERT_TRUE(exists_in_store(storage(), symbol));
+    ASSERT_TRUE(exists_in_store(storage(), symbol, entity::KeyType::VERSION));
 
     auto result = storage().read(entity::VariantKey{key}, {});
     ASSERT_EQ(std::get<StringId>(result.atom_key().id()), symbol);
@@ -113,7 +113,7 @@ TEST_F(FileBackedStorage, KeysDoNotCollide) {
 
     for (size_t i = 0; i < key_types.size(); ++i) {
         auto key = arcticdb::atom_key_builder().content_hash(i).build(symbol, key_types[i]);
-        ASSERT_TRUE(exists_in_store(storage(), symbol));
+        ASSERT_TRUE(storage().key_exists(key));
 
         auto result = storage().read(entity::VariantKey{key}, {});
         ASSERT_TRUE(segments_are_identical(segments[i], result.segment()));
@@ -125,7 +125,7 @@ TEST_F(FileBackedStorage, ListSymbols) {
     const std::string symbol{"symbol"};
     auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
     storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
-    ASSERT_TRUE(exists_in_store(storage(), symbol));
+    ASSERT_TRUE(exists_in_store(storage(), symbol, entity::KeyType::VERSION));
 
     bool executed_on_found = false;
     storage().iterate_type(arcticdb::entity::KeyType::VERSION, [&](entity::VariantKey&& found_key) {

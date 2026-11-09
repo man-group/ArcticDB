@@ -22,6 +22,7 @@ class RealPosix : public PosixInterface {
     int rename(const char* oldpath, const char* newpath) override;
     int link(const char* oldpath, const char* newpath) override;
     int mkdir(const char* pathname, mode_t mode) override;
+    int mkdirat(int fd, const char* pathname, mode_t mode) override;
     int stat(const char* pathname, struct stat* statbuf) override;
     int fstat(int fd, struct stat* statbuf) override;
     DIR* opendir(const char* name) override;
