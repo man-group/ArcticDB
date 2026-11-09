@@ -70,7 +70,8 @@ on:
           on real S3 (aws-same-region gated, aws-cross-region reported).
         type: choice
         options: [tpch_sf01_lmdb_pilot, tpch_sf1, tpch_sf1_lmdb_cs, asof, qb, check6_gate, h2o_1e7,
-                  check6_shippable, tpch_sf1_default_layout, check6_aws]
+                  check6_shippable, tpch_sf1_default_layout, check6_aws, tpch_sf10_parity,
+                  tpch_sf1_default_layout_cs]
         default: tpch_sf01_lmdb_pilot
       storages:
         description: Comma-separated `lmdb,s3`. Empty keeps the suite's default.
@@ -101,7 +102,9 @@ on:
         type: string
         default: ''
       settings:
-        description: Comma-separated TPC-H session settings (`join_enumeration=false`), added to the suite's. Empty keeps the suite's.
+        description: >-
+          Comma-separated TPC-H session settings (`join_enumeration=false`), added to the suite's, or the driver's own
+          keys (`io_threads=64`, `config.S3.Async=1`). Empty keeps the suite's.
         type: string
         default: ''
       group:
@@ -127,6 +130,28 @@ on:
         description: Build the wheel and the crate even when an earlier run of this snapshot left them (`reuse builds`).
         type: boolean
         default: false
+      crate_rustflags:
+        description: RUSTFLAGS for arcticdb_sql only (`-C target-cpu=x86-64-v3`). Empty for the plain build.
+        type: string
+        default: ''
+      crate_profile:
+        description: >-
+          Comma-separated release-profile overrides for arcticdb_sql only (`lto=fat,codegen-units=1`),
+          as CARGO_PROFILE_RELEASE_*. Empty for the plain build.
+        type: string
+        default: ''
+      crate_features:
+        description: Comma-separated extra Cargo features for arcticdb_sql (`mimalloc`). Empty for none.
+        type: string
+        default: ''
+      post_module:
+        description: A `bench.<module>` of the snapshot to run after the suite (`parity_sweep`). Its failure is ignored. Empty for none.
+        type: string
+        default: ''
+      post_args:
+        description: Extra arguments for `post_module`, after its `--out-dir` and `--data-dir`.
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -179,6 +204,11 @@ jobs:
           FLAMEGRAPH: ${{ inputs.flamegraph }}
           AWS_SAME_BUCKET: ${{ inputs.aws_same_bucket }}
           AWS_CROSS_BUCKET: ${{ inputs.aws_cross_bucket }}
+          CRATE_RUSTFLAGS: ${{ inputs.crate_rustflags }}
+          CRATE_PROFILE: ${{ inputs.crate_profile }}
+          CRATE_FEATURES: ${{ inputs.crate_features }}
+          POST_MODULE: ${{ inputs.post_module }}
+          POST_ARGS: ${{ inputs.post_args }}
         run: |
           case "$INSTANCE_TYPE" in
             m6i.xlarge|m6i.2xlarge|m6i.4xlarge|m6a.2xlarge|m6a.4xlarge|c6a.2xlarge|c6a.4xlarge) ;;
@@ -193,7 +223,7 @@ jobs:
           [[ -z "$PROFILES" || "$PROFILES" =~ ^$p(,$p)*$ ]] || { echo "::error::bad profiles"; exit 1; }
           [[ -z "$ROUNDS" || "$ROUNDS" =~ ^[1-9][0-9]?$ ]] || { echo "::error::rounds must be 1-99"; exit 1; }
           [[ -z "$RUNS" || "$RUNS" =~ ^[1-9][0-9]?$ ]] || { echo "::error::runs must be 1-99"; exit 1; }
-          kv='[a-z_.]+=[A-Za-z0-9_.-]+'
+          kv='[A-Za-z0-9_.]+=[A-Za-z0-9_.-]+'
           [[ -z "$SETTINGS" || "$SETTINGS" =~ ^$kv(,$kv)*$ ]] || { echo "::error::settings must be KEY=VALUE,..."; exit 1; }
           [[ -z "$GROUP" || "$GROUP" =~ ^[A-Za-z0-9_.-]{1,40}$ ]] || { echo "::error::group must be 1-40 of [A-Za-z0-9_.-]"; exit 1; }
           [[ -z "$FLAMEGRAPH" || "$FLAMEGRAPH" =~ ^([1-9]|1[0-9]|2[0-3])(,([1-9]|1[0-9]|2[0-3]))*$ ]] \
@@ -202,6 +232,12 @@ jobs:
           if [ -n "$SETTINGS$FLAMEGRAPH" ] && ! tpch; then
             echo "::error::settings and flamegraph are TPC-H only; $SUITE is not"; exit 1
           fi
+          [[ "$CRATE_RUSTFLAGS" =~ ^[A-Za-z0-9_=.\ -]*$ ]] || { echo "::error::bad crate_rustflags"; exit 1; }
+          o='[a-z-]+=[a-z0-9]+'
+          [[ -z "$CRATE_PROFILE" || "$CRATE_PROFILE" =~ ^$o(,$o)*$ ]] || { echo "::error::crate_profile must be KEY=VALUE,..."; exit 1; }
+          [[ "$CRATE_FEATURES" =~ ^[a-z0-9_,-]*$ ]] || { echo "::error::bad crate_features"; exit 1; }
+          [[ "$POST_MODULE" =~ ^[a-z_]*$ ]] || { echo "::error::bad post_module"; exit 1; }
+          [[ "$POST_ARGS" =~ ^[A-Za-z0-9_.,:=/\ -]*$ ]] || { echo "::error::bad post_args"; exit 1; }
           [[ "$AWS_SAME_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || { echo "::error::bad aws_same_bucket"; exit 1; }
           [[ "$AWS_CROSS_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]:[a-z]{2}-[a-z]+-[0-9]$ ]] \
             || { echo "::error::aws_cross_bucket must be BUCKET:REGION or create:REGION"; exit 1; }
@@ -231,6 +267,10 @@ jobs:
           SETTINGS: ${{ inputs.settings }}
           GROUP: ${{ inputs.group }}
           FLAMEGRAPH: ${{ inputs.flamegraph }}
+          CRATE_RUSTFLAGS: ${{ inputs.crate_rustflags }}
+          CRATE_PROFILE: ${{ inputs.crate_profile }}
+          CRATE_FEATURES: ${{ inputs.crate_features }}
+          POST_MODULE: ${{ inputs.post_module }}
         run: |
           test -f rust/arcticdb_sql/bench/ec2_driver.py \
             || { echo "::error::$POC_REF has no rust/arcticdb_sql/bench/ec2_driver.py"; exit 1; }
@@ -244,6 +284,7 @@ jobs:
             d='suite default'
             echo "- storages \`${STORAGES:-$d}\`, profiles \`${PROFILES:-$d}\`, rounds \`${ROUNDS:-$d}\`, runs \`${RUNS:-$d}\`"
             echo "- settings \`${SETTINGS:-$d}\`, group \`${GROUP:-none}\`, flame graphs \`${FLAMEGRAPH:-none}\`"
+            echo "- crate build \`${CRATE_RUSTFLAGS:-plain}\` \`${CRATE_PROFILE:-plain}\` \`${CRATE_FEATURES:-none}\`, post module \`${POST_MODULE:-none}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Catches setup errors before ~25 min of builds and a rented box (run 42413378578 found
@@ -381,6 +422,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           POC_SHA: ${{ needs.plan.outputs.sha }}
           FLAMEGRAPH: ${{ inputs.flamegraph != '' && '1' || '0' }}
+          CRATE_BUILD: ${{ inputs.crate_rustflags }}|${{ inputs.crate_profile }}|${{ inputs.crate_features }}
           CIBW_TAG: ${{ needs.cibw_docker_image.outputs.tag }}
           REBUILD: ${{ inputs.rebuild }}
           WORKFLOW_FILE: .github/workflows/benchmark_datafusion_poc.yml
@@ -410,7 +452,7 @@ jobs:
           manylinux_ref=$(pin "$MANYLINUX_IMAGE")
           wheel_key="v1 poc=$POC_SHA flamegraph=$FLAMEGRAPH image=$cibw_ref recipe=$(recipe jobs.wheel jobs.cibw_docker_image)"
           [[ "$cibw_ref" == *@sha256:* ]] || wheel_key+=" $unique"
-          crate_key="v1 poc=$POC_SHA flamegraph=$FLAMEGRAPH image=$manylinux_ref recipe=$(recipe jobs.crate \
+          crate_key="v1 poc=$POC_SHA flamegraph=$FLAMEGRAPH build=$CRATE_BUILD image=$manylinux_ref recipe=$(recipe jobs.crate \
             env.RUST_TOOLCHAIN env.TPCHGEN_VERSION env.INFERNO_VERSION env.MATURIN_SPEC env.MANYLINUX_IMAGE)"
           [[ "$manylinux_ref" == *@sha256:* ]] || crate_key+=" $unique"
           name() { echo "$1-$(printf '%s' "$2" | sha256sum | cut -c1-24)"; }
@@ -629,7 +671,7 @@ jobs:
     needs: [plan, reuse]
     if: github.event_name == 'workflow_dispatch' && needs.reuse.outputs.crate_run == ''
     runs-on: ubuntu-22.04
-    timeout-minutes: 75
+    timeout-minutes: 240   # fat LTO over DataFusion on a 4-core runner; a plain build is ~20 min
     defaults:
       run: {shell: bash}
     steps:
@@ -639,6 +681,16 @@ jobs:
           tool-cache: true
           large-packages: false
           docker-images: true
+
+      # The runner has 16 GB; LTO over DataFusion can pass that.
+      - name: more swap for LTO
+        if: inputs.crate_profile != ''
+        run: |
+          sudo fallocate -l 24G /swapfile24
+          sudo chmod 600 /swapfile24
+          sudo mkswap /swapfile24 > /dev/null
+          sudo swapon /swapfile24
+          free -h
 
       - uses: actions/checkout@v4
         with:
@@ -653,10 +705,14 @@ jobs:
         env:
           FLAMEGRAPH: ${{ inputs.flamegraph }}
           IMAGE: ${{ needs.reuse.outputs.manylinux_ref }}
+          CRATE_RUSTFLAGS: ${{ inputs.crate_rustflags }}
+          CRATE_PROFILE: ${{ inputs.crate_profile }}
+          CRATE_FEATURES: ${{ inputs.crate_features }}
         run: |
           mkdir -p out/bin out/dist out/cargo
           docker run --rm \
             -e RUST_TOOLCHAIN -e TPCHGEN_VERSION -e MATURIN_SPEC -e INFERNO_VERSION -e FLAMEGRAPH \
+            -e CRATE_RUSTFLAGS -e CRATE_PROFILE -e CRATE_FEATURES \
             -e CARGO_HOME=/w/out/cargo -e CARGO_TARGET_DIR=/w/target \
             -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
             -v "$GITHUB_WORKSPACE:/w" -w /w "$IMAGE" bash -euo pipefail -c '
@@ -669,7 +725,19 @@ jobs:
               PY=/opt/python/cp311-cp311/bin/python
               $PY -m pip install -q "$MATURIN_SPEC"
               cd /w/poc/rust/arcticdb_sql
-              $PY -m maturin build --release --locked -i "$PY" --compatibility manylinux_2_28 --out /w/out/dist
+              features=pyo3/extension-module
+              if [ -n "$CRATE_FEATURES" ]; then features="$features,$CRATE_FEATURES"; fi
+              (
+                # The crate only: tpchgen-cli below keeps the plain build
+                IFS=, read -ra opts <<< "$CRATE_PROFILE"
+                for o in "${opts[@]}"; do
+                  k=${o%%=*}; k=${k//-/_}
+                  export "CARGO_PROFILE_RELEASE_${k^^}=${o#*=}"
+                done
+                export RUSTFLAGS="$CRATE_RUSTFLAGS"
+                env | grep -E "^(RUSTFLAGS|CARGO_PROFILE_RELEASE_)" || true
+                $PY -m maturin build --release --locked --features "$features" -i "$PY" --compatibility manylinux_2_28 --out /w/out/dist
+              )
               cargo install --locked --root /w/out "tpchgen-cli@$TPCHGEN_VERSION"
               /w/out/bin/tpchgen-cli --version
               if [ -n "$FLAMEGRAPH" ]; then cargo install --locked --root /w/out "inferno@$INFERNO_VERSION"; fi
@@ -800,6 +868,8 @@ jobs:
           RUNS: ${{ inputs.runs }}
           SETTINGS: ${{ inputs.settings }}
           FLAMEGRAPH: ${{ inputs.flamegraph }}
+          POST_MODULE: ${{ inputs.post_module }}
+          POST_ARGS: ${{ inputs.post_args }}
           GH_TOKEN: ${{ github.token }}
           LIVE_EVENTS_INTERVAL: '60'
           # Real S3 (the `real S3` plan step): the targets, and the CI key only when there is one
@@ -832,10 +902,17 @@ jobs:
           rc=0
           /venv/bin/python -m bench.ec2_driver "${args[@]}" || rc=$?
           # After the timed suite, so it never perturbs a timing; never fails the run.
+          if [ -n "$POST_MODULE" ]; then
+            # shellcheck disable=SC2086  # POST_ARGS is checked in plan and split on purpose
+            /venv/bin/python -m "bench.$POST_MODULE" --out-dir /work/out --data-dir /work/data $POST_ARGS \
+              || echo "$POST_MODULE failed (ignored)"
+          fi
           if [ -n "$FLAMEGRAPH" ]; then
             dnf install -y -q perf > /dev/null || dnf install -y -q --enablerepo='*' perf > /dev/null || true
+            where=()
+            if [ "$STORAGES" = s3 ]; then where=(--storage s3 --profile "${PROFILES%%,*}"); fi
             /venv/bin/python -m bench.perf_flamegraph --out-dir /work/out --data-dir /work/data \
-              --queries "$FLAMEGRAPH" --tools-dir /work/bin || echo "flame graphs failed (ignored)"
+              --queries "$FLAMEGRAPH" --tools-dir /work/bin ${where[@]+"${where[@]}"} || echo "flame graphs failed (ignored)"
           fi
           exit $rc
           SH
@@ -877,7 +954,7 @@ jobs:
           docker run --rm --network host \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$WORK:/work" \
-            -e SUITE -e STORAGES -e PROFILES -e ROUNDS -e RUNS -e SETTINGS -e FLAMEGRAPH -e DOCKER_CLI_URL \
+            -e SUITE -e STORAGES -e PROFILES -e ROUNDS -e RUNS -e SETTINGS -e FLAMEGRAPH -e POST_MODULE -e POST_ARGS -e DOCKER_CLI_URL \
             -e DFPOC_EVENTS_FILE=/work/out/events.jsonl \
             ${extra[@]+"${extra[@]}"} "$DEV_IMAGE" bash /work/run.sh || rc=$?
           kill "$poster" 2> /dev/null || true
