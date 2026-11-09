@@ -121,13 +121,19 @@ TEST_F(FileBackedStorage, ListSymbols) {
     storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
     ASSERT_TRUE(exists_in_store(storage(), symbol));
 
-    // TODO: Note that this is a copy of test_local_storages.cpp CoreFunctions.
-    bool executed = false;
+    bool executed_on_found = false;
     storage().iterate_type(arcticdb::entity::KeyType::VERSION, [&](entity::VariantKey&& found_key) {
         ASSERT_EQ(found_key, key);
-        executed = true;
+        executed_on_found = true;
     });
-    ASSERT_TRUE(executed);
+    ASSERT_TRUE(executed_on_found);
+
+    bool executed_on_missing = false;
+    storage().iterate_type(arcticdb::entity::KeyType::TABLE_DATA, [&](entity::VariantKey&& found_key) {
+        ASSERT_EQ(found_key, key);
+        executed_on_missing = true;
+    });
+    ASSERT_FALSE(executed_on_missing);
 }
 
 } // namespace
