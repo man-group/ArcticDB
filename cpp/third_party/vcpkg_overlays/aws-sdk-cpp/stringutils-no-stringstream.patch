@@ -1,0 +1,102 @@
+diff --git a/src/aws-cpp-sdk-core/source/utils/StringUtils.cpp b/src/aws-cpp-sdk-core/source/utils/StringUtils.cpp
+index f6c0596..64fe750 100644
+--- a/src/aws-cpp-sdk-core/source/utils/StringUtils.cpp
++++ b/src/aws-cpp-sdk-core/source/utils/StringUtils.cpp
+@@ -96,20 +96,27 @@ Aws::Vector<Aws::String> StringUtils::Split(const Aws::String& toSplit, char spl
+         return StringUtils::SplitWithSpaces(toSplit, splitOn);
+     }
+ 
++    // Walk the string directly rather than through a std::stringstream: constructing a stream takes the
++    // libstdc++ global locale mutex when the global locale is not the classic one, and this runs several
++    // times per request. Same semantics as std::getline on a stream of toSplit.
+     Aws::Vector<Aws::String> returnValues;
+-    Aws::StringStream input(toSplit);
+-    Aws::String item;
++    size_t pos = 0;
++    const size_t len = toSplit.size();
+ 
+-    while(returnValues.size() < numOfTargetParts - 1 && std::getline(input, item, splitOn))
++    while(returnValues.size() < numOfTargetParts - 1 && pos < len)
+     {
++        const size_t end = toSplit.find(splitOn, pos);
++        Aws::String item = toSplit.substr(pos, end == Aws::String::npos ? Aws::String::npos : end - pos);
++        pos = (end == Aws::String::npos) ? len : end + 1;
+         if (!item.empty() || option == SplitOptions::INCLUDE_EMPTY_ENTRIES)
+         {
+             returnValues.emplace_back(std::move(item));
+         }
+     }
+ 
+-    if (std::getline(input, item, static_cast<char>(EOF)))
++    if (pos < len)
+     {
++        Aws::String item = toSplit.substr(pos);
+         if (option != SplitOptions::INCLUDE_EMPTY_ENTRIES)
+         {
+             // Trim all leading delimiters.
+@@ -151,16 +158,23 @@ Aws::Vector<Aws::String> StringUtils::SplitWithSpaces(const Aws::String& toSplit
+ 
+ Aws::Vector<Aws::String> StringUtils::SplitOnLine(const Aws::String& toSplit)
+ {
+-    Aws::StringStream input(toSplit);
++    // No std::stringstream (see Split): same result as std::getline on a stream of toSplit.
+     Aws::Vector<Aws::String> returnValues;
+-    Aws::String item;
++    size_t pos = 0;
++    const size_t len = toSplit.size();
+ 
+-    while (std::getline(input, item))
++    while (pos < len)
+     {
+-        if (item.size() > 0)
++        size_t end = toSplit.find('\n', pos);
++        if (end == Aws::String::npos)
+         {
+-            returnValues.push_back(item);
++            end = len;
+         }
++        if (end > pos)
++        {
++            returnValues.emplace_back(toSplit.substr(pos, end - pos));
++        }
++        pos = end + 1;
+     }
+ 
+     return returnValues;
+@@ -169,26 +183,29 @@ Aws::Vector<Aws::String> StringUtils::SplitOnLine(const Aws::String& toSplit)
+ 
+ Aws::String StringUtils::URLEncode(const char* unsafe)
+ {
+-    Aws::StringStream escaped;
+-    escaped.fill('0');
+-    escaped << std::hex << std::uppercase;
+-
++    // No std::stringstream (see Split): build the result directly; uppercase hex as before.
++    static const char hexDigits[] = "0123456789ABCDEF";
+     size_t unsafeLength = strlen(unsafe);
++    Aws::String escaped;
++    escaped.reserve(unsafeLength * 3);
+     for (auto i = unsafe, n = unsafe + unsafeLength; i != n; ++i)
+     {
+         char c = *i;
+         if (IsAlnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
+         {
+-            escaped << (char)c;
++            escaped.push_back(c);
+         }
+         else
+         {
+             //this unsigned char cast allows us to handle unicode characters.
+-            escaped << '%' << std::setw(2) << int((unsigned char)c) << std::setw(0);
++            const unsigned char u = static_cast<unsigned char>(c);
++            escaped.push_back('%');
++            escaped.push_back(hexDigits[u >> 4]);
++            escaped.push_back(hexDigits[u & 0xF]);
+         }
+     }
+ 
+-    return escaped.str();
++    return escaped;
+ }
+ 
+ Aws::String StringUtils::UTF8Escape(const char* unicodeString, const char* delimiter)

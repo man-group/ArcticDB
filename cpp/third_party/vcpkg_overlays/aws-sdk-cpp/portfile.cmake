@@ -12,6 +12,7 @@ vcpkg_from_github(
         find-dependency.patch
         configure-binary-dir.patch # https://github.com/aws/aws-sdk-cpp/pull/3459
         curl-write-data-no-stringstream.patch
+        stringutils-no-stringstream.patch
         retry-strategy-interface-guard.patch # No-op, fails to apply when the RetryStrategy interface changes
 )
 
