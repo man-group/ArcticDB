@@ -1578,13 +1578,25 @@ def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch, route_env_
         create_library(s3_storage.arctic_uri, lib_name)
 
 
+def _post_to_mock_s3(url, data, verify):
+    # The mock's control requests set state, so repeating one is safe. Windows runners sometimes fail to open a
+    # loopback connection (WinError 10048).
+    for delay in (1, 2, 4, 8):
+        try:
+            requests.post(url, data, verify=verify).raise_for_status()
+            return
+        except requests.exceptions.ConnectionError:
+            time.sleep(delay)
+    requests.post(url, data, verify=verify).raise_for_status()
+
+
 @pytest.mark.parametrize("checksum", [None, "crc64nvme", "md5"])
 def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, checksum):
     # moto is set to reject the CRC64-NVME digest the SDK sends by default and to require a correct
     # Content-MD5 instead, so only the MD5 opt-in should be able to delete.
     endpoint = s3_storage.factory.endpoint
     verify = s3_storage.factory.client_cert_file or False
-    requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"1", verify=verify).raise_for_status()
+    _post_to_mock_s3(endpoint + "/require_md5_checksum_on_delete_objs_request", b"1", verify=verify)
     try:
         create_library(s3_storage.arctic_uri, lib_name)
         lib = Arctic(s3_storage.arctic_uri)[lib_name]
@@ -1610,7 +1622,7 @@ def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, checksum):
         assert "S3_DeleteObjects" in stats["storage_operations"], stats
         assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if checksum == "md5" else 3)
     finally:
-        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
+        _post_to_mock_s3(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify)
 
 
 @pytest.mark.parametrize("checksum_setting", [("when_supported", None), (None, "when_supported")])
@@ -1632,8 +1644,8 @@ def test_s3_delete_objects_checksum_no_effect_in_when_supported_mode(
     verify = s3_storage.factory.client_cert_file or False
     try:
         # Response checksums are on in both cases here, so the mock has to answer them rather than 411
-        requests.post(endpoint + "/reject_checksum_mode", b"0", verify=verify).raise_for_status()
-        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"1", verify=verify).raise_for_status()
+        _post_to_mock_s3(endpoint + "/reject_checksum_mode", b"0", verify=verify)
+        _post_to_mock_s3(endpoint + "/require_md5_checksum_on_delete_objs_request", b"1", verify=verify)
         create_library(s3_storage.arctic_uri, lib_name)
         lib = Arctic(s3_storage.arctic_uri)[lib_name]
         lt = lib._nvs.library_tool()
@@ -1646,8 +1658,16 @@ def test_s3_delete_objects_checksum_no_effect_in_when_supported_mode(
         assert "S3_DeleteObjects" in stats["storage_operations"], stats
         assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
     finally:
-        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
-        requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+        _post_to_mock_s3(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify)
+        _post_to_mock_s3(endpoint + "/reject_checksum_mode", b"1", verify=verify)
+
+
+# Other coverage: test_s3_retry_strategy.cpp and these tests on Linux and macOS.
+_skip_exact_retry_budget_on_windows = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="SKIP_WIN The SDK can lose an attempt on Windows, so an exact retry budget flakes. "
+    "Inferred from CI logs; the cause is not proven",
+)
 
 
 @contextlib.contextmanager
@@ -1656,14 +1676,14 @@ def _corrupting_get_responses(s3_storage):
     verify = s3_storage.factory.client_cert_file or False
 
     def corrupt(count):
-        requests.post(endpoint + "/corrupt_get_responses", str(count).encode(), verify=verify).raise_for_status()
+        _post_to_mock_s3(endpoint + "/corrupt_get_responses", str(count).encode(), verify=verify)
 
-    requests.post(endpoint + "/reject_checksum_mode", b"0", verify=verify).raise_for_status()
+    _post_to_mock_s3(endpoint + "/reject_checksum_mode", b"0", verify=verify)
     try:
         yield corrupt
     finally:
         corrupt(0)
-        requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+        _post_to_mock_s3(endpoint + "/reject_checksum_mode", b"1", verify=verify)
 
 
 def _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries):
@@ -1679,6 +1699,7 @@ def _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries):
             lib.read("sym")
 
 
+@_skip_exact_retry_budget_on_windows
 def test_s3_response_checksum_mismatch_is_retried_once_by_default(
     s3_storage, lib_name, monkeypatch, route_env_to_extension
 ):
@@ -1691,6 +1712,7 @@ def test_s3_response_checksum_mismatch_is_retried_once_by_default(
         _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries=1)
 
 
+@_skip_exact_retry_budget_on_windows
 @pytest.mark.parametrize(
     "aws_max_attempts, max_retries, expected_retries",
     [
