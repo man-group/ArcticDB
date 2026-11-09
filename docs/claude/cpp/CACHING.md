@@ -175,6 +175,16 @@ version_map()->flush();
 version_map()->flush_entry(stream_id);
 ```
 
+### Thread Safety
+
+`check_reload()` and `flush()` may run concurrently on one `VersionMapImpl`. Every `PythonVersionStore` binding takes the
+process-wide `SingleThreadMutexHolder`, so this applies to C++ callers that do not go through the bindings.
+
+- A reload builds a new `VersionMapEntry` and replaces the cached one, so an entry already returned stays consistent. A
+  reload is not cached if a flush, or a reload that started later, has overtaken it.
+- Writes still change the cached entry in place, so they must not run concurrently with a read of the same symbol
+  through the same map.
+
 ### Automatic Cache Bypass
 
 The following operations automatically bypass or refresh the cache:

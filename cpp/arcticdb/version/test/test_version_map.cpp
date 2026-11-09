@@ -9,6 +9,11 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
+#include <atomic>
+#include <chrono>
+#include <functional>
+#include <thread>
+
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -708,6 +713,10 @@ std::shared_ptr<VersionMapEntry> write_versions(
                 key = atom_key_builder().version_id(*version_id_opt).build(id, KeyType::VERSION);
             }
             version_map->tombstone_from_key_or_all(store, id, key);
+            // That may have reloaded, which replaces the cached entry
+            entry = version_map->check_reload(
+                    store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+            );
             break;
         }
         }
@@ -853,7 +862,10 @@ TEST(VersionMap, FollowingVersionChainWithCaching) {
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}));
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}));
 
-    // We add a new undeleted key
+    // We add a new undeleted key, to the entry that the reload above cached
+    entry = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
     auto key4 = atom_key_with_version(id, 3, 5);
     version_map->do_write(store, key4, entry);
     write_symbol_ref(store, key4, std::nullopt, entry->head_.value());
@@ -1300,6 +1312,10 @@ TEST(VersionMap, CompactionUpdateCache) {
         auto key = atom_key_with_version(id, i, i);
         version_map->write_version(store, key, std::nullopt);
     }
+    // The first write reloaded, which replaces the cached entry
+    entry = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
 
     auto assert_keys_in_entry_and_store = [&store](
                                                   std::shared_ptr<VersionMapEntry> entry,
@@ -1573,6 +1589,133 @@ TEST(VersionMap, DowntoCacheHitAfterFromTimeWithTombstoneAll) {
     ASSERT_FALSE(version_map->has_cached_entry(
             id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}
     ));
+}
+
+namespace {
+
+std::optional<VersionId> latest_version(const VersionMapEntry& entry) {
+    const auto latest = entry.get_first_index(true).first;
+    return latest.has_value() ? std::make_optional(latest->version_id()) : std::nullopt;
+}
+
+const LoadStrategy latest_including_deleted{LoadType::LATEST, LoadObjective::INCLUDE_DELETED};
+
+// Runs a callback once, right after the next read returns: a point in a reload where another thread could act.
+struct StoreWithReadHook : InMemoryStore {
+    std::function<void()> after_next_read;
+
+    std::pair<VariantKey, SegmentInMemory> read_sync(const VariantKey& key, storage::ReadKeyOpts opts) override {
+        auto result = InMemoryStore::read_sync(key, opts);
+        if (auto hook = std::exchange(after_next_read, nullptr))
+            hook();
+        return result;
+    }
+};
+
+// Returns how many reads, from 8 threads over about a second, did not see `id` at `expected`. `background` runs in a
+// loop beside them. A race here can also crash the process, which the sanitizer builds report reliably.
+size_t count_inconsistent_reads(
+        const std::shared_ptr<InMemoryStore>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& id,
+        VersionId expected, const std::function<void()>& background
+) {
+    std::atomic<bool> stop{false};
+    std::atomic<size_t> inconsistent{0};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 8; ++i) {
+        threads.emplace_back([&] {
+            while (!stop) {
+                try {
+                    auto entry = version_map->check_reload(store, id, latest_including_deleted, __FUNCTION__);
+                    if (latest_version(*entry) != std::make_optional(expected))
+                        ++inconsistent;
+                } catch (const std::runtime_error&) {
+                    ++inconsistent;
+                }
+            }
+        });
+    }
+    threads.emplace_back([&] {
+        while (!stop)
+            background();
+    });
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    stop = true;
+    for (auto& thread : threads)
+        thread.join();
+    return inconsistent;
+}
+
+} // namespace
+
+TEST(VersionMap, ReloadLeavesAnEntryAlreadyHandedOutUnchanged) {
+    ScopedConfig sc("VersionMap.ReloadInterval", 0);
+    auto store = std::make_shared<InMemoryStore>();
+    auto writer = std::make_shared<VersionMap>();
+    auto reader = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    const auto v0 = atom_key_with_version(id, 0, 0);
+    writer->write_version(store, v0, std::nullopt);
+
+    const auto held = reader->check_reload(store, id, latest_including_deleted, __FUNCTION__);
+    writer->write_version(store, atom_key_with_version(id, 1, 1), v0);
+    const auto reloaded = reader->check_reload(store, id, latest_including_deleted, __FUNCTION__);
+
+    EXPECT_EQ(latest_version(*reloaded), std::make_optional<VersionId>(1));
+    EXPECT_EQ(latest_version(*held), std::make_optional<VersionId>(0));
+}
+
+TEST(VersionMap, SlowReloadDoesNotReplaceANewerOne) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<StoreWithReadHook>();
+    auto writer = std::make_shared<VersionMap>();
+    auto reader = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    const auto v0 = atom_key_with_version(id, 0, 0);
+    writer->write_version(store, v0, std::nullopt);
+
+    store->after_next_read = [&] {
+        writer->write_version(store, atom_key_with_version(id, 1, 1), v0);
+        reader->check_reload(store, id, latest_including_deleted, __FUNCTION__);
+    };
+    const auto slow = reader->check_reload(store, id, latest_including_deleted, __FUNCTION__);
+
+    EXPECT_EQ(latest_version(*slow), std::make_optional<VersionId>(0));
+    const auto cached = reader->check_reload(nullptr, id, latest_including_deleted, __FUNCTION__);
+    EXPECT_EQ(latest_version(*cached), std::make_optional<VersionId>(1));
+}
+
+TEST(VersionMap, ReloadStartedBeforeAFlushIsNotCached) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<StoreWithReadHook>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    version_map->write_version(store, atom_key_with_version(id, 0, 0), std::nullopt);
+    version_map->flush();
+
+    store->after_next_read = [&] { version_map->flush(); };
+    const auto entry = version_map->check_reload(store, id, latest_including_deleted, __FUNCTION__);
+
+    EXPECT_EQ(latest_version(*entry), std::make_optional<VersionId>(0));
+    EXPECT_FALSE(version_map->has_cached_entry(id, latest_including_deleted));
+}
+
+TEST(VersionMap, ConcurrentFlushAndCheckReload) {
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    version_map->write_version(store, atom_key_with_version(id, 0, 0), std::nullopt);
+
+    EXPECT_EQ(count_inconsistent_reads(store, version_map, id, 0, [&] { version_map->flush(); }), 0u);
+}
+
+TEST(VersionMap, ConcurrentReloadsOfOneSymbol) {
+    ScopedConfig sc("VersionMap.ReloadInterval", 0);
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    version_map->write_version(store, atom_key_with_version(id, 0, 0), std::nullopt);
+
+    EXPECT_EQ(count_inconsistent_reads(store, version_map, id, 0, [] { std::this_thread::yield(); }), 0u);
 }
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"

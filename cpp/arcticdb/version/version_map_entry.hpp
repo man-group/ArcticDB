@@ -245,6 +245,7 @@ struct VersionMapEntry {
     void clear() {
         head_.reset();
         last_reload_time_ = 0;
+        reload_order_ = 0;
         tombstones_.clear();
         tombstone_all_.reset();
         keys_.clear();
@@ -262,6 +263,7 @@ struct VersionMapEntry {
         swap(left.keys_, right.keys_);
         swap(left.tombstones_, right.tombstones_);
         swap(left.last_reload_time_, right.last_reload_time_);
+        swap(left.reload_order_, right.reload_order_);
         swap(left.tombstone_all_, right.tombstone_all_);
         swap(left.head_, right.head_);
         swap(left.load_progress_, right.load_progress_);
@@ -492,6 +494,7 @@ struct VersionMapEntry {
     StreamId stream_id_;
     std::optional<AtomKey> head_;
     timestamp last_reload_time_ = 0;
+    uint64_t reload_order_ = 0; // See VersionMapImpl::last_reload_started_
     LoadProgress load_progress_;
     std::deque<AtomKeyPacked> keys_;
     std::optional<AtomKey> tombstone_all_;

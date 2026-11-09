@@ -99,6 +99,11 @@ class VersionMapImpl {
      * when someone requests the latest version, we do have a grace period of DEFAULT_RELOAD_INTERVAL where we will
      * just use the data in the in memory map if it exists rather than reading the ref key from the storage.
      *
+     * THREAD SAFETY
+     * Reads and flushes may run concurrently, though the Python bindings serialise every call with
+     * SingleThreadMutexHolder. A reload replaces the cached entry rather than changing it, so an entry already handed
+     * out stays consistent. Writes still change the cached entry in place, so they must not run concurrently with a
+     * read of the same symbol through this map.
      */
 
     /**
@@ -115,6 +120,10 @@ class VersionMapImpl {
     bool log_changes_ = false;
     std::optional<timestamp> reload_interval_;
     mutable std::mutex map_mutex_;
+    // Guarded by map_mutex_. Reloads are numbered as they start, so one overtaken by a flush or by a later reload does
+    // not repopulate the cache.
+    uint64_t last_reload_started_ = 0;
+    uint64_t last_reload_started_at_flush_ = 0;
     std::shared_ptr<LockTable> lock_table_ = std::make_shared<LockTable>();
 
   public:
@@ -214,6 +223,7 @@ class VersionMapImpl {
     void flush() {
         std::lock_guard lock(map_mutex_);
         map_.clear();
+        last_reload_started_at_flush_ = last_reload_started_;
     }
 
     void load_via_iteration(
@@ -556,8 +566,8 @@ class VersionMapImpl {
     ) {
         ARCTICDB_DEBUG(log::version(), "Check reload in function {} for id {}", function, stream_id);
 
-        if (has_cached_entry(stream_id, load_strategy)) {
-            return get_entry(stream_id);
+        if (auto entry = cached_entry(stream_id, load_strategy)) {
+            return entry;
         }
 
         return storage_reload(store, stream_id, load_strategy);
@@ -725,20 +735,33 @@ class VersionMapImpl {
      * @return whether we have a cached entry suitable for the load strategy, so do not need to go to storage
      */
     bool has_cached_entry(const StreamId& stream_id, const LoadStrategy& requested_load_strategy) const {
-        LoadType requested_load_type = requested_load_strategy.load_type_;
-        util::check(requested_load_type < LoadType::UNKNOWN, "Unexpected load type requested {}", requested_load_type);
+        return cached_entry(stream_id, requested_load_strategy) != nullptr;
+    }
+
+  private:
+    std::shared_ptr<VersionMapEntry> cached_entry(
+            const StreamId& stream_id, const LoadStrategy& requested_load_strategy
+    ) const {
+        util::check(
+                requested_load_strategy.load_type_ < LoadType::UNKNOWN,
+                "Unexpected load type requested {}",
+                requested_load_strategy.load_type_
+        );
 
         requested_load_strategy.validate();
-        MapType::const_iterator entry_it;
-        if (!find_entry(entry_it, stream_id)) {
-            return false;
-        }
+        auto entry = find_entry(stream_id);
+        return entry && covers_load_strategy(entry, stream_id, requested_load_strategy) ? entry : nullptr;
+    }
 
+    bool covers_load_strategy(
+            const std::shared_ptr<VersionMapEntry>& entry, const StreamId& stream_id ARCTICDB_UNUSED,
+            const LoadStrategy& requested_load_strategy
+    ) const {
+        LoadType requested_load_type = requested_load_strategy.load_type_;
         const timestamp reload_interval = reload_interval_.value_or(
                 ConfigsMap::instance()->get_int("VersionMap.ReloadInterval", DEFAULT_RELOAD_INTERVAL)
         );
 
-        const auto& entry = entry_it->second;
         if (const timestamp cache_timing = now() - entry->last_reload_time_; cache_timing > reload_interval) {
             ARCTICDB_DEBUG(
                     log::version(),
@@ -787,7 +810,6 @@ class VersionMapImpl {
         }
     }
 
-  private:
     std::shared_ptr<VersionMapEntry> compact_entry(
             std::shared_ptr<Store> store, const StreamId& stream_id, const std::shared_ptr<VersionMapEntry>& entry
     ) {
@@ -845,14 +867,14 @@ class VersionMapImpl {
             entry->validate();
     }
 
-    bool find_entry(MapType::const_iterator& entry, const StreamId& stream_id) const {
+    std::shared_ptr<VersionMapEntry> find_entry(const StreamId& stream_id) const {
         std::lock_guard lock(map_mutex_);
-        entry = map_.find(stream_id);
+        const auto entry = map_.find(stream_id);
         if (entry == map_.cend()) {
             ARCTICDB_DEBUG(log::version(), "Did not find cached entry for stream id {}", stream_id);
-            return false;
+            return nullptr;
         }
-        return true;
+        return entry->second;
     }
 
     bool inline has_loaded_earliest_version(const VersionMapEntry& entry, const LoadStrategy& requested_load_strategy)
@@ -897,7 +919,7 @@ class VersionMapImpl {
         return false;
     }
 
-    std::shared_ptr<VersionMapEntry>& get_entry(const StreamId& stream_id) {
+    std::shared_ptr<VersionMapEntry> get_entry(const StreamId& stream_id) {
         std::lock_guard lock(map_mutex_);
         if (auto result = map_.find(stream_id); result != std::end(map_))
             return result->second;
@@ -946,21 +968,35 @@ class VersionMapImpl {
          * be much slower, though always consistent.
          */
 
-        auto entry = get_entry(stream_id);
-        entry->clear();
+        auto entry = std::make_shared<VersionMapEntry>(stream_id);
         const auto clock_unsync_tolerance =
                 ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE);
+        entry->reload_order_ = start_reload();
         entry->last_reload_time_ = Clock::nanos_since_epoch() - clock_unsync_tolerance;
 
-        auto temp = std::make_shared<VersionMapEntry>(*entry);
-        load_via_ref_key(store, stream_id, load_strategy, temp);
-        std::swap(*entry, *temp);
+        load_via_ref_key(store, stream_id, load_strategy, entry);
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
-        if (validate_)
-            entry->validate();
+        entry->validate();
+        publish_reloaded_entry(stream_id, entry);
 
         return entry;
+    }
+
+    uint64_t start_reload() {
+        std::lock_guard lock(map_mutex_);
+        return ++last_reload_started_;
+    }
+
+    void publish_reloaded_entry(const StreamId& stream_id, const std::shared_ptr<VersionMapEntry>& entry) {
+        std::lock_guard lock(map_mutex_);
+        if (entry->reload_order_ <= last_reload_started_at_flush_)
+            return;
+
+        if (const auto [cached, inserted] = map_.try_emplace(stream_id, entry);
+            !inserted && cached->second->reload_order_ < entry->reload_order_) {
+            cached->second = entry;
+        }
     }
 
     timestamp now() const { return Clock::nanos_since_epoch(); }
@@ -1112,7 +1148,7 @@ class VersionMapImpl {
     }
 
     void recover_deleted(std::shared_ptr<Store> store, const StreamId& stream_id) {
-        auto& entry = get_entry(stream_id);
+        auto entry = get_entry(stream_id);
         entry->clear();
         load_via_iteration(store, stream_id, entry);
 
