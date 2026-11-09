@@ -23,6 +23,9 @@ class RealPosix : public PosixInterface {
     int mkdir(const char* pathname, mode_t mode) override;
     int stat(const char* pathname, struct stat* statbuf) override;
     int fstat(int fd, struct stat* statbuf) override;
+    DIR* opendir(const char* name) override;
+    struct dirent* readdir(DIR* dirp) override;
+    int closedir(DIR* dirp) override;
 };
 
 } // namespace arcticdb::storage::file_backed

@@ -114,4 +114,20 @@ TEST_F(FileBackedStorage, KeysDoNotCollide) {
     }
 }
 
+TEST_F(FileBackedStorage, ListSymbols) {
+    Segment segment{storage::get_test_segment()};
+    const std::string symbol{"symbol"};
+    auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
+    storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
+    ASSERT_TRUE(exists_in_store(storage(), symbol));
+
+    // TODO: Note that this is a copy of test_local_storages.cpp CoreFunctions.
+    bool executed = false;
+    storage().iterate_type(arcticdb::entity::KeyType::VERSION, [&](entity::VariantKey&& found_key) {
+        ASSERT_EQ(found_key, key);
+        executed = true;
+    });
+    ASSERT_TRUE(executed);
+}
+
 } // namespace

@@ -590,6 +590,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
         storage/file_backed/file_backed_storage.cpp
+        storage/file_backed/posix_interface.cpp
         storage/file_backed/real_posix.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
