@@ -223,7 +223,12 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     py::call_guard<SingleThreadMutexHolder>(),
                     // TODO: Better description
                     "Read the specified version of the dataframe from the store"
-            );
+            )
+            .def("next",
+                 &StreamingReadGenerator::next,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 // TODO: Better description
+                 "Read the specified version of the dataframe from the store");
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())

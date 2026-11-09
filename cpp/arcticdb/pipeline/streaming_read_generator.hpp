@@ -30,18 +30,21 @@ class StreamingReadGenerator {
     );
 
     ReadResult read_result();
+    std::optional<ArrowOutputFrame> next();
 
   private:
     void ensure_index_information();
 
+    size_t idx_{0};
     // TODO: Make this shared_ptr
-    ARCTICDB_UNUSED version_store::LocalVersionedEngine* engine_;
-    ARCTICDB_UNUSED StreamId stream_id_;
-    ARCTICDB_UNUSED VersionQuery version_query_;
-    ARCTICDB_UNUSED std::shared_ptr<ReadQuery> read_query_;
-    ARCTICDB_UNUSED ReadOptions read_options_;
+    version_store::LocalVersionedEngine* engine_;
+    StreamId stream_id_;
+    VersionQuery version_query_;
+    std::shared_ptr<ReadQuery> read_query_;
+    ReadOptions read_options_;
     ARCTICDB_UNUSED std::optional<uint64_t> prefetch_rows_;
     ARCTICDB_UNUSED std::shared_ptr<std::any> handler_data_;
-    ARCTICDB_UNUSED std::shared_ptr<IndexInformation> index_information_;
+    std::shared_ptr<IndexInformation> index_information_;
+    std::vector<RowRange> row_ranges_;
 };
 } // namespace arcticdb

@@ -25,12 +25,12 @@ import polars as pl
 def test_arrow_streaming_reads_basic(in_memory_store_factory):
     lib = in_memory_store_factory(segment_row_size=10)
     sym = "test_arrow_streaming_reads_basic"
-    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(20)}))
     metadata = {"hello": "world"}
     lib.write(sym, df, metadata=metadata)
     gen = lib.read_streaming(sym)
-    # for idx, df_slice in enumerate(gen):
-    #     assert df_slice.equals(df.slice(idx * 10, 10))
+    for idx, df_slice in enumerate(gen):
+        assert df_slice.equals(df.slice(idx * 10, 10))
     vit = lib.read(sym)
     vit.data = None
     assert vit == gen.versioned_item()

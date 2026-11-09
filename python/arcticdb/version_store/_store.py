@@ -277,7 +277,7 @@ class StreamingReadGenerator:
         self._read_result = None
         self._versioned_item = None
 
-    def versioned_item(self):
+    def _ensure_read_result(self):
         if self._read_result is None:
             self._read_result = ReadResult(*self._generator_impl.read_result())
             self._versioned_item = VersionedItem(
@@ -289,13 +289,23 @@ class StreamingReadGenerator:
                 host=self._nvs.env,
                 timestamp=self._read_result.version.timestamp,
             )
+
+    def versioned_item(self):
+        self._ensure_read_result()
         return self._versioned_item
 
     def __iter__(self):
+        self._ensure_read_result()
         return self
 
     def __next__(self):
-        return None
+        data = self._generator_impl.next()
+        if data is None:
+            raise StopIteration
+        # TODO: Support pyarrow output format
+        return self._nvs._adapt_frame_data(
+            data, self._read_result.norm, OutputFormat.POLARS, self._read_result.sort_order
+        )
 
 
 @dataclass
