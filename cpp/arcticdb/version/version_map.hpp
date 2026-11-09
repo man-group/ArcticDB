@@ -41,6 +41,14 @@
 
 namespace arcticdb {
 
+// The chain of a cached entry that a load may reuse instead of reading it again.
+struct CachedChain {
+    AtomKey head;
+    bool fully_loaded;
+};
+
+enum class RefKeyLoad { LOADED, HEAD_UNCHANGED, REACHED_CACHED_HEAD };
+
 template<class Clock = util::SysClock>
 class VersionMapImpl {
     /*
@@ -103,6 +111,11 @@ class VersionMapImpl {
      * revalidated by reading the ref key alone: if the ref still points at the cached head, the index and tombstone
      * keys are unchanged. Its VERSION keys may not be, because compaction keeps the head and rewrites the keys below
      * it, so code that reads or deletes VERSION keys loads from storage with storage_reload instead.
+     *
+     * If the ref has moved, the chain is walked only down to the cached head, and those keys are merged with the entry.
+     * Everything below that head is still valid, for the same reason. A walk that never reaches it (e.g. compaction
+     * removed it) loads the chain as usual. A load that the ref key alone can answer uses it unless the entry is fully
+     * loaded, which would be expensive to rebuild.
      */
 
     /**
@@ -136,9 +149,13 @@ class VersionMapImpl {
 
     bool validate() const { return validate_; }
 
-    void follow_version_chain(
+    /**
+     * @param cached_chain if the walk reaches its head, entry holds only the keys above it and true is returned
+     */
+    bool follow_version_chain(
             const std::shared_ptr<Store>& store, const VersionMapEntry& ref_entry,
-            const std::shared_ptr<VersionMapEntry>& entry, const LoadStrategy& load_strategy
+            const std::shared_ptr<VersionMapEntry>& entry, const LoadStrategy& load_strategy,
+            const std::optional<CachedChain>& cached_chain = std::nullopt
     ) const {
         util::check(
                 ref_entry.stream_id_ == entry->stream_id_,
@@ -161,11 +178,18 @@ class VersionMapImpl {
             cached_penultimate_index = ref_entry.keys_[1].to_atom_key(ref_entry.stream_id_);
         }
 
-        if (key_exists_in_ref_entry(load_strategy, ref_entry, cached_penultimate_index)) {
+        const bool keep_fully_loaded_chain = cached_chain && cached_chain->fully_loaded;
+        if (!keep_fully_loaded_chain && key_exists_in_ref_entry(load_strategy, ref_entry, cached_penultimate_index)) {
             load_progress = ref_entry.load_progress_;
             entry->keys_.push_back(ref_entry.keys_[0]);
             if (cached_penultimate_index)
                 entry->keys_.push_back(*cached_penultimate_index);
+        } else if (cached_chain) {
+            do {
+                ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
+                auto [key, seg] = store->read_sync(next_key.value());
+                next_key = read_segment_with_keys(seg, entry, load_progress);
+            } while (next_key && next_key != cached_chain->head);
         } else {
             do {
                 ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
@@ -178,14 +202,15 @@ class VersionMapImpl {
                      continue_when_loading_undeleted(load_strategy, entry, load_progress));
         }
         entry->load_progress_ = load_progress;
+        return cached_chain && next_key == cached_chain->head;
     }
 
     /**
-     * @param cached_head if the ref key points at this head, entry is left untouched and true is returned
+     * @param cached_chain the entry's chain, reused if the ref key still points at its head or the walk reaches it
      */
-    bool load_via_ref_key(
+    RefKeyLoad load_via_ref_key(
             std::shared_ptr<Store> store, const StreamId& stream_id, const LoadStrategy& load_strategy,
-            const std::shared_ptr<VersionMapEntry>& entry, const std::optional<AtomKey>& cached_head = std::nullopt
+            const std::shared_ptr<VersionMapEntry>& entry, const std::optional<CachedChain>& cached_chain = std::nullopt
     ) {
         load_strategy.validate();
         static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
@@ -195,12 +220,13 @@ class VersionMapImpl {
                 VersionMapEntry ref_entry(stream_id);
                 read_symbol_ref(store, stream_id, ref_entry);
                 if (ref_entry.empty())
-                    return false;
+                    return RefKeyLoad::LOADED;
 
-                if (cached_head && ref_entry.head_ == cached_head)
-                    return true;
+                if (cached_chain && ref_entry.head_ == cached_chain->head)
+                    return RefKeyLoad::HEAD_UNCHANGED;
 
-                follow_version_chain(store, ref_entry, entry, load_strategy);
+                if (follow_version_chain(store, ref_entry, entry, load_strategy, cached_chain))
+                    return RefKeyLoad::REACHED_CACHED_HEAD;
                 break;
             } catch (const std::exception& err) {
                 if (--max_trials <= 0) {
@@ -219,7 +245,7 @@ class VersionMapImpl {
         }
         if (validate_)
             entry->validate();
-        return false;
+        return RefKeyLoad::LOADED;
     }
 
     void flush() {
@@ -979,8 +1005,9 @@ class VersionMapImpl {
     /**
      * Goes to the storage for a given symbol, and recreates the VersionMapEntry from the ref key structure.
      *
-     * @param allow_revalidation keep the cached entry if it matches storage, covers load_strategy and the ref key
-     * still points at its head. Only for callers that use the index and tombstone keys, not the VERSION keys.
+     * @param allow_revalidation reuse the cached entry if it matches storage and covers load_strategy: as it is if the
+     * ref key still points at its head, otherwise merged with the keys written above its head. Only for callers that
+     * use the index and tombstone keys, not the VERSION keys.
      */
     std::shared_ptr<VersionMapEntry> storage_reload(
             std::shared_ptr<Store> store, const StreamId& stream_id, const LoadStrategy& load_strategy,
@@ -991,23 +1018,33 @@ class VersionMapImpl {
                 ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE);
         const timestamp reload_time = Clock::nanos_since_epoch() - clock_unsync_tolerance;
 
-        std::optional<AtomKey> cached_head;
+        std::optional<CachedChain> cached_chain;
         if (allow_revalidation && ConfigsMap::instance()->get_int("VersionMap.RevalidateStaleCache", 1) &&
-            entry->matches_storage_ && cached_load_satisfies(*entry, load_strategy)) {
-            cached_head = entry->head_;
+            entry->matches_storage_ && entry->head_ && cached_load_satisfies(*entry, load_strategy)) {
+            cached_chain = CachedChain{*entry->head_, entry->load_progress_.is_earliest_version_loaded};
         }
-        if (!cached_head)
+        if (!cached_chain)
             entry->clear();
 
+        // A mutation that started or finished since we looked at the entry clears the flag or moves the head
+        const auto entry_unchanged = [&]() { return entry->matches_storage_ && entry->head_ == cached_chain->head; };
+
         auto temp = std::make_shared<VersionMapEntry>(stream_id);
-        if (load_via_ref_key(store, stream_id, load_strategy, temp, cached_head)) {
-            // A mutation that started or finished since we looked at the entry clears the flag or moves the head
-            if (entry->matches_storage_ && entry->head_ == cached_head) {
+        const auto ref_load = load_via_ref_key(store, stream_id, load_strategy, temp, cached_chain);
+        if (ref_load != RefKeyLoad::LOADED) {
+            if (ref_load == RefKeyLoad::HEAD_UNCHANGED && entry_unchanged()) {
                 entry->last_reload_time_ = reload_time;
                 return entry;
             }
-            *temp = VersionMapEntry(stream_id);
-            load_via_ref_key(store, stream_id, load_strategy, temp);
+            bool merged = false;
+            if (ref_load == RefKeyLoad::REACHED_CACHED_HEAD && entry_unchanged()) {
+                append_cached_chain(*temp, *entry);
+                merged = entry_unchanged() && cached_load_satisfies(*temp, load_strategy);
+            }
+            if (!merged) {
+                *temp = VersionMapEntry(stream_id);
+                load_via_ref_key(store, stream_id, load_strategy, temp);
+            }
         }
 
         entry->clear();
@@ -1020,6 +1057,35 @@ class VersionMapImpl {
         entry->matches_storage_ = true;
 
         return entry;
+    }
+
+    /**
+     * Completes newer, which holds the keys written above cached's head, so that it matches a load of the whole chain.
+     * newer is read first, so its tombstones win, as they do when walking the chain.
+     */
+    void append_cached_chain(VersionMapEntry& newer, const VersionMapEntry& cached) {
+        newer.keys_.insert(newer.keys_.end(), cached.keys_.begin(), cached.keys_.end());
+        for (const auto& [_, tombstone] : cached.tombstones_) {
+            newer.try_set_tombstone(tombstone.to_atom_key(newer.stream_id_));
+        }
+        if (cached.tombstone_all_) {
+            newer.try_set_tombstone_all(*cached.tombstone_all_);
+        }
+
+        const LoadProgress written_above = newer.load_progress_;
+        newer.load_progress_ = cached.load_progress_;
+        maybe_invalidate_cached_undeleted(newer);
+        auto& progress = newer.load_progress_;
+        progress.oldest_loaded_index_version_ =
+                std::min(progress.oldest_loaded_index_version_, written_above.oldest_loaded_index_version_);
+        progress.oldest_loaded_undeleted_index_version_ = std::min(
+                progress.oldest_loaded_undeleted_index_version_, written_above.oldest_loaded_undeleted_index_version_
+        );
+        progress.earliest_loaded_timestamp_ =
+                std::min(progress.earliest_loaded_timestamp_, written_above.earliest_loaded_timestamp_);
+        progress.earliest_loaded_undeleted_timestamp_ = std::min(
+                progress.earliest_loaded_undeleted_timestamp_, written_above.earliest_loaded_undeleted_timestamp_
+        );
     }
 
     timestamp now() const { return Clock::nanos_since_epoch(); }

@@ -66,6 +66,21 @@ def _two_clients(in_memory_store_factory, name):
     return lib_a, lib_b
 
 
+def test_stale_cache_reads_only_version_keys_written_by_another_client(in_memory_store_factory, clear_query_stats):
+    lib_a, lib_b = _two_clients(in_memory_store_factory, "delta_walk")
+    for i in range(N):
+        lib_a.write("sym", _df(i))
+    lib_b.list_versions("sym")
+    lib_a.write("sym", _df(N))
+    lib_a.write("sym", _df(N + 1))
+    with config_context("VersionMap.ReloadInterval", 0):
+        version_reads, ref_reads = _version_reads(lambda: lib_b.delete_version("sym", N))
+    assert version_reads == 2
+    assert ref_reads >= 1
+    assert sorted(v["version"] for v in lib_b.list_versions("sym")) == [v for v in range(N + 2) if v != N]
+    assert_frame_equal(lib_a.read("sym").data, _df(N + 1))
+
+
 @pytest.mark.parametrize("change", ["write", "delete_version", "delete", "delete_and_recreate"])
 def test_stale_cache_sees_changes_by_another_client(in_memory_store_factory, change):
     lib_a, lib_b = _two_clients(in_memory_store_factory, f"changes_{change}")

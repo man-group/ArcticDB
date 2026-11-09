@@ -9,6 +9,8 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
+#include <random>
+
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -1705,21 +1707,284 @@ TEST(VersionMapRevalidation, UncoveredLoadReloadsChain) {
     ASSERT_EQ(entry->get_indexes(true).size(), 5);
 }
 
-TEST(VersionMapRevalidation, MovedHeadReadsRefOnce) {
-    auto store = std::make_shared<FaultInjectingStore>();
+namespace {
+
+const LoadStrategy LOAD_LATEST_UNDELETED{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
+const LoadStrategy LOAD_LATEST_INCLUDE_DELETED{LoadType::LATEST, LoadObjective::INCLUDE_DELETED};
+
+struct TwoClients {
+    std::shared_ptr<FaultInjectingStore> store = std::make_shared<FaultInjectingStore>();
     StreamId id{"test"};
-    auto writer = std::make_shared<VersionMap>();
-    write_n_versions(store, writer, id, 0, 3);
-    auto version_map = std::make_shared<VersionMap>();
-    version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
-    write_n_versions(store, writer, id, 3, 4);
+    std::shared_ptr<VersionMap> writer = std::make_shared<VersionMap>();
+    std::shared_ptr<VersionMap> reader = std::make_shared<VersionMap>();
+
+    explicit TwoClients(VersionId versions, const LoadStrategy& reader_load = LOAD_ALL) {
+        write_n_versions(store, writer, id, 0, versions);
+        reader->check_reload(store, id, reader_load, __FUNCTION__);
+    }
+
+    std::shared_ptr<VersionMapEntry> fresh(const LoadStrategy& load = LOAD_ALL) const {
+        return std::make_shared<VersionMap>()->check_reload(store, id, load, __FUNCTION__);
+    }
+
+    void tombstone_version(VersionId version) const {
+        writer->write_tombstones(
+                store,
+                {atom_key_with_version(id, version, 0)},
+                id,
+                writer->check_reload(store, id, LOAD_ALL, __FUNCTION__)
+        );
+    }
+};
+
+void expect_same_as_fresh_load(const VersionMapEntry& entry, const VersionMapEntry& fresh) {
+    EXPECT_EQ(describe(entry), describe(fresh));
+    EXPECT_EQ(entry.head_, fresh.head_);
+    EXPECT_EQ(entry.tombstone_all_, fresh.tombstone_all_);
+    EXPECT_EQ(entry.load_progress_.is_earliest_version_loaded, fresh.load_progress_.is_earliest_version_loaded);
+    EXPECT_EQ(entry.load_progress_.oldest_loaded_index_version_, fresh.load_progress_.oldest_loaded_index_version_);
+    EXPECT_EQ(entry.get_indexes(false).size(), fresh.get_indexes(false).size());
+    EXPECT_EQ(entry.get_first_index(false).first, fresh.get_first_index(false).first);
+    EXPECT_EQ(entry.get_second_undeleted_index(), fresh.get_second_undeleted_index());
+}
+
+} // namespace
+
+TEST(VersionMapRevalidation, MovedHeadReadsOnlyNewVersionKeys) {
+    for (VersionId new_versions : {1, 3}) {
+        SCOPED_TRACE(new_versions);
+        TwoClients clients(6);
+        write_n_versions(clients.store, clients.writer, clients.id, 6, 6 + new_versions);
+
+        ScopedConfig stale("VersionMap.ReloadInterval", 0);
+        clients.store->reset_reads();
+        auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+        EXPECT_EQ(clients.store->reads(KeyType::VERSION_REF), 1);
+        EXPECT_EQ(clients.store->reads(KeyType::VERSION), new_versions);
+
+        auto fresh = clients.fresh();
+        expect_same_as_fresh_load(*entry, *fresh);
+        EXPECT_EQ(version_keys(*entry), version_keys(*fresh));
+    }
+}
+
+TEST(VersionMapRevalidation, MovedHeadMergesTombstones) {
+    using Change = std::function<void(const TwoClients&)>;
+    const std::vector<std::pair<std::string, Change>> changes{
+            {"tombstone", [](const TwoClients& c) { c.tombstone_version(3); }},
+            {"tombstone_oldest", [](const TwoClients& c) { c.tombstone_version(0); }},
+            {"tombstone_latest", [](const TwoClients& c) { c.tombstone_version(5); }},
+            {"tombstone_all", [](const TwoClients& c) { c.writer->tombstone_from_key_or_all(c.store, c.id); }},
+            {"tombstone_all_from_key",
+             [](const TwoClients& c) {
+                 c.writer->tombstone_from_key_or_all(c.store, c.id, atom_key_with_version(c.id, 2, 0));
+             }},
+            {"prune",
+             [](const TwoClients& c) {
+                 c.writer->write_and_prune_previous(
+                         c.store, atom_key_with_version(c.id, 6, PilotedClock::nanos_since_epoch()), std::nullopt
+                 );
+             }},
+    };
+    for (const auto& [name, change] : changes) {
+        SCOPED_TRACE(name);
+        TwoClients clients(6);
+        change(clients);
+
+        ScopedConfig stale("VersionMap.ReloadInterval", 0);
+        clients.store->reset_reads();
+        auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+        EXPECT_EQ(clients.store->reads(KeyType::VERSION_REF), 1);
+        EXPECT_EQ(clients.store->reads(KeyType::VERSION), 1);
+
+        auto fresh = clients.fresh();
+        expect_same_as_fresh_load(*entry, *fresh);
+        EXPECT_EQ(version_keys(*entry), version_keys(*fresh));
+    }
+}
+
+TEST(VersionMapRevalidation, MergedEntryCanBeMutated) {
+    TwoClients clients(6);
+    write_n_versions(clients.store, clients.writer, clients.id, 6, 8);
 
     ScopedConfig stale("VersionMap.ReloadInterval", 0);
-    store->reset_reads();
-    auto entry = version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
-    ASSERT_EQ(store->reads(KeyType::VERSION_REF), 1);
-    ASSERT_EQ(store->reads(KeyType::VERSION), 4);
-    ASSERT_EQ(describe(*entry), describe_storage(store, id));
+    write_n_versions(clients.store, clients.reader, clients.id, 8, 9);
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+    expect_same_as_fresh_load(*entry, *clients.fresh());
+
+    clients.reader->tombstone_from_key_or_all(clients.store, clients.id);
+    entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+    expect_same_as_fresh_load(*entry, *clients.fresh());
+    EXPECT_TRUE(entry->get_indexes(false).empty());
+}
+
+TEST(VersionMapRevalidation, MovedHeadSurvivingCompactionStillMerges) {
+    TwoClients clients(8);
+    write_n_versions(clients.store, clients.writer, clients.id, 8, 9);
+    clients.writer->compact(clients.store, clients.id);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    clients.store->reset_reads();
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+    EXPECT_EQ(clients.store->reads(KeyType::VERSION), 1);
+    expect_same_as_fresh_load(*entry, *clients.fresh());
+
+    EXPECT_NO_THROW(clients.reader->compact(clients.store, clients.id));
+    EXPECT_EQ(describe_storage(clients.store, clients.id), describe(*clients.fresh()));
+}
+
+TEST(VersionMapRevalidation, MovedHeadRemovedByCompactionWalksShortChain) {
+    TwoClients clients(8);
+    write_n_versions(clients.store, clients.writer, clients.id, 8, 10);
+    clients.writer->compact(clients.store, clients.id);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    clients.store->reset_reads();
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+    EXPECT_EQ(clients.store->reads(KeyType::VERSION), 2);
+
+    auto fresh = clients.fresh();
+    expect_same_as_fresh_load(*entry, *fresh);
+    EXPECT_EQ(version_keys(*entry), version_keys(*fresh));
+}
+
+TEST(VersionMapRevalidation, MovedHeadRewrittenChainIsNotMerged) {
+    TwoClients clients(6);
+    clients.writer->overwrite_symbol_tree(clients.store, clients.id, clients.fresh()->get_indexes(true));
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+    auto fresh = clients.fresh();
+    expect_same_as_fresh_load(*entry, *fresh);
+    EXPECT_EQ(version_keys(*entry), version_keys(*fresh));
+}
+
+TEST(VersionMapRevalidation, LatestLoadKeepsFullyLoadedEntry) {
+    TwoClients clients(6);
+    write_n_versions(clients.store, clients.writer, clients.id, 6, 7);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    clients.store->reset_reads();
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_LATEST_UNDELETED, __FUNCTION__);
+    EXPECT_EQ(clients.store->reads(KeyType::VERSION), 1);
+    EXPECT_EQ(entry->get_first_index(false).first, clients.fresh()->get_first_index(false).first);
+
+    clients.store->reset_reads();
+    entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+    EXPECT_EQ(clients.store->reads(KeyType::VERSION), 0);
+    expect_same_as_fresh_load(*entry, *clients.fresh());
+}
+
+TEST(VersionMapRevalidation, LatestLoadOfPartialEntryStillUsesRefAlone) {
+    TwoClients clients(6, LOAD_LATEST_INCLUDE_DELETED);
+    write_n_versions(clients.store, clients.writer, clients.id, 6, 7);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    clients.store->reset_reads();
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_LATEST_INCLUDE_DELETED, __FUNCTION__);
+    EXPECT_EQ(clients.store->reads(KeyType::VERSION_REF), 1);
+    EXPECT_EQ(clients.store->reads(KeyType::VERSION), 0);
+    EXPECT_EQ(entry->get_first_index(true).first->version_id(), 6);
+}
+
+TEST(VersionMapRevalidation, MergedEntryNotCoveringLoadReloadsChain) {
+    TwoClients clients(6, LOAD_LATEST_UNDELETED);
+    clients.tombstone_version(5);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_LATEST_UNDELETED, __FUNCTION__);
+    ASSERT_TRUE(entry->get_first_index(false).first.has_value());
+    EXPECT_EQ(entry->get_first_index(false).first->version_id(), 4);
+}
+
+TEST(VersionMapRevalidation, TransientFailureWalkingNewVersionKeysIsRetried) {
+    TwoClients clients(6);
+    write_n_versions(clients.store, clients.writer, clients.id, 6, 8);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    clients.store->fail_next_reads(KeyType::VERSION, 1);
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+    expect_same_as_fresh_load(*entry, *clients.fresh());
+}
+
+TEST(VersionMapRevalidation, FailedWalkOfNewVersionKeysLeavesUsableEntry) {
+    TwoClients clients(6);
+    write_n_versions(clients.store, clients.writer, clients.id, 6, 8);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    clients.store->fail_next_reads(KeyType::VERSION, 100);
+    EXPECT_ANY_THROW(clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__));
+
+    clients.store->fail_next_reads(KeyType::VERSION, 0);
+    auto entry = clients.reader->check_reload(clients.store, clients.id, LOAD_ALL, __FUNCTION__);
+    expect_same_as_fresh_load(*entry, *clients.fresh());
+}
+
+TEST(VersionMapRevalidation, RandomChangesByAnotherClientMatchFreshLoad) {
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    const std::vector<LoadStrategy> loads{
+            LOAD_ALL,
+            LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
+            LOAD_LATEST_UNDELETED,
+            LOAD_LATEST_INCLUDE_DELETED,
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)},
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-3)},
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)},
+    };
+    for (uint32_t seed = 0; seed < 20; ++seed) {
+        SCOPED_TRACE(seed);
+        std::mt19937 rng(seed);
+        TwoClients clients(4);
+        VersionId next_version = 4;
+        for (int step = 0; step < 60; ++step) {
+            switch (rng() % 7) {
+            case 0:
+            case 1:
+                write_n_versions(clients.store, clients.writer, clients.id, next_version, next_version + 1);
+                ++next_version;
+                break;
+            case 2: {
+                const auto live = clients.fresh()->get_indexes(false);
+                if (!live.empty())
+                    clients.tombstone_version(live[rng() % live.size()].version_id());
+                break;
+            }
+            case 3:
+                if (rng() % 3 == 0)
+                    clients.writer->tombstone_from_key_or_all(clients.store, clients.id);
+                break;
+            case 4:
+                clients.writer->write_and_prune_previous(
+                        clients.store,
+                        atom_key_with_version(clients.id, next_version++, PilotedClock::nanos_since_epoch()),
+                        std::nullopt
+                );
+                break;
+            case 5:
+                clients.writer->compact(clients.store, clients.id);
+                break;
+            default:
+                break;
+            }
+
+            const auto& load = loads[rng() % loads.size()];
+            auto entry = clients.reader->check_reload(clients.store, clients.id, load, __FUNCTION__);
+            auto fresh = clients.fresh(load);
+            ASSERT_EQ(entry->head_, fresh->head_) << "step " << step;
+            ASSERT_EQ(
+                    entry->get_first_index(load.should_include_deleted()).first,
+                    fresh->get_first_index(load.should_include_deleted()).first
+            ) << "step "
+              << step;
+            if (load.load_type_ == LoadType::ALL) {
+                ASSERT_EQ(entry->get_indexes(false).size(), fresh->get_indexes(false).size()) << "step " << step;
+            }
+            if (load.load_type_ == LoadType::ALL && load.should_include_deleted()) {
+                expect_same_as_fresh_load(*entry, *fresh);
+                ASSERT_FALSE(testing::Test::HasFailure()) << "step " << step;
+            }
+        }
+    }
 }
 
 TEST(VersionMapRevalidation, KillSwitchRestoresFullReload) {
