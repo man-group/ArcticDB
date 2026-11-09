@@ -6,8 +6,10 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "entity/variant_key.hpp"
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
+#include <arcticdb/storage/file_backed/posix_interface.hpp>
 #include <arcticdb/storage/file_backed/real_posix.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
@@ -36,6 +38,8 @@ namespace {
 
 static const mode_t NEW_FILE_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;                     // 0644
 static const mode_t DIR_MODE_MASK = S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO; // 07777
+static constexpr std::string_view TMP_FILE_PREFIX(".tmp");
+static constexpr std::string_view SILLY_RENAME_FILE_PREFIX(".nfs");
 
 class FdCloser {
   public:
@@ -47,6 +51,38 @@ class FdCloser {
   private:
     int fd_;
 };
+
+class DirCloser {
+  public:
+    DirCloser(DIR* dirp) noexcept : dirp_(dirp) {}
+    ~DirCloser() { ::closedir(dirp_); }
+
+    ARCTICDB_NO_MOVE_OR_COPY(DirCloser);
+
+  private:
+    DIR* dirp_;
+};
+
+std::string generate_tmp_file_name() {
+    // TODO: Is this enough randomness? Seems legit to me. PID + TID + 32-bit random value ensures
+    // no clashes with local processes. For other machines to clash, they need to accidentally get the same
+    // PID, TID *and* they need to generate the same random value. The seed is also distinct every time.
+    static thread_local std::mt19937 gen{std::random_device{}()};
+    std::ostringstream ss;
+    std::uint32_t random_number = gen();
+    ss << TMP_FILE_PREFIX << getpid() << gettid() << random_number;
+    return ss.str();
+}
+
+bool is_tmp_file_name(std::string_view file_name) noexcept { return file_name.starts_with(TMP_FILE_PREFIX); }
+bool is_silly_rename(std::string_view file_name) noexcept { return file_name.starts_with(SILLY_RENAME_FILE_PREFIX); }
+
+bool skip_during_listing(std::string_view file_name) noexcept {
+    return is_tmp_file_name(file_name) || is_silly_rename(file_name);
+}
+
+// TODO: pseudodir is not a real term.
+bool is_pseudodir(std::string_view file_name) noexcept { return file_name == "." || file_name == ".."; }
 
 void write_all(int fd, std::span<const std::uint8_t> buffer) {
     // TODO: Use mock?
@@ -176,7 +212,7 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
                 fmt::format("do_write() failed to open directory {}", storage_dir_.c_str())
         );
 
-    const std::string tmp_name = generate_random_name();
+    const std::string tmp_name = generate_tmp_file_name();
     const fs::path tmp_file_path = storage_dir_ / tmp_name;
     {
         // TODO: Remembering to do this every time and only after checking < 0 seems error prone. Wrap file descriptors?
@@ -210,7 +246,7 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
         }
         // Makes the file durable for local file systems. No-op on NFS.
         posix_->fsync(dir_fd);
-        // scope closes dir_fd
+        // scope closes dir_fd. This ensures write is durable.
     }
     fs::path destination = storage_dir_ / maybe_safe_file_name_for_key;
     if (posix_->rename(tmp_file_path.c_str(), destination.c_str())) {
@@ -275,11 +311,33 @@ bool FileBackedStorage::do_key_exists(const VariantKey& key) {
 bool FileBackedStorage::do_fast_delete() { throw std::runtime_error("do_fast_delete not implemented"); }
 
 bool FileBackedStorage::do_iterate_type_until_match(
-        KeyType key_type [[maybe_unused]], const IterateTypePredicate& visitor [[maybe_unused]],
-        const std::string& prefix [[maybe_unused]]
+        KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
-    throw std::runtime_error("do_iterate_type_until_match not implemented");
+    DIR* dirp = posix_->opendir(storage_dir_.c_str());
+    if (!dirp)
+        throw std::system_error(
+                errno,
+                std::generic_category(),
+                fmt::format("do_iterate_type_until_match() failed to open directory {}", storage_dir_.c_str())
+        );
+
+    DirCloser close_dir(dirp);
+    struct dirent* dir_entry = nullptr;
+    while ((dir_entry = posix_->readdir(dirp))) {
+        std::string_view file_name(dir_entry->d_name);
+        if (!file_name.starts_with(prefix) || skip_during_listing(file_name) || is_pseudodir(file_name))
+            continue;
+
+        VariantKey key{variant_key_from_bytes(
+                reinterpret_cast<uint8_t*>(dir_entry->d_name), strlen(dir_entry->d_name), key_type
+        )};
+        if (variant_key_type(key) == key_type && visitor(std::move(key)))
+            return true;
+    }
+
+    return false;
 }
+
 void FileBackedStorage::do_visit_object_sizes(
         [[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
         [[maybe_unused]] const ObjectSizesVisitor& visitor
@@ -310,17 +368,6 @@ void FileBackedStorage::do_visit_object_sizes(
     }
 #endif
     return std::nullopt;
-}
-
-std::string FileBackedStorage::generate_random_name() const {
-    // TODO: Is this enough randomness? Seems legit to me. PID + TID + 32-bit random value ensures
-    // no clashes with local processes. For other machines to clash, they need to accidentally get the same
-    // PID, TID *and* they need to generate the same random value. The seed is also distinct every time.
-    static thread_local std::mt19937 gen{std::random_device{}()};
-    std::ostringstream ss;
-    std::uint32_t random_number = gen();
-    ss << ".tmp" << getpid() << gettid() << random_number;
-    return ss.str();
 }
 
 } // namespace arcticdb::storage::file_backed

@@ -28,5 +28,8 @@ int RealPosix::link(const char* oldpath, const char* newpath) { return ::link(ol
 int RealPosix::mkdir(const char* pathname, mode_t mode) { return ::mkdir(pathname, mode); }
 int RealPosix::stat(const char* pathname, struct stat* statbuf) { return ::stat(pathname, statbuf); }
 int RealPosix::fstat(int fd, struct stat* statbuf) { return ::fstat(fd, statbuf); }
+DIR* RealPosix::opendir(const char* name) { return ::opendir(name); }
+struct dirent* RealPosix::readdir(DIR* dirp) { return ::readdir(dirp); }
+int RealPosix::closedir(DIR* dirp) { return ::closedir(dirp); }
 
 } // namespace arcticdb::storage::file_backed
