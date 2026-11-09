@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "storage/storage_exceptions.hpp"
 #include <gtest/gtest.h>
 
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
@@ -82,6 +83,11 @@ TEST_F(FileBackedStorage, WritesAreVisibleAndReadable) {
     auto result = storage().read(entity::VariantKey{key}, {});
     ASSERT_EQ(std::get<StringId>(result.atom_key().id()), symbol);
     ASSERT_TRUE(segments_are_identical(segment, result.segment()));
+}
+
+TEST_F(FileBackedStorage, KeyNotFoundException) {
+    auto key = storage::get_test_key("symbol", entity::KeyType::VERSION);
+    ASSERT_THROW(storage().read(entity::VariantKey{key}, {}), storage::KeyNotFoundException);
 }
 
 TEST_F(FileBackedStorage, KeysDoNotCollide) {

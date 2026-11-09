@@ -22,6 +22,7 @@ int RealPosix::openat(int dirfd, const char* pathname, int flags, mode_t mode) {
 }
 
 ssize_t RealPosix::write(int fd, const void* buf, size_t count) { return ::write(fd, buf, count); }
+ssize_t RealPosix::read(int fd, void* buf, size_t count) { return ::read(fd, buf, count); }
 int RealPosix::fsync(int fd) { return ::fsync(fd); }
 int RealPosix::rename(const char* oldpath, const char* newpath) { return ::rename(oldpath, newpath); }
 int RealPosix::link(const char* oldpath, const char* newpath) { return ::link(oldpath, newpath); }
