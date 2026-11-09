@@ -867,8 +867,8 @@ VersionedItem PythonVersionStore::delete_range(
 }
 
 void PythonVersionStore::append_incomplete(
-        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
-        const py::object& user_meta, bool validate_index
+        const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
+        bool validate_index
 ) const {
 
     using namespace arcticdb::entity;
@@ -877,7 +877,7 @@ void PythonVersionStore::append_incomplete(
 
     // Turn the input into a standardised frame object
     auto frame = convert::py_input_item_to_frame(
-            stream_id, item, norm, user_meta, cfg().write_options().empty_types(), SortednessScan::SKIP
+            stream_id, item, norm, user_meta, cfg().write_options().empty_types(), sortedness_scan_for(validate_index)
     );
     append_incomplete_frame(stream_id, frame, validate_index);
 }

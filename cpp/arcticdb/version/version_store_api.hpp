@@ -86,7 +86,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     void append_incomplete(
-            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+            const StreamId& stream_id, const convert::InputItem& item, const py::object& norm,
             const py::object& user_meta, bool validate_index
     ) const;
 
