@@ -159,7 +159,8 @@ struct ExpressionNode {
  */
 template<typename Result, typename OnLeaf, typename BeforeOperation, typename OnOperation>
 Result evaluate_bottom_up(
-        const ExpressionNode& root, OnLeaf&& on_leaf, BeforeOperation&& before_operation, OnOperation&& on_operation
+        const ExpressionNode& root, const OnLeaf& on_leaf, const BeforeOperation& before_operation,
+        const OnOperation& on_operation
 ) {
     const auto operands_of = [](const ExpressionNode::Operation& op) {
         return std::array<const ExpressionNode*, 3>{op.right_.get(), op.condition_.get(), op.left_.get()};
