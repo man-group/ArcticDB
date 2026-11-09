@@ -19,6 +19,11 @@
 #ifndef WIN32
 #include <aws/core/http/standard/StandardHttpRequest.h>
 #include <aws/core/http/URI.h>
+#include <aws/core/http/HttpResponse.h>
+#include <aws/core/monitoring/HttpClientMetrics.h>
+#include <arcticdb/toolbox/query_stats.hpp>
+#include <chrono>
+#include <optional>
 #include <signal.h>
 #endif
 
@@ -92,9 +97,79 @@ ArcticCurlHttpClient::ArcticCurlHttpClient(const Aws::Client::ClientConfiguratio
 
 bool ArcticCurlHttpClient::should_shuffle_dns_addresses() const { return dns_shuffle_addresses_enabled_; }
 
+namespace {
+// Called by curl on the attempt's thread for each socket it opens, so not for an attempt that reuses a connection
+int count_new_connection(void*, curl_socket_t, curlsocktype purpose) {
+    if (purpose == CURLSOCKTYPE_IPCXN) {
+        query_stats::add_to_current_calls(query_stats::StatType::NEW_CONNECTIONS, 1);
+    }
+    return CURL_SOCKOPT_OK;
+}
+
+std::optional<int64_t> request_metric(
+        const Aws::Http::HttpRequest& request, Aws::Monitoring::HttpClientMetricsType metric_type
+) {
+    const auto& metrics = request.GetRequestMetrics();
+    if (auto it = metrics.find(Aws::Monitoring::GetHttpClientMetricNameByType(metric_type)); it != metrics.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+// Records the query stats of one HTTP attempt, see query_stats::StatType
+void add_attempt_query_stats(
+        const Aws::Http::HttpRequest& request, const Aws::Http::HttpResponse& response, int64_t attempt_time_ns
+) {
+    using query_stats::add_to_current_calls;
+    using query_stats::StatType;
+    add_to_current_calls(StatType::ATTEMPTS, 1);
+    add_to_current_calls(StatType::ATTEMPT_TIME_MS, static_cast<uint64_t>(std::max<int64_t>(attempt_time_ns, 0)));
+    // Set for curl errors (DNS, connect, timeouts, ...) and for an incomplete response body
+    if (response.HasClientError()) {
+        add_to_current_calls(StatType::NETWORK_ERRORS, 1);
+        return;
+    }
+    const auto response_code = static_cast<int>(response.GetResponseCode());
+    if (response_code >= 500 || response_code == static_cast<int>(Aws::Http::HttpResponseCode::TOO_MANY_REQUESTS)) {
+        add_to_current_calls(StatType::SERVER_ERRORS, 1);
+    }
+    // The SDK names CURLINFO_STARTTRANSFER_TIME TimeToFirstByte and CURLINFO_PRETRANSFER_TIME TimeToConnect, both in ms
+    using Aws::Monitoring::HttpClientMetricsType;
+    if (auto ttfb_ms = request_metric(request, HttpClientMetricsType::TimeToFirstByte); ttfb_ms && *ttfb_ms > 0) {
+        add_to_current_calls(StatType::TTFB_MS, static_cast<uint64_t>(*ttfb_ms));
+    }
+    if (auto connect_ms = request_metric(request, HttpClientMetricsType::TimeToConnect);
+        connect_ms && *connect_ms > 0) {
+        add_to_current_calls(StatType::CONNECT_MS, static_cast<uint64_t>(*connect_ms));
+    }
+}
+} // namespace
+
+std::shared_ptr<Aws::Http::HttpResponse> ArcticCurlHttpClient::MakeRequest(
+        const std::shared_ptr<Aws::Http::HttpRequest>& request,
+        Aws::Utils::RateLimits::RateLimiterInterface* read_limiter,
+        Aws::Utils::RateLimits::RateLimiterInterface* write_limiter
+) const {
+    if (!query_stats::QueryStats::instance()->is_enabled()) {
+        return Aws::Http::CurlHttpClient::MakeRequest(request, read_limiter, write_limiter);
+    }
+    const auto start = std::chrono::steady_clock::now();
+    auto response = Aws::Http::CurlHttpClient::MakeRequest(request, read_limiter, write_limiter);
+    const auto attempt_time_ns =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+    if (response) {
+        add_attempt_query_stats(*request, *response, attempt_time_ns);
+    }
+    return response;
+}
+
 void ArcticCurlHttpClient::OverrideOptionsOnConnectionHandle(CURL* connection_handle) const {
     if (should_shuffle_dns_addresses()) {
         curl_easy_setopt(connection_handle, CURLOPT_DNS_SHUFFLE_ADDRESSES, 1L);
+    }
+    // The SDK resets the handle before reusing it, so this is set for every attempt
+    if (query_stats::QueryStats::instance()->is_enabled()) {
+        curl_easy_setopt(connection_handle, CURLOPT_SOCKOPTFUNCTION, count_new_connection);
     }
 }
 

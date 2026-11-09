@@ -45,12 +45,19 @@ class SpdlogLogSystem : public Aws::Utils::Logging::LogSystemInterface {
 // Whether to set CURLOPT_DNS_SHUFFLE_ADDRESSES.
 bool dns_shuffle_addresses_enabled();
 
-// Custom client that allows setting specific cUrl options.
+// Custom client that allows setting specific cUrl options. Each call to MakeRequest is one HTTP attempt, as the SDK
+// retries above it, so it also records per-attempt query stats.
 class ArcticCurlHttpClient : public Aws::Http::CurlHttpClient {
   public:
     explicit ArcticCurlHttpClient(const Aws::Client::ClientConfiguration& client_configuration);
 
     bool should_shuffle_dns_addresses() const;
+
+    std::shared_ptr<Aws::Http::HttpResponse> MakeRequest(
+            const std::shared_ptr<Aws::Http::HttpRequest>& request,
+            Aws::Utils::RateLimits::RateLimiterInterface* read_limiter = nullptr,
+            Aws::Utils::RateLimits::RateLimiterInterface* write_limiter = nullptr
+    ) const override;
 
   protected:
     void OverrideOptionsOnConnectionHandle(CURL* connection_handle) const override;

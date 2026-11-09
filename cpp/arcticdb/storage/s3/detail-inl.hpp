@@ -135,6 +135,12 @@ inline void raise_if_unexpected_error(const Aws::S3::S3Error& err, const std::st
     }
 }
 
+// For query stats, a missing key or bucket is an answer from S3 rather than a failure
+template<typename Output>
+bool succeeded_or_expected_error(S3Result<Output>& result) {
+    return result.is_success() || is_expected_error_type(result.get_error().GetErrorType());
+}
+
 template<class KeyBucketizer>
 void do_write_impl(
         KeySegmentPair& key_seg, const std::string& root_folder, const std::string& bucket_name,
@@ -155,6 +161,7 @@ void do_write_impl(
     auto query_stat_operation_time =
             query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject, key_type);
     auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
+    query_stat_operation_time.finish(put_object_result.is_success());
 
     if (put_object_result.is_success()) {
         query_stats::add(
@@ -188,6 +195,7 @@ KeySegmentPair do_read_impl(
     auto query_stat_operation_time =
             query_stats::add_task_count_and_time(query_stats::TaskType::S3_GetObject, key_type);
     auto get_object_result = s3_client.get_object(s3_object_name, bucket_name);
+    query_stat_operation_time.finish(succeeded_or_expected_error(get_object_result));
     auto unencoded_key = key_decoder(std::move(variant_key));
 
     if (get_object_result.is_success()) {
@@ -231,9 +239,8 @@ folly::Future<KeySegmentPair> do_async_read_impl(
                      decoder = std::forward<KeyDecoder>(key_decoder),
                      key_type,
                      start = std::chrono::steady_clock::now()](auto&& result) mutable -> KeySegmentPair {
-                        auto query_stat_operation_time = query_stats::add_task_count_and_time(
-                                query_stats::TaskType::S3_GetObjectAsync, key_type, start
-                        );
+                        query_stats::add_task_count_and_time(query_stats::TaskType::S3_GetObjectAsync, key_type, start)
+                                .finish(succeeded_or_expected_error(result));
                         if (result.is_success()) {
                             auto segment = std::move(result.get_output());
                             query_stats::add(
@@ -372,7 +379,10 @@ void do_remove_impl(
         to_delete.emplace_back(object_path(bucketizer.bucketize(key_type_dir, k), k));
     }
 
-    std::vector<std::optional<query_stats::RAIIAddTime>> stat_timers;
+    // The batch is timed once for each key type in it, as one call including the retries of rejected objects. It
+    // succeeded if every object was deleted, and failed if the request failed or any object is still rejected after the
+    // retries.
+    std::vector<query_stats::RAIIAddTime> stat_timers;
     if (query_stats::QueryStats::instance()->is_enabled()) {
         auto distinct_key_types = unique_key_types(ks);
         stat_timers.reserve(distinct_key_types.size());
@@ -383,6 +393,9 @@ void do_remove_impl(
 
     for (auto& bad_key : delete_objects_with_retry(std::move(to_delete), bucket_name, s3_client)) {
         failed_deletes.emplace_back(std::move(bad_key.s3_object_name), std::move(bad_key.error_message));
+    }
+    for (auto& stat_timer : stat_timers) {
+        stat_timer.finish(failed_deletes.empty());
     }
     raise_if_failed_deletes(failed_deletes);
 }
@@ -461,6 +474,7 @@ void do_write_if_none_impl(
     auto query_stat_operation_time =
             query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject, key_type);
     auto put_object_result = s3_client.put_object(s3_object_name, seg, bucket_name, PutHeader::IF_NONE_MATCH);
+    query_stat_operation_time.finish(put_object_result.is_success());
 
     if (put_object_result.is_success()) {
         query_stats::add(
@@ -598,6 +612,7 @@ inline bool do_iterate_type_impl(
         auto query_stat_operation_time =
                 query_stats::add_task_count_and_time(query_stats::TaskType::S3_ListObjectsV2, key_type);
         auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
+        query_stat_operation_time.finish(succeeded_or_expected_error(list_objects_result));
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
 
@@ -695,6 +710,7 @@ bool do_key_exists_impl(
     auto query_stat_operation_time =
             query_stats::add_task_count_and_time(query_stats::TaskType::S3_HeadObject, key_type);
     auto head_object_result = s3_client.head_object(s3_object_name, bucket_name);
+    query_stat_operation_time.finish(succeeded_or_expected_error(head_object_result));
 
     if (!head_object_result.is_success()) {
         auto& error = head_object_result.get_error();

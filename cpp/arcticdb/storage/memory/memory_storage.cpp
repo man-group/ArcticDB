@@ -47,6 +47,7 @@ void MemoryStorage::do_write(KeySegmentPair& key_seg) {
             },
             [&](const AtomKey& key) {
                 if (key_vec.find(key) != key_vec.end()) {
+                    query_stat_operation_time.finish(true);
                     throw DuplicateKeyException(key);
                 }
                 add_serialization_fields(key_seg);
@@ -73,6 +74,7 @@ void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     if (!opts.upsert_ && it == key_vec.end()) {
         std::string err_message =
                 fmt::format("do_update called with upsert=false on non-existent key(s): {}", key_seg.variant_key());
+        query_stat_operation_time.finish(true);
         throw KeyNotFoundException(key_seg.variant_key(), err_message);
     }
 
@@ -115,6 +117,7 @@ KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
 
         return {std::move(variant_key), std::move(seg)};
     } else {
+        query_stat_operation_time.finish(true);
         throw KeyNotFoundException(variant_key);
     }
 }
@@ -149,6 +152,7 @@ void MemoryStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
         );
         key_vec.erase(it);
     } else if (!opts.ignores_missing_key_) {
+        query_stat_operation_time.finish(true);
         throw KeyNotFoundException(variant_key);
     }
 }

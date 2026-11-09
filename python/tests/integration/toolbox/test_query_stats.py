@@ -1,5 +1,6 @@
 import arcticdb.toolbox.query_stats as qs
 import pytest
+from arcticdb.exceptions import StorageException
 from arcticdb.util.test import config_context
 from arcticdb.arctic import Arctic
 
@@ -683,3 +684,44 @@ def test_query_stats_disabled_after_exception(clear_query_stats):
         with qs.query_stats():
             raise RuntimeError("boom")
     assert not qs_ext.is_enabled()
+
+
+def test_query_stats_failed_storage_calls_are_failures(mock_s3_store_with_error_simulation, clear_query_stats):
+    lib = mock_s3_store_with_error_simulation
+    df = pd.DataFrame({"a": [1, 2]})
+    qs.enable()
+    lib.write("symbol", df)
+    with pytest.raises(StorageException):
+        lib.write("symbol#Failure_Write_99_0", df)
+    with pytest.raises(StorageException):
+        lib.read("symbol#Failure_Read_17_0")
+
+    storage_operations = qs.get_query_stats()["storage_operations"]
+    puts = storage_operations["S3_PutObject"]["TABLE_DATA"]
+    assert puts["count"] == 1
+    assert puts["size_bytes"] > 0
+    assert puts["failure_count"] == 1
+    assert puts["total_time_ms"] < 8000
+    assert puts["failure_time_ms"] < 8000
+
+    # ArcticDB reads the version ref key a second time when the first read fails
+    gets = storage_operations["S3_GetObject"]["VERSION_REF"]
+    assert gets["failure_count"] == 2
+    all_stats = [stats for op_stats in storage_operations.values() for stats in op_stats.values()]
+    assert sum(stats["failure_count"] for stats in all_stats) == 3, storage_operations
+    # The mock S3 client makes no HTTP requests
+    assert all(stats["attempts"] == 0 for stats in all_stats), storage_operations
+
+
+def test_query_stats_missing_keys_are_not_failures(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    qs.enable()
+    assert not lib.has_symbol("missing")
+    with pytest.raises(Exception):
+        lib.read("missing")
+
+    stats = qs.get_query_stats()["storage_operations"]
+    for op_stats in stats.values():
+        for key_type, key_stats in op_stats.items():
+            assert key_stats["failure_count"] == 0, (key_type, key_stats)
+            assert key_stats["count"] > 0, (key_type, key_stats)

@@ -10,6 +10,11 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/log/log.hpp>
 
+#include <algorithm>
+#include <exception>
+#include <utility>
+#include <vector>
+
 namespace arcticdb::query_stats {
 
 std::shared_ptr<QueryStats> QueryStats::instance_;
@@ -74,10 +79,33 @@ std::string stat_type_to_string(StatType stat_type) {
         return "count";
     case StatType::SIZE_BYTES:
         return "size_bytes";
+    case StatType::FAILURE_TIME_MS:
+        return "failure_time_ms";
+    case StatType::FAILURE_COUNT:
+        return "failure_count";
+    case StatType::ATTEMPTS:
+        return "attempts";
+    case StatType::ATTEMPT_TIME_MS:
+        return "attempt_time_ms";
+    case StatType::NETWORK_ERRORS:
+        return "network_errors";
+    case StatType::SERVER_ERRORS:
+        return "server_errors";
+    case StatType::TTFB_MS:
+        return "ttfb_ms";
+    case StatType::CONNECT_MS:
+        return "connect_ms";
+    case StatType::NEW_CONNECTIONS:
+        return "new_connections";
     default:
         log::version().warn("Unknown stat type {}", static_cast<int>(stat_type));
         return "unknown";
     }
+}
+
+bool is_held_in_nanoseconds(StatType stat_type) {
+    return stat_type == StatType::TOTAL_TIME_MS || stat_type == StatType::FAILURE_TIME_MS ||
+           stat_type == StatType::ATTEMPT_TIME_MS;
 }
 
 std::string get_key_type_str(entity::KeyType key) {
@@ -99,33 +127,17 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
             std::string key_type_str = get_key_type_str(static_cast<entity::KeyType>(key_idx));
             OperationStatsOutput op_output;
 
-            bool has_non_zero_stats = op_stats.count_.readFull();
+            // Only operations that were called are added to the output
+            if (op_stats[StatType::COUNT].readFull() == 0 && op_stats[StatType::FAILURE_COUNT].readFull() == 0) {
+                continue;
+            }
             for (size_t stat_idx = 0; stat_idx < static_cast<size_t>(StatType::END); ++stat_idx) {
                 auto stat_type = static_cast<StatType>(stat_idx);
-                uint64_t value = 0;
-                switch (stat_type) {
-                case StatType::TOTAL_TIME_MS:
-                    value = op_stats.total_time_ns_.readFull() / 1e6;
-                    break;
-                case StatType::COUNT:
-                    value = op_stats.count_.readFull();
-                    break;
-                case StatType::SIZE_BYTES:
-                    value = op_stats.size_bytes_.readFull();
-                    break;
-                default:
-                    continue;
-                }
-                if (has_non_zero_stats) {
-                    std::string stat_name = stat_type_to_string(stat_type);
-                    op_output[stat_name] = value;
-                }
+                uint64_t value = op_stats[stat_type].readFull();
+                op_output[stat_type_to_string(stat_type)] = is_held_in_nanoseconds(stat_type) ? value / 1e6 : value;
             }
 
-            // Only non-zero stats will be added to the output
-            if (!op_output.empty()) {
-                result["storage_operations"][task_type_str][key_type_str] = std::move(op_output);
-            }
+            result["storage_operations"][task_type_str][key_type_str] = std::move(op_output);
         }
     }
 
@@ -134,49 +146,72 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
 
 void QueryStats::add(TaskType task_type, entity::KeyType key_type, StatType stat_type, uint64_t value) {
     if (is_enabled()) {
-        auto& stats = stats_by_storage_op_type_[static_cast<size_t>(task_type)][static_cast<size_t>(key_type)];
-        switch (stat_type) {
-        case StatType::TOTAL_TIME_MS:
-            stats.total_time_ns_.increment(value);
-            break;
-        case StatType::COUNT:
-            stats.count_.increment(value);
-            break;
-        case StatType::SIZE_BYTES:
-            stats.size_bytes_.increment(value);
-            break;
-        default:
-            internal::raise<ErrorCode::E_INVALID_ARGUMENT>("Invalid stat type");
-        }
+        internal::check<ErrorCode::E_INVALID_ARGUMENT>(stat_type < StatType::END, "Invalid stat type");
+        stats_by_storage_op_type_[static_cast<size_t>(task_type)][static_cast<size_t>(key_type)][stat_type].increment(
+                value
+        );
     }
 }
 
-[[nodiscard]] std::optional<RAIIAddTime> QueryStats::add_task_count_and_time(
+[[nodiscard]] RAIIAddTime QueryStats::add_task_count_and_time(
         TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start
 ) {
     if (is_enabled()) {
-        auto& stats = stats_by_storage_op_type_[static_cast<size_t>(task_type)][static_cast<size_t>(key_type)];
-        stats.count_.increment(1);
-        return std::make_optional<RAIIAddTime>(stats.total_time_ns_, start.value_or(std::chrono::steady_clock::now()));
+        return {stats_by_storage_op_type_[static_cast<size_t>(task_type)][static_cast<size_t>(key_type)],
+                start.value_or(std::chrono::steady_clock::now())};
     }
-    return std::nullopt;
+    return {};
 }
 
-RAIIAddTime::RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, TimePoint start) :
-    time_var_(time_var),
-    start_(start) {}
+namespace {
+// The stats of the calls being timed on this thread, which per-attempt stats are added to. Usually at most one, but a
+// DeleteObjects batch is timed once for each key type in it.
+std::vector<OperationStats*>& current_calls() {
+    thread_local std::vector<OperationStats*> calls;
+    return calls;
+}
+} // namespace
 
-RAIIAddTime::~RAIIAddTime() {
-    time_var_.increment(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_).count()
-    );
+RAIIAddTime::RAIIAddTime(OperationStats& stats, TimePoint start) :
+    stats_(&stats),
+    start_(start),
+    uncaught_exceptions_(std::uncaught_exceptions()) {
+    current_calls().push_back(stats_);
+}
+
+RAIIAddTime::RAIIAddTime(RAIIAddTime&& other) noexcept :
+    stats_(std::exchange(other.stats_, nullptr)),
+    start_(other.start_),
+    uncaught_exceptions_(other.uncaught_exceptions_) {}
+
+void RAIIAddTime::finish(bool succeeded) {
+    if (stats_ == nullptr) {
+        return;
+    }
+    auto& calls = current_calls();
+    if (auto it = std::find(calls.rbegin(), calls.rend(), stats_); it != calls.rend()) {
+        calls.erase(std::next(it).base());
+    }
+    const auto elapsed =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_).count();
+    (*stats_)[succeeded ? StatType::COUNT : StatType::FAILURE_COUNT].increment(1);
+    (*stats_)[succeeded ? StatType::TOTAL_TIME_MS : StatType::FAILURE_TIME_MS].increment(elapsed);
+    stats_ = nullptr;
+}
+
+RAIIAddTime::~RAIIAddTime() { finish(std::uncaught_exceptions() <= uncaught_exceptions_); }
+
+void add_to_current_calls(StatType stat_type, uint64_t value) {
+    for (auto* stats : current_calls()) {
+        (*stats)[stat_type].increment(value);
+    }
 }
 
 void add(TaskType task_type, entity::KeyType key_type, StatType stat_type, uint64_t value) {
     QueryStats::instance()->add(task_type, key_type, stat_type, value);
 }
 
-[[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(
+[[nodiscard]] RAIIAddTime add_task_count_and_time(
         TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start
 ) {
     return QueryStats::instance()->add_task_count_and_time(task_type, key_type, start);

@@ -1165,6 +1165,7 @@ if(${TEST})
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_s3_api.cpp
+            storage/test/test_s3_query_stats.cpp
             storage/test/test_s3_retry_strategy.cpp
             storage/test/test_storage_factory.cpp
             storage/test/common.hpp

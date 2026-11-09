@@ -57,22 +57,49 @@ def get_query_stats() -> Dict[str, Any]:
     Returns
     -------
     Dict[str, Any]:
-        A dictionary containing statistics organized by key type,
-        operation group, and task type. Each task contains timing and count information.
+        A dictionary containing statistics organized by storage operation and key type.
         Example output:
         {
             "storage_operations": {
-                "S3_ListObjectsV2": {
-                    "total_time_ms": 83,
-                    "count": 3
-                },
-                "S3_GetObject": {
-                    "total_time_ms": 50,
-                    "count": 3,
-                    "size_bytes": 10
+                "S3_PutObject": {
+                    "TABLE_DATA": {
+                        "count": 1,
+                        "total_time_ms": 108,
+                        "size_bytes": 103,
+                        "failure_count": 0,
+                        "failure_time_ms": 0,
+                        "attempts": 3,
+                        "attempt_time_ms": 33,
+                        "network_errors": 2,
+                        "server_errors": 0,
+                        "ttfb_ms": 15,
+                        "connect_ms": 4,
+                        "new_connections": 1
+                    }
                 }
             }
         }
+
+        Each call is counted once, as succeeded or failed:
+
+        - count, total_time_ms: calls that succeeded. A read, HeadObject or ListObjectsV2 that finds no key or bucket
+          succeeded, as the storage answered.
+        - failure_count, failure_time_ms: calls that failed with an error or raised.
+        - size_bytes: bytes read or written by the calls that succeeded.
+
+        Both times are of the whole call, including the retries in the AWS SDK and the waits between them.
+
+        The other stats are per HTTP attempt to S3, over the attempts of all the calls. They are not recorded for
+        S3_GetObjectAsync:
+
+        - attempts, attempt_time_ms: HTTP attempts and the time spent in them. attempts - count - failure_count is
+          the number of retries.
+        - network_errors: attempts that did not get a complete HTTP response, e.g. DNS failure or connect timeout.
+        - server_errors: attempts that got an HTTP 5xx or 429 response, e.g. SlowDown.
+        - ttfb_ms, connect_ms: over the attempts that got a complete response, the sum of the time to the first
+          response byte and the sum of the time to connect. (ttfb_ms - connect_ms) / (attempts - network_errors) is
+          the mean time S3 took to answer. Both are in whole milliseconds per attempt, rounded down.
+        - new_connections: connections opened. Attempts that reuse a pooled connection open none.
 
     Notes
     ----------
