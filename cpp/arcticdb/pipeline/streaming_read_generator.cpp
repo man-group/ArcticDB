@@ -11,10 +11,9 @@
 #include <arcticdb/pipeline/streaming_read_generator.hpp>
 #include <arcticdb/version/version_core.hpp>
 
-// TODO: Consider putting in version_store namespace
-namespace arcticdb {
+namespace arcticdb::version_store {
 StreamingReadGenerator::StreamingReadGenerator(
-        version_store::LocalVersionedEngine* engine, const StreamId& stream_id, const VersionQuery& version_query,
+        LocalVersionedEngine* engine, const StreamId& stream_id, const VersionQuery& version_query,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::optional<uint64_t> prefetch_rows, std::shared_ptr<std::any> handler_data
 ) :
@@ -59,7 +58,7 @@ void StreamingReadGenerator::ensure_index_information() {
     );
     // TODO: Does fetch_index_and_column_stats always return IndexInformation? If so, change API
     index_information_ = std::get<std::shared_ptr<IndexInformation>>(
-            version_store::fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get()
+            fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get()
     );
     // TODO: Get rid of this clone
     pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
@@ -88,11 +87,10 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     // TODO: read_frame_for_version is destructive of the index segment, find a more elegant solution than this clone
     auto index_seg = index_information_->index_.second.clone();
     auto read_version_output =
-            version_store::read_frame_for_version(
-                    engine_->store(), index_information_, read_query_copy, read_options_, handler_data_
-            )
+            read_frame_for_version(engine_->store(), index_information_, read_query_copy, read_options_, handler_data_)
                     .get();
     index_information_->index_.second = std::move(index_seg);
+    // TODO: Cache this, or pass empty object to create_python_read_result
     VersionedItem versioned_item{to_atom(index_information_->index_.first)};
     auto read_result = create_python_read_result(
             versioned_item,
@@ -101,4 +99,4 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     );
     return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
 }
-} // namespace arcticdb
+} // namespace arcticdb::version_store

@@ -19,12 +19,12 @@
 #include <arcticdb/pipeline/read_query.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 
-namespace arcticdb {
+namespace arcticdb::version_store {
 class StreamingReadGenerator {
   public:
     // TODO: What is the right move/copy policy?
     StreamingReadGenerator(
-            version_store::LocalVersionedEngine* engine, const StreamId& stream_id, const VersionQuery& version_query,
+            LocalVersionedEngine* engine, const StreamId& stream_id, const VersionQuery& version_query,
             const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
             std::optional<uint64_t> prefetch_rows, std::shared_ptr<std::any> handler_data
     );
@@ -37,14 +37,14 @@ class StreamingReadGenerator {
 
     size_t idx_{0};
     // TODO: Make this shared_ptr
-    version_store::LocalVersionedEngine* engine_;
+    LocalVersionedEngine* engine_;
     StreamId stream_id_;
     VersionQuery version_query_;
     std::shared_ptr<ReadQuery> read_query_;
     ReadOptions read_options_;
     ARCTICDB_UNUSED std::optional<uint64_t> prefetch_rows_;
-    ARCTICDB_UNUSED std::shared_ptr<std::any> handler_data_;
+    std::shared_ptr<std::any> handler_data_;
     std::shared_ptr<IndexInformation> index_information_;
     std::vector<RowRange> row_ranges_;
 };
-} // namespace arcticdb
+} // namespace arcticdb::version_store
