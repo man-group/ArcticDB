@@ -26,6 +26,8 @@
 // TODO: Windows will be an entirely separate implementation. Some of the Storage class implementations will be
 //       platform independent, so perhaps it is prudent to introduce some separate TUs per platform.
 // TODO: Because of Windows, all my usages of c_str() are bad. They return wchar_t*.
+// TODO: The usages of `to_tokenized_key` need to be reconsidered. They are not compatible with Windows.
+//       due to the use of '*' as separator.
 #ifndef _WIN32
 #include <fcntl.h>
 #include <linux/limits.h>
@@ -43,92 +45,11 @@ static constexpr std::string_view SILLY_RENAME_FILE_PREFIX(".nfs");
 
 using arcticdb::storage::file_backed::PosixInterface;
 
-class File {
-  public:
-    File(PosixInterface& posix, const char* pathname, int flags, mode_t mode) : posix_(posix) {
-        fd_ = posix.open(pathname, flags, mode);
-        if (fd_ < 0)
-            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to open {}", pathname));
-    }
-
-    File(PosixInterface& posix, const File& dir_fd, const char* pathname, int flags, mode_t mode) : posix_(posix) {
-        fd_ = posix.openat(dir_fd.fd_, pathname, flags, mode);
-        if (fd_ < 0)
-            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to openat {}", pathname));
-    }
-
-    ~File() {
-        // TODO: Check if there are any exceptions in flight. If anything goes wrong in here, we can't throw. If nothing
-        // in flight, we can safely throw.
-        if (needs_flush_) {
-            posix_.fsync(fd_);
-            // TODO: Not sure why I chose to stat the file too. Can't find documentation which says it's necessary.
-            struct stat tmp_st;
-            posix_.fstat(fd_, &tmp_st);
-        }
-
-        // TODO: Check this, and decide if safe to throw.
-        [[maybe_unused]] int res = ::close(fd_);
-    }
-
-    ARCTICDB_NO_MOVE_OR_COPY(File);
-
-    void write_all(PosixInterface& posix, std::span<const std::uint8_t> buffer) {
-        const size_t buffer_size = buffer.size();
-        size_t written = 0;
-        while (written < buffer_size) {
-            const ssize_t n = posix.write(fd_, buffer.data() + written, buffer_size - written);
-            if (n < 0) {
-                if (errno == EINTR)
-                    continue;
-                throw std::system_error(errno, std::generic_category(), "write failed");
-            }
-            written += static_cast<size_t>(n);
-        }
-
-        needs_flush_ = true;
-    }
-
-    void fsync() const {
-        // TODO: Can this error? Yes... EINTR at the least should be retried. Then there's the usual ones
-        // which write can return.
-        int res = posix_.fsync(fd_);
-        if (res < 0) {
-            if (errno == EINTR) {
-                // Try one more time? TODO: Quick retries should be wrapped in a retry() that takes a lambda.
-                res = posix_.fsync(fd_);
-            }
-        }
-
-        if (res < 0)
-            throw std::system_error(errno, std::generic_category(), "fsync failed");
-    }
-
-    // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
-    // errors.
-    void unlinkat_best_effort(const char* pathname) const { ::unlinkat(fd_, pathname, 0); }
-
-  private:
-    PosixInterface& posix_;
-    int fd_;
-    bool needs_flush_ = false;
-};
-
-class DirCloser {
-  public:
-    DirCloser(DIR* dirp) noexcept : dirp_(dirp) {}
-    ~DirCloser() { ::closedir(dirp_); }
-
-    ARCTICDB_NO_MOVE_OR_COPY(DirCloser);
-
-  private:
-    DIR* dirp_;
-};
-
 std::string generate_tmp_file_name() {
     // TODO: Is this enough randomness? Seems legit to me. PID + TID + 32-bit random value ensures
     // no clashes with local processes. For other machines to clash, they need to accidentally get the same
     // PID, TID *and* they need to generate the same random value. The seed is also distinct every time.
+    // TODO: On second thought, a timestamp + random value should be a lot more reliable collision-wise.
     static thread_local std::mt19937 gen{std::random_device{}()};
     std::ostringstream ss;
     std::uint32_t random_number = gen();
@@ -145,21 +66,6 @@ bool skip_during_listing(std::string_view file_name) noexcept {
 
 // TODO: pseudodir is not a real term.
 bool is_pseudodir(std::string_view file_name) noexcept { return file_name == "." || file_name == ".."; }
-
-void read_all(int fd, std::span<std::uint8_t> buffer) {
-    // TODO: Use mock?
-    size_t buffer_size = buffer.size();
-    size_t read = 0;
-    while (read < buffer_size) {
-        const ssize_t n = ::read(fd, buffer.data(), buffer_size - read);
-        if (n > 0)
-            read += static_cast<size_t>(n);
-        else if (n == 0)
-            throw std::runtime_error(fmt::format("Unexpected EOF after {} of {} bytes", read, buffer_size));
-        else if (errno != EINTR)
-            throw std::system_error(errno, std::generic_category(), "read failed");
-    }
-}
 
 void refresh_directory(const fs::path& dir) {
     int fd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY);
@@ -205,6 +111,121 @@ bool exists(
 
     return false;
 }
+
+class File {
+  public:
+    // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
+    File(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
+        posix_(posix) {
+        fd_ = posix.open(pathname.c_str(), flags, mode);
+        // TODO: Use a retry wrapper
+        if (fd_ < 0) {
+            if (errno == ENOENT) {
+                refresh_ancestors(storage_dir, pathname);
+                fd_ = posix.open(pathname.c_str(), flags, mode);
+            }
+        }
+        if (fd_ < 0) {
+            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to open {}", pathname.c_str()));
+        }
+    }
+
+    File(PosixInterface& posix, const File& dir_fd, const fs::path& pathname, int flags, mode_t mode) : posix_(posix) {
+        fd_ = posix.openat(dir_fd.fd_, pathname.c_str(), flags, mode);
+        // TODO Note that there is no retry here on ENOENT. It's awkward to refresh the ancestor directories, since we'd
+        // have to close the fd and reopen it. Technically doable from within here. Do it later.
+        if (fd_ < 0)
+            throw std::system_error(
+                    errno, std::generic_category(), fmt::format("Failed to openat {}", pathname.c_str())
+            );
+    }
+
+    ~File() {
+        // TODO: Check if there are any exceptions in flight. If anything goes wrong in here, we can't throw. If nothing
+        // in flight, we can safely throw.
+        if (needs_flush_) {
+            posix_.fsync(fd_);
+            // TODO: Not sure why I chose to stat the file too. Can't find documentation which says it's necessary.
+            struct stat tmp_st;
+            posix_.fstat(fd_, &tmp_st);
+        }
+
+        // TODO: Check this, and decide if safe to throw.
+        [[maybe_unused]] int res = ::close(fd_);
+    }
+
+    ARCTICDB_NO_MOVE_OR_COPY(File);
+
+    void write_all(PosixInterface& posix, std::span<const std::uint8_t> buffer) {
+        const size_t buffer_size = buffer.size();
+        size_t written = 0;
+        while (written < buffer_size) {
+            const ssize_t n = posix.write(fd_, buffer.data() + written, buffer_size - written);
+            if (n < 0) {
+                if (errno == EINTR)
+                    continue;
+                throw std::system_error(errno, std::generic_category(), "write failed");
+            }
+            written += static_cast<size_t>(n);
+        }
+
+        needs_flush_ = true;
+    }
+
+    std::shared_ptr<arcticdb::Buffer> read_all() const {
+        struct stat st;
+        posix_.fstat(fd_, &st);
+        const size_t buffer_size = st.st_size;
+        auto buffer = std::make_shared<arcticdb::Buffer>(buffer_size);
+        size_t read = 0;
+        while (read < buffer_size) {
+            const ssize_t n = posix_.read(fd_, buffer->data(), buffer_size - read);
+            if (n > 0)
+                read += static_cast<size_t>(n);
+            else if (n == 0)
+                throw std::runtime_error(fmt::format("Unexpected EOF after {} of {} bytes", read, buffer_size));
+            else if (errno != EINTR)
+                throw std::system_error(errno, std::generic_category(), "read failed");
+        }
+
+        return buffer;
+    }
+
+    void sync() const {
+        // TODO: Can this error? Yes... EINTR at the least should be retried. Then there's the usual ones
+        // which write can return.
+        int res = posix_.fsync(fd_);
+        if (res < 0) {
+            if (errno == EINTR) {
+                // Try one more time? TODO: Quick retries should be wrapped in a retry() that takes a lambda.
+                res = posix_.fsync(fd_);
+            }
+        }
+
+        if (res < 0)
+            throw std::system_error(errno, std::generic_category(), "fsync failed");
+    }
+
+    // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
+    // errors.
+    void unlinkat_best_effort(const fs::path& pathname) const { ::unlinkat(fd_, pathname.c_str(), 0); }
+
+  private:
+    PosixInterface& posix_;
+    int fd_;
+    bool needs_flush_ = false;
+};
+
+class DirCloser {
+  public:
+    DirCloser(DIR* dirp) noexcept : dirp_(dirp) {}
+    ~DirCloser() { ::closedir(dirp_); }
+
+    ARCTICDB_NO_MOVE_OR_COPY(DirCloser);
+
+  private:
+    DIR* dirp_;
+};
 
 } // namespace
 
@@ -253,13 +274,11 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     const std::string tmp_name = generate_tmp_file_name();
     const fs::path tmp_file_path = storage_dir_ / tmp_name;
     {
-        File dir_fd(*posix_, storage_dir_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+        File dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
 
         try {
             {
-                File tmp_key_fd(
-                        *posix_, dir_fd, tmp_name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
-                );
+                File tmp_key_fd(*posix_, dir_fd, tmp_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE);
                 size_t segment_size = seg.calculate_size();
                 std::vector<std::uint8_t> buffer(segment_size);
                 seg.write_to(buffer.data());
@@ -267,9 +286,11 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
             }
             // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
             // No-op on NFS.
-            dir_fd.fsync();
+            // TODO: Maybe fsync() could be absorbed into the File class, if the tmp file's write signalled the
+            //       containing directory that it needs to flush too. i.e. there is a chain of custody.
+            dir_fd.sync();
         } catch (...) {
-            dir_fd.unlinkat_best_effort(tmp_file_path.c_str());
+            dir_fd.unlinkat_best_effort(tmp_file_path);
             throw;
         }
     }
@@ -298,24 +319,15 @@ void FileBackedStorage::do_read(
     throw std::runtime_error("do_read with visitor not implemented");
 }
 KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
-    // TODO: The conversion to file name needs careful vetting.
-    std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
-    fs::path dest_path = storage_dir_ / maybe_safe_file_name_for_key;
-    int fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC, 0);
-    if (fd < 0) {
-        if (errno == ENOENT) {
-            refresh_ancestors(storage_dir_, dest_path);
-            fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC, 0);
-            if (fd < 0)
-                throw KeyNotFoundException(variant_key);
-        } else { // TODO: Retry once on ESTALE too, without refresh
-            throw KeyNotFoundException(variant_key);
-        }
+    std::shared_ptr<Buffer> buffer;
+    try {
+        const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
+        const fs::path dest_path = storage_dir_ / maybe_safe_file_name_for_key;
+        File file(*posix_, storage_dir_, dest_path, O_RDONLY | O_CLOEXEC, 0);
+        buffer = file.read_all();
+    } catch (const std::system_error& e) {
+        throw KeyNotFoundException(variant_key);
     }
-    struct stat st;
-    posix_->fstat(fd, &st);
-    auto buffer = std::make_shared<Buffer>(st.st_size);
-    read_all(fd, std::span<std::uint8_t>(buffer->data(), st.st_size));
     return {std::move(variant_key), Segment::from_buffer(buffer)};
 }
 
