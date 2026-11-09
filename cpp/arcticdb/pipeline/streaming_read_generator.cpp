@@ -63,10 +63,8 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
             read_frame_for_version(engine_->store(), index_information_, read_query_copy, read_options_, handler_data_)
                     .get();
     index_information_->index_.second = std::move(index_seg);
-    // TODO: Cache this, or pass empty object to create_python_read_result
-    VersionedItem versioned_item{to_atom(index_information_->index_.first)};
     auto read_result = create_python_read_result(
-            versioned_item,
+            {},
             read_options_.output_format_for_frame(),
             std::move(read_version_output.frame_and_descriptor_)
     );
