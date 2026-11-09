@@ -237,7 +237,7 @@ jobs:
           [[ -z "$CRATE_PROFILE" || "$CRATE_PROFILE" =~ ^$o(,$o)*$ ]] || { echo "::error::crate_profile must be KEY=VALUE,..."; exit 1; }
           [[ "$CRATE_FEATURES" =~ ^[a-z0-9_,-]*$ ]] || { echo "::error::bad crate_features"; exit 1; }
           [[ "$POST_MODULE" =~ ^[a-z_]*$ ]] || { echo "::error::bad post_module"; exit 1; }
-          [[ "$POST_ARGS" =~ ^[A-Za-z0-9_.,:=/\ -]*$ ]] || { echo "::error::bad post_args"; exit 1; }
+          [[ "$POST_ARGS" =~ ^[A-Za-z0-9_.,:=/@+\ -]*$ ]] || { echo "::error::bad post_args"; exit 1; }
           [[ "$AWS_SAME_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || { echo "::error::bad aws_same_bucket"; exit 1; }
           [[ "$AWS_CROSS_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]:[a-z]{2}-[a-z]+-[0-9]$ ]] \
             || { echo "::error::aws_cross_bucket must be BUCKET:REGION or create:REGION"; exit 1; }
