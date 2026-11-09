@@ -41,15 +41,77 @@ static const mode_t DIR_MODE_MASK = S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IR
 static constexpr std::string_view TMP_FILE_PREFIX(".tmp");
 static constexpr std::string_view SILLY_RENAME_FILE_PREFIX(".nfs");
 
-class FdCloser {
-  public:
-    FdCloser(int fd) noexcept : fd_(fd) {}
-    ~FdCloser() { ::close(fd_); }
+using arcticdb::storage::file_backed::PosixInterface;
 
-    ARCTICDB_NO_MOVE_OR_COPY(FdCloser);
+class File {
+  public:
+    File(PosixInterface& posix, const char* pathname, int flags, mode_t mode) : posix_(posix) {
+        fd_ = posix.open(pathname, flags, mode);
+        if (fd_ < 0)
+            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to open {}", pathname));
+    }
+
+    File(PosixInterface& posix, const File& dir_fd, const char* pathname, int flags, mode_t mode) : posix_(posix) {
+        fd_ = posix.openat(dir_fd.fd_, pathname, flags, mode);
+        if (fd_ < 0)
+            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to openat {}", pathname));
+    }
+
+    ~File() {
+        // TODO: Check if there are any exceptions in flight. If anything goes wrong in here, we can't throw. If nothing
+        // in flight, we can safely throw.
+        if (needs_flush_) {
+            posix_.fsync(fd_);
+            // TODO: Not sure why I chose to stat the file too. Can't find documentation which says it's necessary.
+            struct stat tmp_st;
+            posix_.fstat(fd_, &tmp_st);
+        }
+
+        // TODO: Check this, and decide if safe to throw.
+        [[maybe_unused]] int res = ::close(fd_);
+    }
+
+    ARCTICDB_NO_MOVE_OR_COPY(File);
+
+    void write_all(PosixInterface& posix, std::span<const std::uint8_t> buffer) {
+        const size_t buffer_size = buffer.size();
+        size_t written = 0;
+        while (written < buffer_size) {
+            const ssize_t n = posix.write(fd_, buffer.data() + written, buffer_size - written);
+            if (n < 0) {
+                if (errno == EINTR)
+                    continue;
+                throw std::system_error(errno, std::generic_category(), "write failed");
+            }
+            written += static_cast<size_t>(n);
+        }
+
+        needs_flush_ = true;
+    }
+
+    void fsync() const {
+        // TODO: Can this error? Yes... EINTR at the least should be retried. Then there's the usual ones
+        // which write can return.
+        int res = posix_.fsync(fd_);
+        if (res < 0) {
+            if (errno == EINTR) {
+                // Try one more time? TODO: Quick retries should be wrapped in a retry() that takes a lambda.
+                res = posix_.fsync(fd_);
+            }
+        }
+
+        if (res < 0)
+            throw std::system_error(errno, std::generic_category(), "fsync failed");
+    }
+
+    // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
+    // errors.
+    void unlinkat_best_effort(const char* pathname) const { ::unlinkat(fd_, pathname, 0); }
 
   private:
+    PosixInterface& posix_;
     int fd_;
+    bool needs_flush_ = false;
 };
 
 class DirCloser {
@@ -83,21 +145,6 @@ bool skip_during_listing(std::string_view file_name) noexcept {
 
 // TODO: pseudodir is not a real term.
 bool is_pseudodir(std::string_view file_name) noexcept { return file_name == "." || file_name == ".."; }
-
-void write_all(int fd, std::span<const std::uint8_t> buffer) {
-    // TODO: Use mock?
-    const size_t buffer_size = buffer.size();
-    size_t written = 0;
-    while (written < buffer_size) {
-        const ssize_t n = ::write(fd, buffer.data() + written, buffer_size - written);
-        if (n < 0) {
-            if (errno == EINTR)
-                continue;
-            throw std::system_error(errno, std::generic_category(), "write failed");
-        }
-        written += static_cast<size_t>(n);
-    }
-}
 
 void read_all(int fd, std::span<std::uint8_t> buffer) {
     // TODO: Use mock?
@@ -198,56 +245,35 @@ std::string FileBackedStorage::name() const { return fmt::format("file_backed_st
 // TODO: There are some bare libc function calls in here which should be moved behind the PosixInterface.
 
 void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
-    // TODO: The conversion to file name needs careful vetting.
     std::string maybe_safe_file_name_for_key = to_tokenized_key(key_seg.variant_key());
     Segment& seg = *key_seg.segment_ptr();
-    // bool is_overwrite = std::holds_alternative<RefKey>(key_seg.variant_key());
     // TODO: With bucketizer, may have to create new directories with O_CREAT. Essential to set the directory
     // permissions.
-    int dir_fd = posix_->open(storage_dir_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
-    if (dir_fd < 0)
-        throw std::system_error(
-                errno,
-                std::generic_category(),
-                fmt::format("do_write() failed to open directory {}", storage_dir_.c_str())
-        );
 
     const std::string tmp_name = generate_tmp_file_name();
     const fs::path tmp_file_path = storage_dir_ / tmp_name;
     {
-        // TODO: Remembering to do this every time and only after checking < 0 seems error prone. Wrap file descriptors?
-        FdCloser close_dir_fd(dir_fd);
-        int tmp_key_fd =
-                posix_->openat(dir_fd, tmp_name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE);
-        if (tmp_key_fd < 0) {
-            throw std::system_error(
-                    errno,
-                    std::generic_category(),
-                    fmt::format("do_write() failed to create file {}", tmp_file_path.c_str())
-            );
-        }
+        File dir_fd(*posix_, storage_dir_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
 
-        struct stat tmp_st;
-        {
-            FdCloser close_key_fd(tmp_key_fd);
-            size_t segment_size = seg.calculate_size();
-            std::vector<std::uint8_t> buffer(segment_size);
-            seg.write_to(buffer.data());
-            try {
-                write_all(tmp_key_fd, buffer);
-            } catch (...) {
-                ::unlinkat(dir_fd, tmp_file_path.c_str(), 0);
-                throw;
+        try {
+            {
+                File tmp_key_fd(
+                        *posix_, dir_fd, tmp_name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
+                );
+                size_t segment_size = seg.calculate_size();
+                std::vector<std::uint8_t> buffer(segment_size);
+                seg.write_to(buffer.data());
+                tmp_key_fd.write_all(*posix_, buffer);
             }
-
-            posix_->fsync(tmp_key_fd);
-            posix_->fstat(tmp_key_fd, &tmp_st);
-            // scope closes tmp_key_fd
+            // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
+            // No-op on NFS.
+            dir_fd.fsync();
+        } catch (...) {
+            dir_fd.unlinkat_best_effort(tmp_file_path.c_str());
+            throw;
         }
-        // Makes the file durable for local file systems. No-op on NFS.
-        posix_->fsync(dir_fd);
-        // scope closes dir_fd. This ensures write is durable.
     }
+    // All file descriptors closed before rename.
     fs::path destination = storage_dir_ / maybe_safe_file_name_for_key;
     if (posix_->rename(tmp_file_path.c_str(), destination.c_str())) {
         const int err = errno;
