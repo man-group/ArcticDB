@@ -27,6 +27,7 @@ int RealPosix::fsync(int fd) { return ::fsync(fd); }
 int RealPosix::rename(const char* oldpath, const char* newpath) { return ::rename(oldpath, newpath); }
 int RealPosix::link(const char* oldpath, const char* newpath) { return ::link(oldpath, newpath); }
 int RealPosix::mkdir(const char* pathname, mode_t mode) { return ::mkdir(pathname, mode); }
+int RealPosix::mkdirat(int fd, const char* pathname, mode_t mode) { return ::mkdirat(fd, pathname, mode); }
 int RealPosix::stat(const char* pathname, struct stat* statbuf) { return ::stat(pathname, statbuf); }
 int RealPosix::fstat(int fd, struct stat* statbuf) { return ::fstat(fd, statbuf); }
 DIR* RealPosix::opendir(const char* name) { return ::opendir(name); }

@@ -26,6 +26,7 @@ class PosixInterface {
     virtual int rename(const char* oldpath, const char* newpath) = 0;
     virtual int link(const char* oldpath, const char* newpath) = 0;
     virtual int mkdir(const char* pathname, mode_t mode) = 0;
+    virtual int mkdirat(int fd, const char* pathname, mode_t mode) = 0;
     virtual int stat(const char* pathname, struct stat* statbuf) = 0;
     virtual int fstat(int fd, struct stat* statbuf) = 0;
     virtual DIR* opendir(const char* name) = 0;
