@@ -64,9 +64,7 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
                     .get();
     index_information_->index_.second = std::move(index_seg);
     auto read_result = create_python_read_result(
-            {},
-            read_options_.output_format_for_frame(),
-            std::move(read_version_output.frame_and_descriptor_)
+            {}, read_options_.output_format_for_frame(), std::move(read_version_output.frame_and_descriptor_)
     );
     return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
 }
