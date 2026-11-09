@@ -206,6 +206,16 @@ class File {
             throw std::system_error(errno, std::generic_category(), "fsync failed");
     }
 
+    void mkdir(const fs::path& pathname, mode_t mode) const {
+        int res = posix_.mkdirat(fd_, pathname.c_str(), mode);
+        if (res < 0) {
+            if (errno != EEXIST)
+                throw std::system_error(
+                        errno, std::generic_category(), fmt::format("failed to create subdir {}", pathname.c_str())
+                );
+        }
+    }
+
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
     // errors.
     void unlinkat_best_effort(const fs::path& pathname) const { ::unlinkat(fd_, pathname.c_str(), 0); }
@@ -261,24 +271,24 @@ FileBackedStorage::~FileBackedStorage() = default;
 
 std::string FileBackedStorage::name() const { return fmt::format("file_backed_storage-{}", storage_dir_.c_str()); }
 
-// TODO: Remove all these maybe unused attributes.
-// TODO: Need a bucketizer. For now I'll dump everything in the storage dir.
-// TODO: There are some bare libc function calls in here which should be moved behind the PosixInterface.
-
 void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     std::string maybe_safe_file_name_for_key = to_tokenized_key(key_seg.variant_key());
     Segment& seg = *key_seg.segment_ptr();
     // TODO: With bucketizer, may have to create new directories with O_CREAT. Essential to set the directory
     // permissions.
 
-    const std::string tmp_name = generate_tmp_file_name();
-    const fs::path tmp_file_path = storage_dir_ / tmp_name;
+    const std::string tmp_file_name = generate_tmp_file_name();
+    const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
+    const fs::path tmp_file_path = storage_dir_ / key_name / tmp_file_name;
     {
-        File dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
-
+        File storage_dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+        storage_dir_fd.mkdir(key_name, new_dir_mode_);
+        File key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
         try {
             {
-                File tmp_key_fd(*posix_, dir_fd, tmp_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE);
+                File tmp_key_fd(
+                        *posix_, key_type_dir_fd, tmp_file_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
+                );
                 size_t segment_size = seg.calculate_size();
                 std::vector<std::uint8_t> buffer(segment_size);
                 seg.write_to(buffer.data());
@@ -288,14 +298,14 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
             // No-op on NFS.
             // TODO: Maybe fsync() could be absorbed into the File class, if the tmp file's write signalled the
             //       containing directory that it needs to flush too. i.e. there is a chain of custody.
-            dir_fd.sync();
+            storage_dir_fd.sync();
         } catch (...) {
-            dir_fd.unlinkat_best_effort(tmp_file_path);
+            storage_dir_fd.unlinkat_best_effort(tmp_file_path);
             throw;
         }
     }
     // All file descriptors closed before rename.
-    fs::path destination = storage_dir_ / maybe_safe_file_name_for_key;
+    fs::path destination = storage_dir_ / key_name / maybe_safe_file_name_for_key;
     if (posix_->rename(tmp_file_path.c_str(), destination.c_str())) {
         const int err = errno;
         ::unlink(tmp_file_path.c_str());
@@ -322,7 +332,8 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
     std::shared_ptr<Buffer> buffer;
     try {
         const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
-        const fs::path dest_path = storage_dir_ / maybe_safe_file_name_for_key;
+        const fs::path dest_path =
+                storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
         File file(*posix_, storage_dir_, dest_path, O_RDONLY | O_CLOEXEC, 0);
         buffer = file.read_all();
     } catch (const std::system_error& e) {
@@ -341,9 +352,8 @@ void FileBackedStorage::do_remove(
 }
 
 bool FileBackedStorage::do_key_exists(const VariantKey& key) {
-    // TODO: The conversion to file name needs careful vetting.
-    std::string maybe_safe_file_name_for_key = to_tokenized_key(key);
-    return exists(*posix_, storage_dir_, maybe_safe_file_name_for_key);
+    const fs::path subpath = fs::path(entity::key_type_long_name(variant_key_type(key))) / to_tokenized_key(key);
+    return exists(*posix_, storage_dir_, subpath);
 }
 
 bool FileBackedStorage::do_fast_delete() { throw std::runtime_error("do_fast_delete not implemented"); }
@@ -351,13 +361,10 @@ bool FileBackedStorage::do_fast_delete() { throw std::runtime_error("do_fast_del
 bool FileBackedStorage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
-    DIR* dirp = posix_->opendir(storage_dir_.c_str());
+    const fs::path keys_dir = storage_dir_ / entity::key_type_long_name(key_type);
+    DIR* dirp = posix_->opendir(keys_dir.c_str());
     if (!dirp)
-        throw std::system_error(
-                errno,
-                std::generic_category(),
-                fmt::format("do_iterate_type_until_match() failed to open directory {}", storage_dir_.c_str())
-        );
+        return false;
 
     DirCloser close_dir(dirp);
     struct dirent* dir_entry = nullptr;
