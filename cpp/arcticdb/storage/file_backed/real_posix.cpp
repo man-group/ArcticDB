@@ -33,5 +33,6 @@ int RealPosix::fstat(int fd, struct stat* statbuf) { return ::fstat(fd, statbuf)
 DIR* RealPosix::opendir(const char* name) { return ::opendir(name); }
 struct dirent* RealPosix::readdir(DIR* dirp) { return ::readdir(dirp); }
 int RealPosix::closedir(DIR* dirp) { return ::closedir(dirp); }
+int RealPosix::unlink(const char* pathname) { return ::unlink(pathname); }
 
 } // namespace arcticdb::storage::file_backed
