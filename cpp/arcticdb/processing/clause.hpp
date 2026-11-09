@@ -1411,7 +1411,11 @@ struct CompactDataClause {
     [[nodiscard]] std::set<RowRange> structure_row_ranges(const std::set<RowRange>& row_ranges) const;
 
   private:
-    [[nodiscard]] std::vector<EntityId> process_mixed_column_slicing(ProcessingUnit&& proc) const;
+    [[nodiscard]] std::vector<EntityId> process_mixed_column_slicing(
+            std::vector<std::shared_ptr<SegmentInMemory>>&& input_segments,
+            const std::vector<std::shared_ptr<RowRange>>& input_row_ranges,
+            const std::vector<std::shared_ptr<ColRange>>& input_col_ranges
+    ) const;
 
     void add_segment_from_frame(const ColRange& col_range, std::vector<SegmentInMemory>& segments) const;
 };

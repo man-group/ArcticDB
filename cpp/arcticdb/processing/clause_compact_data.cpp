@@ -205,32 +205,32 @@ std::vector<std::vector<EntityId>> CompactDataClause::structure_for_processing(s
 std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_ids) const {
     auto input_segment_count = entity_ids.size();
     util::check(input_segment_count != 0, "Unexpected empty entity_ids in CompactDataClause::process");
-    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-            *component_manager_, entity_ids
-    );
-    auto col_range_start = proc.col_ranges_->front()->first;
-    if (std::ranges::any_of(*proc.col_ranges_, [col_range_start](const std::shared_ptr<ColRange>& col_range) {
+    auto [input_segments, input_row_ranges, input_col_ranges] =
+            component_manager_->get_components_and_decrement_refcount<
+                    std::shared_ptr<SegmentInMemory>,
+                    std::shared_ptr<RowRange>,
+                    std::shared_ptr<ColRange>>(entity_ids);
+    auto col_range_start = input_col_ranges.front()->first;
+    if (std::ranges::any_of(input_col_ranges, [col_range_start](const std::shared_ptr<ColRange>& col_range) {
             return col_range->first != col_range_start;
         })) {
-        return process_mixed_column_slicing(std::move(proc));
+        return process_mixed_column_slicing(std::move(input_segments), input_row_ranges, input_col_ranges);
     }
+    const auto first_col_range_end = input_col_ranges.front()->second;
     log::version().debug(
             "CompactDataClause processing {} segments with starting column {} and with row ranges spanning [{:d}, "
             "{:d}]",
             input_segment_count,
             col_range_start,
-            proc.row_ranges_->front()->first,
-            proc.row_ranges_->back()->second
+            input_row_ranges.front()->first,
+            input_row_ranges.back()->second
     );
-    std::vector<SegmentInMemory> segments = util::extract_from_pointers(std::move(*proc.segments_));
+    std::vector<SegmentInMemory> segments = util::extract_from_pointers(std::move(input_segments));
     // Presence of frame implies we are doing inline compaction in append. The second condition means we are processing
     // the last row-slice of the existing data, and so it must be combined with the frame
-    if (frame_ && frame_->offset == proc.row_ranges_->back()->second) {
+    if (frame_ && frame_->offset == input_row_ranges.back()->second) {
         add_segment_from_frame(
-                ColRange{
-                        col_range_start,
-                        dynamic_schema_ ? frame_->desc().field_count() : proc.col_ranges_->front()->second
-                },
+                ColRange{col_range_start, dynamic_schema_ ? frame_->desc().field_count() : first_col_range_end},
                 segments
         );
     }
@@ -241,7 +241,7 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     std::vector<std::shared_ptr<SegmentInMemory>> segment_ptrs = util::extract_to_pointers(std::move(segments));
     std::vector<std::shared_ptr<RowRange>> row_ranges;
     std::vector<std::shared_ptr<ColRange>> col_ranges;
-    auto row_range_start = proc.row_ranges_->front()->first;
+    auto row_range_start = input_row_ranges.front()->first;
     const auto index_field_count = segment_ptrs.front()->descriptor().index().field_count();
     for (const auto& segment : segment_ptrs) {
         col_ranges.emplace_back(std::make_shared<ColRange>(
@@ -250,18 +250,19 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
         row_ranges.emplace_back(std::make_shared<RowRange>(row_range_start, row_range_start + segment->row_count()));
         row_range_start += segment->row_count();
     }
-    proc.set_segments(std::move(segment_ptrs));
-    proc.set_row_ranges(std::move(row_ranges));
-    proc.set_col_ranges(std::move(col_ranges));
     log::version().debug(
             "CompactDataClause compacted {} segments into {} segments with starting column {} and with row ranges "
             "spanning [{:d}, {:d}]",
             input_segment_count,
-            proc.segments_->size(),
+            segment_ptrs.size(),
             col_range_start,
-            proc.row_ranges_->front()->first,
-            proc.row_ranges_->back()->second
+            row_ranges.front()->first,
+            row_ranges.back()->second
     );
+    ProcessingUnit proc;
+    proc.set_segments(std::move(segment_ptrs));
+    proc.set_row_ranges(std::move(row_ranges));
+    proc.set_col_ranges(std::move(col_ranges));
     return push_entities(*component_manager_, std::move(proc));
 }
 
@@ -283,7 +284,8 @@ SegmentInMemory take_columns(SegmentInMemory& segment, size_t begin, size_t end,
         res.add_column(segment.field(idx), column);
     }
     for (size_t idx = index_field_count + begin; idx < index_field_count + end; ++idx) {
-        res.add_column(segment.field(idx), std::move(segment.columns().at(idx)));
+        auto column = std::move(segment.columns().at(idx));
+        res.add_column(segment.field(idx), column);
     }
     res.set_string_pool(segment.string_pool_ptr());
     res.set_row_id(static_cast<ssize_t>(row_count) - 1);
@@ -291,28 +293,32 @@ SegmentInMemory take_columns(SegmentInMemory& segment, size_t begin, size_t end,
 }
 } // namespace
 
-std::vector<EntityId> CompactDataClause::process_mixed_column_slicing(ProcessingUnit&& proc) const {
+std::vector<EntityId> CompactDataClause::process_mixed_column_slicing(
+        std::vector<std::shared_ptr<SegmentInMemory>>&& input_segments,
+        const std::vector<std::shared_ptr<RowRange>>& input_row_ranges,
+        const std::vector<std::shared_ptr<ColRange>>& input_col_ranges
+) const {
     // Only static schema data can reach here. Stock writers never column-slice dynamic schema data.
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             !dynamic_schema_, "CompactDataClause cannot combine differently column-sliced data with dynamic schema"
     );
-    const auto num_segments = proc.segments_->size();
+    const auto num_segments = input_segments.size();
     // Output column slices are the common refinement of the input column slices, so every input segment splits into
     // whole output column slices
     std::set<size_t> boundaries;
-    for (const auto& col_range : *proc.col_ranges_) {
+    for (const auto& col_range : input_col_ranges) {
         boundaries.insert(col_range->first);
         boundaries.insert(col_range->second);
     }
     const std::vector<size_t> col_starts(boundaries.cbegin(), boundaries.cend());
     std::vector<size_t> order(num_segments);
     std::iota(order.begin(), order.end(), 0);
-    std::ranges::sort(order, [&proc](size_t left, size_t right) {
-        return std::tie(proc.row_ranges_->at(left)->first, proc.col_ranges_->at(left)->first) <
-               std::tie(proc.row_ranges_->at(right)->first, proc.col_ranges_->at(right)->first);
+    std::ranges::sort(order, [&input_row_ranges, &input_col_ranges](size_t left, size_t right) {
+        return std::tie(input_row_ranges.at(left)->first, input_col_ranges.at(left)->first) <
+               std::tie(input_row_ranges.at(right)->first, input_col_ranges.at(right)->first);
     });
-    const auto row_range_start = proc.row_ranges_->at(order.front())->first;
-    const auto row_range_end = proc.row_ranges_->at(order.back())->second;
+    const auto row_range_start = input_row_ranges.at(order.front())->first;
+    const auto row_range_end = input_row_ranges.at(order.back())->second;
     log::version().debug(
             "CompactDataClause processing {} differently column-sliced segments with row ranges spanning [{:d}, {:d}] "
             "into {} column slices",
@@ -323,8 +329,8 @@ std::vector<EntityId> CompactDataClause::process_mixed_column_slicing(Processing
     );
     std::vector<std::vector<SegmentInMemory>> segments_by_output_col_slice(col_starts.size() - 1);
     for (auto idx : order) {
-        auto segment = std::move(proc.segments_->at(idx));
-        const auto& col_range = *proc.col_ranges_->at(idx);
+        auto segment = std::move(input_segments.at(idx));
+        const auto& col_range = *input_col_ranges.at(idx);
         auto output_idx = static_cast<size_t>(
                 std::distance(col_starts.cbegin(), std::ranges::lower_bound(col_starts, col_range.first))
         );
@@ -355,6 +361,7 @@ std::vector<EntityId> CompactDataClause::process_mixed_column_slicing(Processing
             segment_ptrs.emplace_back(std::make_shared<SegmentInMemory>(std::move(segment)));
         }
     }
+    ProcessingUnit proc;
     proc.set_segments(std::move(segment_ptrs));
     proc.set_row_ranges(std::move(row_ranges));
     proc.set_col_ranges(std::move(col_ranges));
