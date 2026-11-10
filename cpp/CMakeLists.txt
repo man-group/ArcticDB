@@ -17,6 +17,11 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/pdb_generation.cmake)
 
 enable_testing()
 
+option(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING "Build with Perfetto instrumented tracing" OFF)
+if(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING)
+    add_compile_definitions(ARCTICDB_PERFORMANCE_SAMPLING)
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF CACHE BOOL "")
 set(ARCTICDB_USE_PCH OFF CACHE BOOL "Whether to use precompiled headers")
