@@ -66,6 +66,11 @@ class FileBackedStorageFixture : public ::testing::Test {
         storage_.emplace(library_path, storage::OpenMode::DELETE, cfg, faulty_posix_);
     }
 
+    void TearDown() override {
+        // TODO: This is really difficult to ensure.
+        // ASSERT_EQ(faulty_posix_->num_open_file_descriptors(), 0);
+    }
+
     FileBackedStorage& storage() { return *storage_; }
     FaultyPosix& posix() { return *faulty_posix_; }
 
@@ -95,6 +100,9 @@ TEST_F(FileStorageApi, WritesAreVisibleAndReadable) {
     auto result = storage().read(entity::VariantKey{key}, {});
     ASSERT_EQ(std::get<StringId>(result.atom_key().id()), STREAM_ID);
     ASSERT_TRUE(segments_are_identical(segment, result.segment()));
+
+    storage().remove(entity::VariantKey{key}, {});
+    ASSERT_FALSE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
 }
 
 TEST_F(FileStorageApi, KeyNotFoundException) {
@@ -157,6 +165,7 @@ class FaultInjection : public FileBackedStorageFixture, public ::testing::WithPa
     }
 
     void TearDown() override {
+        FileBackedStorageFixture::TearDown();
         ASSERT_FALSE(posix().uncosumed_faults())
                 << "Tests were written with the expectation that all faults would be consumed, but they were not.";
     }

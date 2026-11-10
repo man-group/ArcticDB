@@ -32,17 +32,44 @@
 namespace arcticdb::storage::file_backed {
 
 int FaultyPosix::open(const char* pathname, int flags, mode_t mode) {
+    std::unique_lock lock(data_mutex_);
+    if (std::queue<std::optional<PosixError>>& fault_sequence = faults_[SyscallId::OPEN]; !fault_sequence.empty()) {
+        const std::optional<PosixError> maybe_error = fault_sequence.front();
+        if (maybe_error) {
+            errno = *maybe_error;
+            fault_sequence.pop();
+            return -1;
+        }
+    }
     int res = ::open(pathname, flags, mode);
-    PROPAGATE_FAULT_IF_EXISTS(SyscallId::OPEN);
+    if (res >= 0)
+        ++num_open_file_descriptors_;
+
+    return res;
 }
 
 int FaultyPosix::openat(int dirfd, const char* pathname, int flags, mode_t mode) {
+    std::unique_lock lock(data_mutex_);
+    if (std::queue<std::optional<PosixError>>& fault_sequence = faults_[SyscallId::OPEN]; !fault_sequence.empty()) {
+        const std::optional<PosixError> maybe_error = fault_sequence.front();
+        if (maybe_error) {
+            errno = *maybe_error;
+            fault_sequence.pop();
+            return -1;
+        }
+    }
     int res = ::openat(dirfd, pathname, flags, mode);
-    PROPAGATE_FAULT_IF_EXISTS(SyscallId::OPEN);
+    if (res >= 0)
+        ++num_open_file_descriptors_;
+
+    return res;
 }
 
 int FaultyPosix::close(int fd) {
     int res = ::close(fd);
+    if (num_open_file_descriptors_ == 0)
+        throw std::runtime_error("Would underflow num_open_file_descriptors_");
+    --num_open_file_descriptors_;
     PROPAGATE_FAULT_IF_EXISTS(SyscallId::CLOSE);
 }
 
@@ -110,5 +137,7 @@ void FaultyPosix::inject_fault(SyscallId syscall, std::optional<PosixError> mayb
 bool FaultyPosix::uncosumed_faults() const noexcept {
     return !std::ranges::all_of(faults_ | std::ranges::views::values, &std::queue<std::optional<PosixError>>::empty);
 }
+
+size_t FaultyPosix::num_open_file_descriptors() const noexcept { return num_open_file_descriptors_; }
 
 } // namespace arcticdb::storage::file_backed
