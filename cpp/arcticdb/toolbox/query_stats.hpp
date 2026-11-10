@@ -36,30 +36,9 @@ enum class TaskType : size_t {
     END
 };
 
-// Each timed call is recorded once, as either succeeded or failed:
-// - COUNT and TOTAL_TIME_MS: calls that succeeded. For S3 reads, HeadObject and ListObjectsV2 this includes calls that
-// S3
-//   answered with a missing key or bucket, as that is an expected answer. So TOTAL_TIME_MS / COUNT is the mean time of
-//   the calls that S3 answered.
-// - FAILURE_COUNT and FAILURE_TIME_MS: calls that failed, either with an error or by throwing.
-// Both times are of the whole SDK call, including every SDK retry and the backoff between them.
-//
-// The other stats are per HTTP attempt. ArcticCurlHttpClient records them below the SDK retry loop, and they are added
-// to the calls being timed on the same thread. They are recorded only for synchronous S3 calls on Linux and macOS.
-// They remain zero on Windows, for S3_GetObjectAsync whose attempts run on SDK threads, and for uninstrumented
-// backends. The formulas below apply only when per-attempt stats are recorded; mean response time also requires
-// ATTEMPTS - NETWORK_ERRORS > 0.
-// - ATTEMPTS: HTTP attempts. ATTEMPTS - COUNT - FAILURE_COUNT is the number of retries.
-// - ATTEMPT_TIME_MS: time spent in HTTP attempts. TOTAL_TIME_MS + FAILURE_TIME_MS - ATTEMPT_TIME_MS is the time spent
-//   in backoff between retries and in the SDK outside of HTTP (e.g. signing).
-// - NETWORK_ERRORS: attempts that did not get a complete HTTP response, e.g. DNS failure, connection refused or
-// timeout.
-// - SERVER_ERRORS: attempts that got an HTTP 5xx or 429 response, e.g. InternalError or SlowDown.
-// - TTFB_MS and CONNECT_MS: over the attempts that got a complete HTTP response, the sums of the time to the first
-//   response byte and of the time to connect (DNS, TCP, TLS and proxy, about 0 on a reused connection). Both are from
-//   the start of the attempt, so (TTFB_MS - CONNECT_MS) / (ATTEMPTS - NETWORK_ERRORS) is the mean time S3 took to
-//   answer, including sending the request. The SDK gives both per attempt in whole milliseconds, rounded down.
-// - NEW_CONNECTIONS: sockets opened by the attempts. An attempt that reuses a pooled connection opens none.
+// Call counts/times separate successes (including expected missing keys) from failures; times include retries.
+// Per-attempt stats require synchronous ArcticCurlHttpClient calls (Linux/macOS); otherwise they remain zero.
+// See toolbox/query_stats.py:get_query_stats for metric definitions and formulas.
 enum class StatType : std::uint8_t {
     TOTAL_TIME_MS = 0,
     COUNT = 1,

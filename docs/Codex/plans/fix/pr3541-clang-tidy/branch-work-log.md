@@ -1,8 +1,0 @@
-- Reviewed PR #3541 at 8585f9caa556f46b88e63ec65dd7ee7768b556fb and its clang-tidy CI diagnostics.
-- Fixed all nine reported diagnostics: internal linkage, integer conversion, enum size, ranges algorithms, and empty catch.
-- Added a C++ regression test for exact counters above 2^53 and millisecond truncation. Both an isolated C++ reproduction and the repository gtest failed with the original conversion and passed with integer division.
-- Created the authorized codex-pr3541 venv and applied the local macOS build toolkit. Built the debug extension and verified its import path is in this worktree.
-- LLVM 19.1.7 clang-tidy completed successfully on query_stats.cpp and test_s3_query_stats.cpp using explicit macOS SDK and C++ include paths. All reported PR diagnostics are resolved; warnings on unchanged code remain. Used an anonymous namespace for the time-unit helper to satisfy misc-use-anonymous-namespace as well.
-- Validation: 12 QueryStatsFixture C++ tests, Async.QueryStatsDemo, and all 19 Python query-stats integration tests pass. make lint and git diff --check pass.
-- Reviewed storage result classification, batch deletes, async handling, timer ownership, concurrency, output compatibility, HTTP accounting, tests and documentation. Addressed the Windows documentation finding in the Python docstring, C++ stats description and toolbox technical documentation: per-attempt metrics require synchronous curl instrumentation on Linux/macOS; formulas require instrumentation and a nonzero response denominator.
-- User authorized committing and pushing the clang-tidy fixes and documentation correction to PR #3541. No GitHub review comments were posted.
