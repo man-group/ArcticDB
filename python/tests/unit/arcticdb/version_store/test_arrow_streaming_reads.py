@@ -23,13 +23,14 @@ from arcticdb.exceptions import ArcticNativeException
 # from arcticdb_ext.storage import KeyType
 
 
-def test_arrow_streaming_reads_basic(in_memory_store_factory):
+@pytest.mark.parametrize("prefetch_rows", [None, 20, 0])
+def test_arrow_streaming_reads_basic(in_memory_store_factory, prefetch_rows):
     lib = in_memory_store_factory(segment_row_size=10)
     sym = "test_arrow_streaming_reads_basic"
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     metadata = {"hello": "world"}
     lib.write(sym, df, metadata=metadata)
-    gen = lib.read_streaming(sym, prefetch_rows=20)
+    gen = lib.read_streaming(sym, prefetch_rows=prefetch_rows)
     for idx, df_slice in enumerate(gen):
         assert df_slice.equals(df.slice(idx * 10, 10))
     vit = lib.read(sym)
