@@ -277,6 +277,27 @@ TEST(VersionMap, TestCompact) {
     ASSERT_EQ(result, expected);
 }
 
+TEST(VersionMap, OverwriteSymbolTreeWithNoIndexesRemovesSymbol) {
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test1"};
+    THREE_SIMPLE_KEYS
+
+    auto version_map = std::make_shared<VersionMap>();
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
+
+    version_map->overwrite_symbol_tree(store, id, {});
+
+    ASSERT_EQ(store->num_ref_keys(), 0);
+    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
+    ASSERT_TRUE(
+            std::make_shared<VersionMap>()
+                    ->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__)
+                    ->empty()
+    );
+}
+
 TEST(VersionMap, TestCompactWithDelete) {
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};

@@ -534,6 +534,17 @@ class VersionMapImpl {
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
             if (validate_)
                 entry->validate();
+        } else {
+            // Otherwise the ref key would point at the head deleted below
+            try {
+                store->remove_key_sync(RefKey{stream_id, KeyType::VERSION_REF});
+            } catch (const storage::KeyNotFoundException& e) {
+                log::version().debug(
+                        "No ref key to remove for symbol {} in overwrite_symbol_tree, exception: {}",
+                        stream_id,
+                        e.what()
+                );
+            }
         }
         try {
             remove_entry_version_keys(store, old_entry, stream_id);
