@@ -43,26 +43,62 @@ ReadResult StreamingReadGenerator::read_result() {
             tsd.sorted()};
 }
 
+void StreamingReadGenerator::prefetch() {
+    util::check(prefetch_rows_.has_value(), "StreamingReadGenerator: prefetch_rows_ should be populated");
+    while (in_flight_rows_ < *prefetch_rows_ && !row_ranges_.empty()) {
+        auto row_range = std::move(row_ranges_.front());
+        in_flight_rows_ += row_range.diff();
+        row_ranges_.pop_front();
+        // TODO: Make all of this async
+        // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when reading
+        // ahead
+        auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
+        read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
+        auto index_information_copy = std::make_shared<IndexInformation>(
+                std::make_pair(index_information_->index_.first, index_information_->index_.second.clone()),
+                std::nullopt
+        );
+        index_information_copy->column_stats_ = index_information_->column_stats_;
+        auto read_version_output_fut = read_frame_for_version(
+                engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
+        );
+        frame_futs_.emplace_back(
+                std::move(row_range),
+                std::move(read_version_output_fut).thenValueInline([this](auto&& read_version_output) {
+                    auto read_result = create_python_read_result(
+                            {},
+                            read_options_.output_format_for_frame(),
+                            std::move(read_version_output.frame_and_descriptor_)
+                    );
+                    return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
+                })
+        );
+    }
+}
+
 std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     py::gil_scoped_release release_gil;
     ensure_index_information();
-    if (idx_ >= row_ranges_.size()) {
+    if (frame_futs_.empty() && row_ranges_.empty()) {
         return std::nullopt;
     }
-    const auto& row_range = row_ranges_[idx_++];
-    // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when reading
-    // ahead
-    auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
-    read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
-    auto index_seg = index_information_->index_.second.clone();
-    auto read_version_output =
-            read_frame_for_version(engine_->store(), index_information_, read_query_copy, read_options_, handler_data_)
-                    .get();
-    index_information_->index_.second = std::move(index_seg);
-    auto read_result = create_python_read_result(
-            {}, read_options_.output_format_for_frame(), std::move(read_version_output.frame_and_descriptor_)
-    );
-    return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
+    if (!started_) {
+        prefetch();
+        started_ = true;
+    }
+    // TODO: Remove this hack
+    if (in_flight_rows_ == 0) {
+        auto prefetch_rows_before = *prefetch_rows_;
+        prefetch_rows_ = 1;
+        prefetch();
+        prefetch_rows_ = prefetch_rows_before;
+    }
+    auto [row_range, frame_fut] = std::move(frame_futs_.front());
+    frame_futs_.pop_front();
+    in_flight_rows_ -= row_range.diff();
+    auto res = std::move(frame_fut).get();
+    prefetch();
+    return res;
 }
 
 void StreamingReadGenerator::ensure_index_information() {
@@ -86,5 +122,6 @@ void StreamingReadGenerator::ensure_index_information() {
         }
         row_ranges_.emplace_back(slice_and_key.slice().rows());
     }
+    prefetch_rows_ = prefetch_rows_.value_or(1'000'000);
 }
 } // namespace arcticdb::version_store

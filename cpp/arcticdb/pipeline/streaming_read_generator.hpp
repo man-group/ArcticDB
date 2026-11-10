@@ -10,6 +10,7 @@
 
 #include <any>
 #include <cstdint>
+#include <list>
 #include <optional>
 
 #include <arcticdb/entity/read_result.hpp>
@@ -28,21 +29,26 @@ class StreamingReadGenerator {
             std::optional<uint64_t> prefetch_rows, std::shared_ptr<std::any> handler_data
     );
 
+    ARCTICDB_MOVE_ONLY_DEFAULT(StreamingReadGenerator);
+
     ReadResult read_result();
     std::optional<ArrowOutputFrame> next();
 
   private:
     void ensure_index_information();
+    void prefetch();
 
-    size_t idx_{0};
+    bool started_{false};
+    uint64_t in_flight_rows_{0};
     LocalVersionedEngine* engine_;
     StreamId stream_id_;
     VersionQuery version_query_;
     std::shared_ptr<ReadQuery> read_query_;
     ReadOptions read_options_;
-    ARCTICDB_UNUSED std::optional<uint64_t> prefetch_rows_;
+    std::optional<uint64_t> prefetch_rows_;
     std::shared_ptr<std::any> handler_data_;
     std::shared_ptr<IndexInformation> index_information_;
-    std::vector<RowRange> row_ranges_;
+    std::list<RowRange> row_ranges_;
+    std::list<std::pair<RowRange, folly::Future<ArrowOutputFrame>>> frame_futs_;
 };
 } // namespace arcticdb::version_store
