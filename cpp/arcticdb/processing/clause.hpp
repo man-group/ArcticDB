@@ -845,29 +845,12 @@ struct WriteClause {
     void process_compressed(const std::vector<EntityId>& entity_ids) const;
 };
 
-/// Type used as the key when column values of type TDT are compared for matching. std::nullopt represents a missing
-/// value. A present NaN or NaT is also NA, see is_na.
-template<util::scalar_type_descriptor_tag TDT>
-using MatchKeyType = std::conditional_t<
-        is_sequence_type(TDT::data_type()), std::optional<std::string_view>, std::optional<typename TDT::RawType>>;
-
-template<typename TDT, typename T>
-concept raw_value_for_type_descriptor = util::scalar_type_descriptor_tag<TDT> &&
-                                        util::any_of<std::remove_cvref_t<T>, MatchKeyType<TDT>, typename TDT::RawType>;
-
 /// Whether value, one of the representations merge-update uses for a column of type TDT, denotes a missing entry.
 /// TDT is always the type of the column itself. value can be the raw type stored in the column or the MatchKeyType
 /// match key.
-template<util::scalar_type_descriptor_tag TDT, typename V>
-requires raw_value_for_type_descriptor<TDT, V>
-constexpr bool is_na(V value) {
-    if constexpr (std::same_as<V, MatchKeyType<TDT>>) {
-        if constexpr (is_sequence_type(TDT::data_type())) {
-            return !value.has_value();
-        } else {
-            return !value.has_value() || is_na<TDT>(*value);
-        }
-    } else if constexpr (is_floating_point_type(TDT::data_type())) {
+template<util::scalar_type_descriptor_tag TDT>
+constexpr bool is_na(const typename TDT::RawType value) {
+    if constexpr (is_floating_point_type(TDT::data_type())) {
         return std::isnan(value);
     } else if constexpr (is_time_type(TDT::data_type())) {
         return value == NaT;
@@ -877,19 +860,6 @@ constexpr bool is_na(V value) {
         return false;
     }
 }
-
-template<util::scalar_type_descriptor_tag TDT>
-struct NaAwareComparator {
-    bool match_na;
-    bool operator()(MatchKeyType<TDT> left, MatchKeyType<TDT> right) const {
-        const bool left_na = is_na<TDT>(left);
-        const bool right_na = is_na<TDT>(right);
-        if (left_na || right_na) {
-            return match_na && left_na && right_na;
-        }
-        return left == right;
-    }
-};
 
 struct HashedSource;
 
