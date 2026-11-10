@@ -37,6 +37,19 @@ def test_arrow_streaming_reads_basic(in_memory_store_factory):
     assert vit == gen.versioned_item()
 
 
+def test_arrow_streaming_reads_col_slicing(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
+    sym = "test_arrow_streaming_reads_col_slicing"
+    df = pl.from_pandas(pd.DataFrame({f"col_{i}": np.arange(i * 20, (i + 1) * 20) for i in range(5)}))
+    lib.write(sym, df)
+    gen = lib.read_streaming(sym)
+    for idx, df_slice in enumerate(gen):
+        assert df_slice.equals(df.slice(idx * 10, 10))
+    vit = lib.read(sym)
+    vit.data = None
+    assert vit == gen.versioned_item()
+
+
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
 def test_arrow_streaming_reads_invalid_prefetch_rows(in_memory_version_store, prefetch_rows):
     lib = in_memory_version_store
