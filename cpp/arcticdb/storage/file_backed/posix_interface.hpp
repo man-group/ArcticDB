@@ -19,6 +19,7 @@ class PosixInterface {
     virtual ~PosixInterface();
     virtual int open(const char* pathname, int flags, mode_t mode) = 0;
     virtual int openat(int dirfd, const char* pathname, int flags, mode_t mode) = 0;
+    virtual int close(int fd) = 0;
     // Wow so I can feed 64 bits of buffer size but the function can only signal 63 bits of bytes written? Cool.
     virtual ssize_t write(int fd, const void* buf, size_t count) = 0;
     virtual ssize_t read(int fd, void* buf, size_t count) = 0;
