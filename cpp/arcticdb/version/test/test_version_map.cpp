@@ -290,6 +290,11 @@ TEST(VersionMap, OverwriteSymbolTreeWithNoIndexesRemovesSymbol) {
     version_map->overwrite_symbol_tree(store, id, {});
 
     ASSERT_EQ(store->num_ref_keys(), 0);
+    ASSERT_TRUE(
+            version_map
+                    ->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__)
+                    ->empty()
+    );
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     ASSERT_TRUE(
             std::make_shared<VersionMap>()

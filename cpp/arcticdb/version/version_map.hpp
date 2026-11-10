@@ -535,6 +535,7 @@ class VersionMapImpl {
             if (validate_)
                 entry->validate();
         } else {
+            entry->clear();
             // Otherwise the ref key would point at the head deleted below
             try {
                 store->remove_key_sync(RefKey{stream_id, KeyType::VERSION_REF});
