@@ -161,15 +161,19 @@ class Directory {
     }
 
     ~Directory() {
-        // TODO: Check if there are any exceptions in flight. If anything goes wrong in here, we can't throw. If nothing
-        // in flight, we can safely throw.
-        // TODO: Check this
-        [[maybe_unused]] int res = ::close(fd_);
+        // TODO: Check if the file descriptor hasn't been closed
     }
 
     ARCTICDB_NO_MOVE_OR_COPY(Directory);
 
     int fd() const noexcept { return fd_; }
+
+    void close() {
+        assert(fd_ >= 0 && "Closing a directory which was already closed");
+        if (posix_.close(fd_) < 0)
+            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to close directory"));
+        fd_ = -1;
+    }
 
     void sync() const {
         // TODO: Can this error? Yes... EINTR at the least should be retried. Then there's the usual ones
@@ -235,20 +239,17 @@ class File {
     }
 
     ~File() {
-        // TODO: Check if there are any exceptions in flight. If anything goes wrong in here, we can't throw. If nothing
-        // in flight, we can safely throw.
-        if (needs_flush_) {
-            posix_.fsync(fd_);
-            // TODO: Not sure why I chose to stat the file too. Can't find documentation which says it's necessary.
-            struct stat tmp_st;
-            posix_.fstat(fd_, &tmp_st);
-        }
-
-        // TODO: Check this, and decide if safe to throw.
-        [[maybe_unused]] int res = ::close(fd_);
+        // TODO: log if the file handle hasn't been closed?
     }
 
     ARCTICDB_NO_MOVE_OR_COPY(File);
+
+    void close() {
+        assert(fd_ >= 0 && "Closing a file which was already closed");
+        if (posix_.close(fd_) < 0)
+            raise_io_error(errno, fmt::format("Failed to close file"));
+        fd_ = -1;
+    }
 
     void write_all(PosixInterface& posix, std::span<const std::uint8_t> buffer) {
         const size_t buffer_size = buffer.size();
@@ -262,8 +263,6 @@ class File {
             }
             written += static_cast<size_t>(n);
         }
-
-        needs_flush_ = true;
     }
 
     std::shared_ptr<arcticdb::Buffer> read_all() const {
@@ -303,7 +302,6 @@ class File {
   private:
     PosixInterface& posix_;
     int fd_;
-    bool needs_flush_ = false;
 };
 
 class DirCloser {
@@ -380,16 +378,17 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
                 seg.write_to(buffer.data());
                 tmp_key_fd.write_all(*posix_, buffer);
                 tmp_key_fd.sync();
+                tmp_key_fd.close();
             }
-            // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
-            // No-op on NFS.
-            // TODO: Maybe fsync() could be absorbed into the File class, if the tmp file's write signalled the
-            //       containing directory that it needs to flush too. i.e. there is a chain of custody.
-            storage_dir_fd.sync();
         } catch (...) {
             storage_dir_fd.unlinkat_best_effort(tmp_file_path);
             throw;
         }
+        // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
+        // No-op on NFS.
+        key_type_dir_fd.sync();
+        key_type_dir_fd.close();
+        storage_dir_fd.close();
     }
     // All file descriptors closed before rename.
     fs::path destination = storage_dir_ / key_name / maybe_safe_file_name_for_key;
@@ -433,6 +432,7 @@ void FileBackedStorage::do_read(
                 storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
         File file(*posix_, storage_dir_, dest_path, O_RDONLY | O_CLOEXEC, 0);
         buffer = file.read_all();
+        file.close();
     } catch (const std::system_error& e) {
         throw KeyNotFoundException(variant_key);
     }
@@ -447,6 +447,7 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
                 storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
         File file(*posix_, storage_dir_, dest_path, O_RDONLY | O_CLOEXEC, 0);
         buffer = file.read_all();
+        file.close();
     } catch (const std::system_error& e) {
         throw KeyNotFoundException(variant_key);
     }
