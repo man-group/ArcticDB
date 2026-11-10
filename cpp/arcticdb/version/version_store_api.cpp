@@ -1611,4 +1611,10 @@ VersionedItem PythonVersionStore::rename_columns_arrow_compat(
     return rename_columns_arrow_compat_internal(stream_id, index_columns, prune_previous_versions);
 }
 
+std::unordered_map<std::tuple<StreamId, VersionId>, double> PythonVersionStore::batch_dedup_ratios(
+        const std::vector<StreamId>& stream_ids
+) {
+    return batch_dedup_ratios_internal(stream_ids);
+}
+
 } // namespace arcticdb::version_store
