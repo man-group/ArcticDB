@@ -6,12 +6,16 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include "storage/storage_exceptions.hpp"
+#include <asm-generic/errno.h>
+#include <cerrno>
 #include <gtest/gtest.h>
 
+#include <arcticdb/storage/file_backed/faulty_posix.hpp>
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
 #include <arcticdb/storage/test/common.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/util/clock.hpp>
+#include <arcticdb/util/error_code.hpp>
 
 #include <fmt/format.h>
 
@@ -20,6 +24,8 @@
 
 namespace fs = std::filesystem;
 using namespace arcticdb;
+using namespace storage::file_backed;
+using namespace std::literals;
 
 namespace {
 
@@ -44,9 +50,11 @@ class TempDir {
     fs::path temp_path_;
 };
 
-class FileBackedStorage : public ::testing::Test {
+class FileBackedStorageFixture : public ::testing::Test {
   public:
-    FileBackedStorage() : temp_dir_(*::testing::UnitTest::GetInstance()->current_test_info()) {
+    FileBackedStorageFixture() :
+        temp_dir_(*::testing::UnitTest::GetInstance()->current_test_info()),
+        faulty_posix_(std::make_shared<FaultyPosix>()) {
         arcticdb::proto::file_storage::Config cfg;
         cfg.set_dir_path(temp_dir_.get().generic_string());
         // TODO: Rename the variable as use_mock_os_apis. It's okay to use actual storage, we just inject failures.
@@ -54,14 +62,16 @@ class FileBackedStorage : public ::testing::Test {
 
         // I copied the delim from elsewhere. I don't get it. The default is '.'.
         arcticdb::storage::LibraryPath library_path("test_lib", '/');
-        storage_.emplace(library_path, storage::OpenMode::DELETE, cfg);
+        storage_.emplace(library_path, storage::OpenMode::DELETE, cfg, faulty_posix_);
     }
 
-    storage::file_backed::FileBackedStorage& storage() { return *storage_; }
+    FileBackedStorage& storage() { return *storage_; }
+    FaultyPosix& posix() { return *faulty_posix_; }
 
   private:
     TempDir temp_dir_;
-    std::optional<storage::file_backed::FileBackedStorage> storage_;
+    std::shared_ptr<FaultyPosix> faulty_posix_;
+    std::optional<FileBackedStorage> storage_;
 };
 
 bool segments_are_identical(const Segment& x, const Segment& y) {
@@ -73,7 +83,9 @@ bool segments_are_identical(const Segment& x, const Segment& y) {
                                                    );
 }
 
-TEST_F(FileBackedStorage, WritesAreVisibleAndReadable) {
+using FileStorageApi = FileBackedStorageFixture;
+
+TEST_F(FileStorageApi, WritesAreVisibleAndReadable) {
     Segment segment{storage::get_test_segment()};
     const std::string symbol{"symbol"};
     auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
@@ -85,12 +97,12 @@ TEST_F(FileBackedStorage, WritesAreVisibleAndReadable) {
     ASSERT_TRUE(segments_are_identical(segment, result.segment()));
 }
 
-TEST_F(FileBackedStorage, KeyNotFoundException) {
+TEST_F(FileStorageApi, KeyNotFoundException) {
     auto key = storage::get_test_key("symbol", entity::KeyType::VERSION);
     ASSERT_THROW(storage().read(entity::VariantKey{key}, {}), storage::KeyNotFoundException);
 }
 
-TEST_F(FileBackedStorage, KeysDoNotCollide) {
+TEST_F(FileStorageApi, KeysDoNotCollide) {
     // An early bug in file path generation led to files being overwritten. Write a few different segments
     // to four files and then try to reread them and match them to original data.
     const std::array<Segment, 4> segments{
@@ -120,7 +132,7 @@ TEST_F(FileBackedStorage, KeysDoNotCollide) {
     }
 }
 
-TEST_F(FileBackedStorage, ListSymbols) {
+TEST_F(FileStorageApi, ListSymbols) {
     Segment segment{storage::get_test_segment()};
     const std::string symbol{"symbol"};
     auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
@@ -141,5 +153,48 @@ TEST_F(FileBackedStorage, ListSymbols) {
     });
     ASSERT_FALSE(executed_on_missing);
 }
+
+using FaultParam = std::tuple<SyscallId, Fault, std::string_view>;
+
+class FaultInjection : public FileBackedStorageFixture, public ::testing::WithParamInterface<FaultParam> {
+    void SetUp() override {
+        const FaultParam& params = GetParam();
+        posix().inject_fault(std::get<0>(params), std::get<1>(params));
+    }
+
+    void TearDown() override {
+        ASSERT_FALSE(posix().uncosumed_faults()
+        ) << "Tests were probably written with the expectation that all faults would be consumed, but they were not. "
+             "Double check.";
+    }
+};
+
+TEST_P(FaultInjection, NoSideEffect) {
+    Segment segment{storage::get_test_segment()};
+    const std::string symbol{"symbol"};
+    auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
+    ASSERT_THROW(
+            storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone())), QuotaExceededException
+    );
+    ASSERT_FALSE(exists_in_store(storage(), symbol, entity::KeyType::VERSION));
+    const size_t num_lingering_temporaries = storage().get_num_temporary_files();
+    ASSERT_EQ(num_lingering_temporaries, 0)
+            << fmt::format("{} temporary files were not cleaned up", num_lingering_temporaries);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FileStorageResilience, FaultInjection,
+        testing::ValuesIn(
+                {std::make_tuple(SyscallId::WRITE, Fault{-1, ENOSPC}, "WriteNoSpace"sv),
+                 std::make_tuple(SyscallId::WRITE, Fault{-1, EDQUOT}, "WriteNoQuota"sv),
+                 std::make_tuple(SyscallId::SYNC, Fault{-1, ENOSPC}, "SyncNoSpace"sv),
+                 std::make_tuple(SyscallId::SYNC, Fault{-1, EDQUOT}, "SyncNoQuota"sv),
+                 std::make_tuple(SyscallId::CLOSE, Fault{-1, ENOSPC}, "CloseNoSpace"sv),
+                 std::make_tuple(SyscallId::CLOSE, Fault{-1, EDQUOT}, "CloseNoQuota"sv)}
+        ),
+        [](const testing::TestParamInfo<FaultInjection::ParamType>& info) {
+            return std::string(std::get<2>(info.param));
+        }
+);
 
 } // namespace

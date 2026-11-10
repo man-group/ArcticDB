@@ -21,7 +21,22 @@ class FileBackedStorage final : public Storage {
   public:
     using Config = arcticdb::proto::file_storage::Config;
 
+    /**
+     *
+     *
+     * @param library_path Where
+     * @param mode Control access rights.
+     * @param conf Custom configuration specific to FileBackedStorage.
+     * @param posix_interface An optional interface. If given, ownership will be transferred. Otherwise,
+     *        a new one will be created internally.
+     *
+     * @return
+     */
     FileBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf);
+    FileBackedStorage(
+            const LibraryPath& library_path, OpenMode mode, const Config& conf,
+            const std::shared_ptr<PosixInterface>& posix_interface
+    );
     ~FileBackedStorage() override;
 
     bool supports_object_size_calculation() const override { return true; }
@@ -56,11 +71,16 @@ class FileBackedStorage final : public Storage {
     [[nodiscard]] const std::set<char>& do_unsupported_library_chars() const override;
     [[nodiscard]] std::optional<char> do_verify_library_suffix(std::string_view) const override;
 
+  public: // APIs specific to this storage type.
+    // Fetch number of temporary files currently on storage. These are not normally visible through
+    // public APIs, but the function is useful for tests.
+    size_t get_num_temporary_files() const;
+
   private:
     std::filesystem::path storage_dir_;
     // TODO: Need to collect the process umask and chmod newly created directories if needed.
     mode_t new_dir_mode_;
-    std::unique_ptr<PosixInterface> posix_;
+    std::shared_ptr<PosixInterface> posix_;
 };
 
 } // namespace arcticdb::storage::file_backed
