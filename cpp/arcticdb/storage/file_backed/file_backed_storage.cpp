@@ -80,12 +80,12 @@ std::string generate_tmp_file_name() {
 bool is_tmp_file_name(std::string_view file_name) noexcept { return file_name.starts_with(TMP_FILE_PREFIX); }
 bool is_silly_rename(std::string_view file_name) noexcept { return file_name.starts_with(SILLY_RENAME_FILE_PREFIX); }
 
-bool skip_during_listing(std::string_view file_name) noexcept {
-    return is_tmp_file_name(file_name) || is_silly_rename(file_name);
-}
-
 // TODO: pseudodir is not a real term.
 bool is_pseudodir(std::string_view file_name) noexcept { return file_name == "." || file_name == ".."; }
+
+bool skip_during_listing(std::string_view file_name) noexcept {
+    return is_tmp_file_name(file_name) || is_silly_rename(file_name) || is_pseudodir(file_name);
+}
 
 void refresh_directory(const fs::path& dir) {
     int fd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY);
@@ -437,10 +437,7 @@ void FileBackedStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     return do_write(key_seg);
 }
 
-void FileBackedStorage::do_read(
-        VariantKey&& variant_key [[maybe_unused]], const ReadVisitor& visitor [[maybe_unused]],
-        ReadKeyOpts opts [[maybe_unused]]
-) {
+void FileBackedStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts) {
     visitor(variant_key, read_impl(*posix_, storage_dir_, VariantKey{variant_key}));
 }
 
@@ -464,9 +461,7 @@ void FileBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
     }
 }
 
-void FileBackedStorage::do_remove(
-        std::span<VariantKey> variant_keys [[maybe_unused]], RemoveOpts opts [[maybe_unused]]
-) {
+void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
     // TODO: Factor out and reuse this code
     std::vector<VariantKey> failed_deletes;
     for (const VariantKey& variant_key : variant_keys) {
@@ -510,7 +505,7 @@ bool FileBackedStorage::do_iterate_type_until_match(
     struct dirent* dir_entry = nullptr;
     while ((dir_entry = posix_->readdir(dirp))) {
         std::string_view file_name(dir_entry->d_name);
-        if (!file_name.starts_with(prefix) || skip_during_listing(file_name) || is_pseudodir(file_name))
+        if (!file_name.starts_with(prefix) || skip_during_listing(file_name))
             continue;
 
         VariantKey key{variant_key_from_bytes(
