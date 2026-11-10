@@ -46,6 +46,7 @@ static const mode_t DIR_MODE_MASK = S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IR
 static constexpr std::string_view TMP_FILE_PREFIX(".tmp");
 static constexpr std::string_view SILLY_RENAME_FILE_PREFIX(".nfs");
 
+using namespace arcticdb;
 using arcticdb::storage::file_backed::PosixInterface;
 
 void raise_io_error(int error_code, std::string_view message) {
@@ -315,6 +316,22 @@ class DirCloser {
     DIR* dirp_;
 };
 
+Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, VariantKey&& variant_key) {
+    std::shared_ptr<Buffer> buffer;
+    try {
+        const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
+        const fs::path dest_path =
+                storage_dir / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
+        File file(posix, storage_dir, dest_path, O_RDONLY | O_CLOEXEC, 0);
+        // TODO: This try is wrong. read_all() can throw. That's not a KeyNotFoundException. And we wouldn't close().
+        buffer = file.read_all();
+        file.close();
+    } catch (const std::system_error& e) {
+        throw storage::KeyNotFoundException(variant_key);
+    }
+    return Segment::from_buffer(buffer);
+}
+
 } // namespace
 
 namespace arcticdb::storage::file_backed {
@@ -424,34 +441,11 @@ void FileBackedStorage::do_read(
         VariantKey&& variant_key [[maybe_unused]], const ReadVisitor& visitor [[maybe_unused]],
         ReadKeyOpts opts [[maybe_unused]]
 ) {
-    // TODO: Factor out common implementation with other do_read().
-    std::shared_ptr<Buffer> buffer;
-    try {
-        const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
-        const fs::path dest_path =
-                storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
-        File file(*posix_, storage_dir_, dest_path, O_RDONLY | O_CLOEXEC, 0);
-        buffer = file.read_all();
-        file.close();
-    } catch (const std::system_error& e) {
-        throw KeyNotFoundException(variant_key);
-    }
-    visitor(variant_key, Segment::from_buffer(buffer));
+    visitor(variant_key, read_impl(*posix_, storage_dir_, VariantKey{variant_key}));
 }
 
 KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
-    std::shared_ptr<Buffer> buffer;
-    try {
-        const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
-        const fs::path dest_path =
-                storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
-        File file(*posix_, storage_dir_, dest_path, O_RDONLY | O_CLOEXEC, 0);
-        buffer = file.read_all();
-        file.close();
-    } catch (const std::system_error& e) {
-        throw KeyNotFoundException(variant_key);
-    }
-    return {std::move(variant_key), Segment::from_buffer(buffer)};
+    return {std::move(variant_key), read_impl(*posix_, storage_dir_, VariantKey{variant_key})};
 }
 
 void FileBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
