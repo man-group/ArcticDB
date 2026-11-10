@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <string>
 #include <thread>
 #include <vector>
@@ -990,3 +991,48 @@ TEST(Async, FormatTaskStatsLine) {
             "priority=3"
     );
 }
+
+#ifdef __linux__
+namespace {
+size_t open_file_descriptors() {
+    return std::distance(std::filesystem::directory_iterator("/proc/self/fd"), std::filesystem::directory_iterator{});
+}
+
+// Holds `tasks` IO threads busy at once, so the pool starts that many threads
+size_t start_io_threads(size_t tasks) {
+    std::atomic<size_t> started{0};
+    std::atomic<size_t> running{0};
+    std::atomic<bool> release{false};
+    for (size_t i = 0; i < tasks; ++i) {
+        async::io_executor().add([&] {
+            ++running;
+            ++started;
+            while (!release)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            --running;
+        });
+    }
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (started < tasks && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const size_t result = started;
+    release = true;
+    while (running > 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    return result;
+}
+} // namespace
+
+// reattach_instance leaks the old pool with its started threads, so tests that resize the pools use this instead
+TEST(Async, ReplacingTheSchedulerForTestingFreesTheOldPool) {
+    ScopedConfig config({{"VersionStore.NumCPUThreads", 2}, {"VersionStore.NumIOThreads", 32}});
+    async::TaskScheduler::replace_instance_for_testing();
+    const size_t before = open_file_descriptors();
+
+    ASSERT_EQ(start_io_threads(32), 32);
+    ASSERT_GE(open_file_descriptors(), before + 32);
+
+    async::TaskScheduler::replace_instance_for_testing();
+    EXPECT_LE(open_file_descriptors(), before);
+}
+#endif

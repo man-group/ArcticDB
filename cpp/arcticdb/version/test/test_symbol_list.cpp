@@ -260,7 +260,7 @@ TEST_P(SymbolListWithWriteFailures, InitialCompact) {
 TEST_F(SymbolListSuite, InitialCompactConcurent) {
     ConfigsMap::instance()->set_int("VersionStore.NumCPUThreads", 1);
     ConfigsMap::instance()->set_int("VersionStore.NumIOThreads", 1);
-    async::TaskScheduler::reattach_instance();
+    async::TaskScheduler::replace_instance_for_testing();
 
     auto version_store = get_test_engine();
     const auto& store = version_store._test_get_store();

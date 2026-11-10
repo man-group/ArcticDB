@@ -301,6 +301,9 @@ class TaskScheduler {
     static TaskScheduler* instance();
     static bool is_initialized();
     static void reattach_instance();
+    // Tests only: like reattach_instance, but stops and frees the old scheduler. reattach_instance leaks it,
+    // which is right after a fork, but in one test process each leaked pool keeps its threads and descriptors.
+    static void replace_instance_for_testing();
     static void stop_active_threads();
     static bool forked_;
     static bool is_forked();
