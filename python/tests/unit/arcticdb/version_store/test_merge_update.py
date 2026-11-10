@@ -6061,3 +6061,30 @@ def test_update_sparse_target_with_pandas_nan(arrow_library, strategy):
     assert isinstance(result["s"].iloc[1], float) and np.isnan(result["s"].iloc[1])
     polars_f = lib.read("sym", output_format="polars").data["f"]
     assert polars_f.is_nan()[1] and not polars_f.is_null()[1]
+
+
+@arrow_format_param
+@pytest.mark.parametrize("upsert", [False, True])
+@pytest.mark.parametrize("source_index", [[None, 2, 3], [None, None]], ids=["leading_nat", "all_nat"])
+def test_merge_rejects_nat_in_source_index(lmdb_library, arrow_format, upsert, source_index):
+    lib = lmdb_library
+    nat = np.iinfo(np.int64).min
+    if not upsert:
+        write_arrow(
+            lib, "sym", pa.table({"ts": ts(1, 2, 3), "a": pa.array([1, 2, 3])}), arrow_format, index_column=True
+        )
+    index_values = [nat if day is None else pd.Timestamp(2024, 1, day).value for day in source_index]
+    source = pa.table(
+        {
+            "ts": pa.array(index_values, type=pa.int64()).cast(pa.timestamp("ns")),
+            "a": pa.array(range(len(source_index))),
+        }
+    )
+    with pytest.raises(UserInputException, match="NaT"):
+        lib.merge(
+            "sym",
+            to_format(source, arrow_format),
+            index_column=True,
+            strategy=MergeStrategy("update", "insert"),
+            upsert=upsert,
+        )
