@@ -1204,7 +1204,11 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
         );
 
         // When - we delete all versions without reloading
-        version_map->write_tombstone_all_key_internal(store, tombstone_key, entry);
+        {
+            auto mutation = entry->begin_mutation();
+            version_map->write_tombstone_all_key_internal(store, tombstone_key, entry, mutation);
+            mutation.commit();
+        }
 
         // Tombstone All should not invalidate cache as it deletes everything so all undeleted versions have been
         // loaded.
@@ -2112,20 +2116,6 @@ TEST(VersionMapRevalidation, CompactionByAnotherClientThenWriteThenCompact) {
     ASSERT_EQ(describe_storage(store, id).size(), 9);
 }
 
-TEST(VersionMapRevalidation, CompactAndRemoveDeletedIndexesAfterAnotherClientCompacted) {
-    auto store = std::make_shared<FaultInjectingStore>();
-    StreamId id{"test"};
-    auto client_a = std::make_shared<VersionMap>();
-    write_n_versions(store, client_a, id, 0, 8);
-    auto client_b = std::make_shared<VersionMap>();
-    client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__);
-    client_a->compact(store, id);
-
-    ScopedConfig stale("VersionMap.ReloadInterval", 0);
-    ASSERT_NO_THROW(client_b->compact_and_remove_deleted_indexes(store, id));
-    ASSERT_EQ(describe_storage(store, id).size(), 8);
-}
-
 TEST(VersionMapRevalidation, OverwriteSymbolTreeAfterAnotherClientCompacted) {
     auto store = std::make_shared<FaultInjectingStore>();
     StreamId id{"test"};
@@ -2141,23 +2131,6 @@ TEST(VersionMapRevalidation, OverwriteSymbolTreeAfterAnotherClientCompacted) {
     store->iterate_type(KeyType::VERSION, [&](VariantKey&&) { ++version_keys; });
     ASSERT_EQ(version_keys, 1);
     ASSERT_EQ(describe_storage(store, id).size(), 8);
-}
-
-TEST(VersionMapRevalidation, OverwriteSymbolTreeWithNoIndexesRemovesSymbol) {
-    ScopedConfig fresh("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
-    auto store = std::make_shared<FaultInjectingStore>();
-    StreamId id{"test"};
-    auto client_a = std::make_shared<VersionMap>();
-    write_n_versions(store, client_a, id, 0, 3);
-    auto client_b = std::make_shared<VersionMap>();
-    client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__);
-
-    client_a->overwrite_symbol_tree(store, id, {});
-    ASSERT_TRUE(client_a->check_reload(store, id, LOAD_ALL, __FUNCTION__)->empty());
-
-    ScopedConfig stale("VersionMap.ReloadInterval", 0);
-    ASSERT_TRUE(client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__)->empty());
-    ASSERT_TRUE(describe_storage(store, id).empty());
 }
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"

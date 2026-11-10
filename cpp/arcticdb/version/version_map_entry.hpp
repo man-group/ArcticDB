@@ -283,6 +283,7 @@ struct VersionMapEntry {
      * Clears matches_storage_ for the duration of a mutation of the entry and its storage, and restores it on commit.
      * If the mutation does not commit, e.g. because a storage write threw, the entry is cleared, so that the next load
      * goes to storage rather than serving in-memory changes that storage may not have.
+     * Each operation that changes an entry begins exactly one; the helpers it calls take it to show one is in progress.
      */
     class Mutation {
       public:
@@ -301,6 +302,8 @@ struct VersionMapEntry {
             committed_ = true;
             entry_.matches_storage_ = matched_storage_;
         }
+
+        [[nodiscard]] bool guards(const VersionMapEntry& entry) const { return &entry_ == &entry; }
 
       private:
         VersionMapEntry& entry_;

@@ -38,6 +38,7 @@
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/util/lock_table.hpp>
+#include <arcticdb/util/variant.hpp>
 
 namespace arcticdb {
 
@@ -47,7 +48,15 @@ struct CachedChain {
     bool fully_loaded;
 };
 
-enum class RefKeyLoad : uint8_t { LOADED, HEAD_UNCHANGED, REACHED_CACHED_HEAD };
+// What reading the ref key found, relative to a cached chain.
+struct ChainUnchanged {};
+struct KeysAboveCachedHead {
+    std::shared_ptr<VersionMapEntry> keys;
+};
+struct ChainReloaded {
+    std::shared_ptr<VersionMapEntry> entry;
+};
+using ChainRevalidation = std::variant<ChainUnchanged, KeysAboveCachedHead, ChainReloaded>;
 
 template<class Clock = util::SysClock>
 class VersionMapImpl {
@@ -110,7 +119,8 @@ class VersionMapImpl {
      * After that, an entry that matches storage (see VersionMapEntry::matches_storage_) and covers the load is
      * revalidated by reading the ref key alone: if the ref still points at the cached head, the index and tombstone
      * keys are unchanged. Its VERSION keys may not be, because compaction keeps the head and rewrites the keys below
-     * it, so code that reads or deletes VERSION keys loads from storage with storage_reload instead.
+     * it, so check_reload revalidates with revalidate_cached_indexes, and code that reads or deletes VERSION keys
+     * loads from storage with storage_reload instead.
      *
      * If the ref has moved, the chain is walked only down to the cached head, and those keys are merged with the entry.
      * Everything below that head is still valid, for the same reason. A walk that never reaches it (e.g. compaction
@@ -149,13 +159,9 @@ class VersionMapImpl {
 
     bool validate() const { return validate_; }
 
-    /**
-     * @param cached_chain if the walk reaches its head, entry holds only the keys above it and true is returned
-     */
-    bool follow_version_chain(
+    void follow_version_chain(
             const std::shared_ptr<Store>& store, const VersionMapEntry& ref_entry,
-            const std::shared_ptr<VersionMapEntry>& entry, const LoadStrategy& load_strategy,
-            const std::optional<CachedChain>& cached_chain = std::nullopt
+            const std::shared_ptr<VersionMapEntry>& entry, const LoadStrategy& load_strategy
     ) const {
         util::check(
                 ref_entry.stream_id_ == entry->stream_id_,
@@ -168,28 +174,12 @@ class VersionMapImpl {
 
         std::optional<VersionId> latest_version;
         LoadProgress load_progress;
-        util::check(ref_entry.keys_.size() >= 2, "Invalid empty ref entry");
-        std::optional<AtomKey> cached_penultimate_index;
-        if (ref_entry.keys_.size() == 3) {
-            util::check(
-                    is_index_or_tombstone(ref_entry.keys_[1].type()),
-                    "Expected index key in as second item in 3-item ref key"
-            );
-            cached_penultimate_index = ref_entry.keys_[1].to_atom_key(ref_entry.stream_id_);
-        }
-
-        const bool keep_fully_loaded_chain = cached_chain && cached_chain->fully_loaded;
-        if (!keep_fully_loaded_chain && key_exists_in_ref_entry(load_strategy, ref_entry, cached_penultimate_index)) {
+        auto cached_penultimate_index = penultimate_index_in_ref(ref_entry);
+        if (key_exists_in_ref_entry(load_strategy, ref_entry, cached_penultimate_index)) {
             load_progress = ref_entry.load_progress_;
             entry->keys_.push_back(ref_entry.keys_[0]);
             if (cached_penultimate_index)
                 entry->keys_.push_back(*cached_penultimate_index);
-        } else if (cached_chain) {
-            do {
-                ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
-                auto [key, seg] = store->read_sync(next_key.value());
-                next_key = read_segment_with_keys(seg, entry, load_progress);
-            } while (next_key && next_key != cached_chain->head);
         } else {
             do {
                 ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
@@ -202,50 +192,28 @@ class VersionMapImpl {
                      continue_when_loading_undeleted(load_strategy, entry, load_progress));
         }
         entry->load_progress_ = load_progress;
-        return cached_chain && next_key == cached_chain->head;
     }
 
-    /**
-     * @param cached_chain the entry's chain, reused if the ref key still points at its head or the walk reaches it
-     */
-    RefKeyLoad load_via_ref_key(
+    void load_via_ref_key(
             std::shared_ptr<Store> store, const StreamId& stream_id, const LoadStrategy& load_strategy,
-            const std::shared_ptr<VersionMapEntry>& entry, const std::optional<CachedChain>& cached_chain = std::nullopt
+            const std::shared_ptr<VersionMapEntry>& entry
     ) {
         load_strategy.validate();
-        static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
-        auto max_trials = max_trial_config;
-        while (true) {
-            try {
-                VersionMapEntry ref_entry(stream_id);
-                read_symbol_ref(store, stream_id, ref_entry);
-                if (ref_entry.empty())
-                    return RefKeyLoad::LOADED;
-
-                if (cached_chain && ref_entry.head_ == cached_chain->head)
-                    return RefKeyLoad::HEAD_UNCHANGED;
-
-                if (follow_version_chain(store, ref_entry, entry, load_strategy, cached_chain))
-                    return RefKeyLoad::REACHED_CACHED_HEAD;
-                break;
-            } catch (const std::exception& err) {
-                if (--max_trials <= 0) {
-                    throw;
+        retry_ref_key_load(
+                stream_id,
+                [&]() {
+                    VersionMapEntry ref_entry(stream_id);
+                    read_symbol_ref(store, stream_id, ref_entry);
+                    if (!ref_entry.empty())
+                        follow_version_chain(store, ref_entry, entry, load_strategy);
+                },
+                [&]() {
+                    entry->head_.reset();
+                    entry->keys_.clear();
                 }
-                // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
-                log::version().warn(
-                        "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",
-                        err.what(),
-                        stream_id
-                );
-                entry->head_.reset();
-                entry->keys_.clear();
-                continue;
-            }
-        }
-        if (validate_)
+        );
+        if (validate_ && !entry->empty())
             entry->validate();
-        return RefKeyLoad::LOADED;
     }
 
     void flush() {
@@ -283,7 +251,15 @@ class VersionMapImpl {
         auto entry = check_reload(store, key.id(), load_param, __FUNCTION__);
 
         auto mutation = entry->begin_mutation();
-        do_write(store, key, entry, prevent_non_increasing_version_id);
+        write_to_chain(
+                store,
+                key.version_id(),
+                key.id(),
+                std::span{&key, 1},
+                entry,
+                mutation,
+                prevent_non_increasing_version_id
+        );
         write_symbol_ref(store, key, previous_key, entry->head_.value());
         if (validate_)
             entry->validate();
@@ -311,7 +287,13 @@ class VersionMapImpl {
             );
         }
         auto mutation = entry->begin_mutation();
-        auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
+        auto output = undeleted_indexes_up_to(*entry, first_key_to_tombstone);
+        if (!output.indexes.empty()) {
+            auto tombstone_key =
+                    write_tombstone_all_key_internal(store, *output.first_key_to_tombstone, entry, mutation);
+            if (log_changes_)
+                log_tombstone_all(store, stream_id, tombstone_key.version_id());
+        }
 
         if (validate_)
             entry->validate();
@@ -322,7 +304,7 @@ class VersionMapImpl {
             );
         mutation.commit();
 
-        return output;
+        return {output.latest_version_id, std::move(output.indexes)};
     }
 
     std::string dump_entry(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
@@ -338,20 +320,21 @@ class VersionMapImpl {
         ARCTICDB_DEBUG(log::version(), "Version map pruning previous versions for stream {}", key.id());
         auto entry =
                 check_reload(store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__);
-        auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
+        auto to_prune = undeleted_indexes_up_to(*entry, previous_key);
 
         auto mutation = entry->begin_mutation();
         std::vector<AtomKey> keys_to_write;
         std::optional<AtomKey> tombstone_all_key;
         keys_to_write.push_back(key);
-        if (!result.empty()) {
-            auto first_key_to_tombstone = previous_key ? previous_key : entry->get_first_index(false).first;
-            tombstone_all_key = get_tombstone_all_key(first_key_to_tombstone.value(), store->current_timestamp());
+        if (!to_prune.indexes.empty()) {
+            tombstone_all_key = get_tombstone_all_key(*to_prune.first_key_to_tombstone, store->current_timestamp());
+            // Before the write, which needs it to find the previous undeleted index for the ref key
             entry->try_set_tombstone_all(tombstone_all_key.value());
             keys_to_write.push_back(tombstone_all_key.value());
         }
 
-        auto previous_index = do_write(store, key.version_id(), key.id(), std::span{keys_to_write}, entry);
+        auto previous_index =
+                write_to_chain(store, key.version_id(), key.id(), std::span{keys_to_write}, entry, mutation);
         write_symbol_ref(
                 store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), previous_index, entry->head_.value()
         );
@@ -364,7 +347,7 @@ class VersionMapImpl {
             log_write(store, key.id(), key.version_id());
         }
 
-        return result;
+        return std::move(to_prune.indexes);
     }
 
     std::pair<VersionId, std::deque<AtomKey>> delete_all_versions(
@@ -423,12 +406,18 @@ class VersionMapImpl {
             if (is_index_key_type(key.type())) {
                 const auto tombstone = entry->get_tombstone(key.version_id());
                 if (tombstone) {
-                    if (!store->key_exists(key.to_atom_key(stream_id)).get())
+                    if (!store->key_exists(key).get())
                         ARCTICDB_DEBUG(log::version(), "Removing deleted key {}", key);
                     else {
                         if (tombstone->type() == KeyType::TOMBSTONE_ALL)
                             new_entry->try_set_tombstone_all(*tombstone);
                         else {
+                            util::check(
+                                    key.id() == new_entry->stream_id_,
+                                    "compact_and_remove_deleted_indexes found mismatching stream ids {} != {}",
+                                    key.id(),
+                                    new_entry->stream_id_
+                            );
                             new_entry->try_set_tombstone(*tombstone);
                         }
 
@@ -574,17 +563,6 @@ class VersionMapImpl {
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
             if (validate_)
                 entry->validate();
-        } else {
-            // Otherwise the ref key would point at the head deleted below
-            try {
-                store->remove_key_sync(RefKey{stream_id, KeyType::VERSION_REF});
-            } catch (const storage::KeyNotFoundException& e) {
-                log::version().debug(
-                        "No ref key to remove for symbol {} in overwrite_symbol_tree, exception: {}",
-                        stream_id,
-                        e.what()
-                );
-            }
         }
         try {
             remove_entry_version_keys(store, old_entry, stream_id);
@@ -611,7 +589,7 @@ class VersionMapImpl {
             return get_entry(stream_id);
         }
 
-        return storage_reload(store, stream_id, load_strategy, true);
+        return revalidate_cached_indexes(store, stream_id, load_strategy);
     }
 
     /**
@@ -631,10 +609,26 @@ class VersionMapImpl {
             const std::span<const AtomKey>& keys, const std::shared_ptr<VersionMapEntry>& entry,
             const bool prevent_non_increasing_version_id = true
     ) {
+        auto mutation = entry->begin_mutation();
+        auto previous_index = write_to_chain(
+                std::move(store), version_id, stream_id, keys, entry, mutation, prevent_non_increasing_version_id
+        );
+        mutation.commit();
+        return previous_index;
+    }
+
+    /**
+     * Returns the second undeleted index (after the write).
+     */
+    std::optional<AtomKey> write_to_chain(
+            std::shared_ptr<Store> store, const VersionId& version_id, const StreamId& stream_id,
+            const std::span<const AtomKey>& keys, const std::shared_ptr<VersionMapEntry>& entry,
+            const VersionMapEntry::Mutation& mutation, const bool prevent_non_increasing_version_id = true
+    ) {
+        check_mutation_guards(mutation, *entry);
         if (validate_)
             entry->validate();
 
-        auto mutation = entry->begin_mutation();
         auto atom_journal_key = to_atom(journal_key(store, version_id, stream_id, keys, entry->head_));
 
         bool has_index_key = false;
@@ -683,9 +677,7 @@ class VersionMapImpl {
             write_to_entry(entry, key, atom_journal_key);
         }
 
-        auto previous_index = entry->get_second_undeleted_index();
-        mutation.commit();
-        return previous_index;
+        return entry->get_second_undeleted_index();
     }
 
     AtomKey write_tombstones(
@@ -695,7 +687,7 @@ class VersionMapImpl {
         static const bool should_log_individual_tombstones =
                 ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
         auto mutation = entry->begin_mutation();
-        auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
+        auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, mutation, creation_ts);
         write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
         mutation.commit();
         if (log_changes_) {
@@ -713,8 +705,10 @@ class VersionMapImpl {
 
     std::vector<AtomKey> write_tombstones_internal(
             std::shared_ptr<Store> store, const std::vector<AtomKey>& keys, const StreamId& stream_id,
-            const std::shared_ptr<VersionMapEntry>& entry, const std::optional<timestamp>& creation_ts = std::nullopt
+            const std::shared_ptr<VersionMapEntry>& entry, const VersionMapEntry::Mutation& mutation,
+            const std::optional<timestamp>& creation_ts = std::nullopt
     ) {
+        check_mutation_guards(mutation, *entry);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(keys.size() > 0, "No version ids to write tombstone for");
         if (validate_)
             entry->validate();
@@ -736,13 +730,11 @@ class VersionMapImpl {
         // It IS important that we log with the same version id as the tombstone key
         // for backwards compatibility with older replication logic
         auto tombstone_version_id = tombstones.front().version_id();
-        auto mutation = entry->begin_mutation();
-        do_write(store, tombstone_version_id, stream_id, std::span{tombstones}, entry);
+        write_to_chain(store, tombstone_version_id, stream_id, std::span{tombstones}, entry, mutation);
         for (const auto& key : tombstones) {
             entry->try_set_tombstone(key);
         }
         maybe_invalidate_cached_undeleted(*entry);
-        mutation.commit();
 
         return tombstones;
     }
@@ -1004,59 +996,150 @@ class VersionMapImpl {
 
     /**
      * Goes to the storage for a given symbol, and recreates the VersionMapEntry from the ref key structure.
-     *
-     * @param allow_revalidation reuse the cached entry if it matches storage and covers load_strategy: as it is if the
+     */
+    std::shared_ptr<VersionMapEntry> storage_reload(
+            std::shared_ptr<Store> store, const StreamId& stream_id, const LoadStrategy& load_strategy
+    ) {
+        auto entry = get_entry(stream_id);
+        entry->clear();
+        const timestamp reload_time = reload_timestamp();
+        auto loaded = std::make_shared<VersionMapEntry>(stream_id);
+        load_via_ref_key(store, stream_id, load_strategy, loaded);
+        return publish_reload(entry, loaded, reload_time);
+    }
+
+    /**
+     * Like storage_reload, but reuses the cached entry if it matches storage and covers load_strategy: as it is if the
      * ref key still points at its head, otherwise merged with the keys written above its head. Only for callers that
      * use the index and tombstone keys, not the VERSION keys.
      */
-    std::shared_ptr<VersionMapEntry> storage_reload(
-            std::shared_ptr<Store> store, const StreamId& stream_id, const LoadStrategy& load_strategy,
-            bool allow_revalidation = false
+    std::shared_ptr<VersionMapEntry> revalidate_cached_indexes(
+            std::shared_ptr<Store> store, const StreamId& stream_id, const LoadStrategy& load_strategy
     ) {
         auto entry = get_entry(stream_id);
-        const auto clock_unsync_tolerance =
-                ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE);
-        const timestamp reload_time = Clock::nanos_since_epoch() - clock_unsync_tolerance;
+        if (!ConfigsMap::instance()->get_int("VersionMap.RevalidateStaleCache", 1) || !entry->matches_storage_ ||
+            !entry->head_ || !cached_load_satisfies(*entry, load_strategy))
+            return storage_reload(store, stream_id, load_strategy);
 
-        std::optional<CachedChain> cached_chain;
-        if (allow_revalidation && ConfigsMap::instance()->get_int("VersionMap.RevalidateStaleCache", 1) &&
-            entry->matches_storage_ && entry->head_ && cached_load_satisfies(*entry, load_strategy)) {
-            cached_chain = CachedChain{*entry->head_, entry->load_progress_.is_earliest_version_loaded};
-        }
-        if (!cached_chain)
-            entry->clear();
-
+        const CachedChain cached{*entry->head_, entry->load_progress_.is_earliest_version_loaded};
+        const timestamp reload_time = reload_timestamp();
         // A mutation that started or finished since we looked at the entry clears the flag or moves the head
-        const auto entry_unchanged = [&]() { return entry->matches_storage_ && entry->head_ == cached_chain->head; };
+        const auto entry_unchanged = [&]() { return entry->matches_storage_ && entry->head_ == cached.head; };
 
-        auto temp = std::make_shared<VersionMapEntry>(stream_id);
-        const auto ref_load = load_via_ref_key(store, stream_id, load_strategy, temp, cached_chain);
-        if (ref_load != RefKeyLoad::LOADED) {
-            if (ref_load == RefKeyLoad::HEAD_UNCHANGED && entry_unchanged()) {
-                entry->last_reload_time_ = reload_time;
-                return entry;
-            }
-            bool merged = false;
-            if (ref_load == RefKeyLoad::REACHED_CACHED_HEAD && entry_unchanged()) {
-                append_cached_chain(*temp, *entry);
-                merged = entry_unchanged() && cached_load_satisfies(*temp, load_strategy);
-            }
-            if (!merged) {
-                *temp = VersionMapEntry(stream_id);
-                load_via_ref_key(store, stream_id, load_strategy, temp);
-            }
-        }
+        return util::variant_match(
+                load_above_cached_head(store, stream_id, load_strategy, cached),
+                [&](const ChainUnchanged&) {
+                    if (!entry_unchanged())
+                        return storage_reload(store, stream_id, load_strategy);
+                    entry->last_reload_time_ = reload_time;
+                    return entry;
+                },
+                [&](const KeysAboveCachedHead& above) {
+                    if (!entry_unchanged())
+                        return storage_reload(store, stream_id, load_strategy);
+                    append_cached_chain(*above.keys, *entry);
+                    if (!entry_unchanged() || !cached_load_satisfies(*above.keys, load_strategy))
+                        return storage_reload(store, stream_id, load_strategy);
+                    return publish_reload(entry, above.keys, reload_time);
+                },
+                [&](const ChainReloaded& reloaded) { return publish_reload(entry, reloaded.entry, reload_time); }
+        );
+    }
 
+    /**
+     * Reads the ref key and, unless it still points at cached.head, the VERSION keys down to cached.head. A load that
+     * the ref key alone can answer uses it, unless the cached chain is fully loaded.
+     */
+    ChainRevalidation load_above_cached_head(
+            const std::shared_ptr<Store>& store, const StreamId& stream_id, const LoadStrategy& load_strategy,
+            const CachedChain& cached
+    ) const {
+        load_strategy.validate();
+        return retry_ref_key_load(stream_id, [&]() -> ChainRevalidation {
+            VersionMapEntry ref_entry(stream_id);
+            read_symbol_ref(store, stream_id, ref_entry);
+            auto loaded = std::make_shared<VersionMapEntry>(stream_id);
+            if (ref_entry.empty())
+                return ChainReloaded{loaded};
+            if (ref_entry.head_ == cached.head)
+                return ChainUnchanged{};
+
+            auto penultimate_index = penultimate_index_in_ref(ref_entry);
+            if (!cached.fully_loaded && key_exists_in_ref_entry(load_strategy, ref_entry, penultimate_index)) {
+                follow_version_chain(store, ref_entry, loaded, load_strategy);
+                return ChainReloaded{loaded};
+            }
+
+            loaded->head_ = ref_entry.head_;
+            LoadProgress load_progress;
+            auto next_key = ref_entry.head_;
+            do {
+                ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
+                auto [key, seg] = store->read_sync(next_key.value());
+                next_key = read_segment_with_keys(seg, loaded, load_progress);
+            } while (next_key && next_key != cached.head);
+            loaded->load_progress_ = load_progress;
+
+            if (next_key)
+                return KeysAboveCachedHead{loaded};
+            return ChainReloaded{loaded};
+        });
+    }
+
+    std::shared_ptr<VersionMapEntry> publish_reload(
+            const std::shared_ptr<VersionMapEntry>& entry, const std::shared_ptr<VersionMapEntry>& loaded,
+            timestamp reload_time
+    ) const {
         entry->clear();
-        temp->last_reload_time_ = reload_time;
-        std::swap(*entry, *temp);
+        loaded->last_reload_time_ = reload_time;
+        std::swap(*entry, *loaded);
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
         if (validate_)
             entry->validate();
         entry->matches_storage_ = true;
-
         return entry;
+    }
+
+    timestamp reload_timestamp() const {
+        const auto clock_unsync_tolerance =
+                ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE);
+        return Clock::nanos_since_epoch() - clock_unsync_tolerance;
+    }
+
+    static std::optional<AtomKey> penultimate_index_in_ref(const VersionMapEntry& ref_entry) {
+        util::check(ref_entry.keys_.size() >= 2, "Invalid empty ref entry");
+        if (ref_entry.keys_.size() != 3)
+            return std::nullopt;
+        util::check(
+                is_index_or_tombstone(ref_entry.keys_[1].type()),
+                "Expected index key in as second item in 3-item ref key"
+        );
+        return ref_entry.keys_[1].to_atom_key(ref_entry.stream_id_);
+    }
+
+    /**
+     * Retries a load that starts by reading the ref key, which someone else (e.g. compaction) may have modified.
+     */
+    template<typename Load, typename BeforeRetry = void (*)()>
+    static auto retry_ref_key_load(const StreamId& stream_id, Load&& load, BeforeRetry&& before_retry = [] {}) {
+        static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
+        auto max_trials = max_trial_config;
+        while (true) {
+            try {
+                return load();
+            } catch (const std::exception& err) {
+                if (--max_trials <= 0) {
+                    throw;
+                }
+                log::version().warn(
+                        "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",
+                        err.what(),
+                        stream_id
+                );
+                before_retry();
+            }
+        }
     }
 
     /**
@@ -1254,39 +1337,36 @@ class VersionMapImpl {
 
   private:
     FRIEND_TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad);
-    std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(
-            std::shared_ptr<Store> store, const StreamId& stream_id,
-            std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
-            std::shared_ptr<VersionMapEntry> entry = nullptr, bool should_write_to_storage = true
-    ) {
-        if (!entry) {
-            entry = check_reload(
-                    store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
-            );
-        }
+    struct IndexesToTombstone {
+        VersionId latest_version_id;
+        std::optional<AtomKey> first_key_to_tombstone;
+        std::vector<AtomKey> indexes;
+    };
 
+    /**
+     * The undeleted indexes at or below first_key_to_tombstone, or below the latest undeleted index if it is empty.
+     */
+    IndexesToTombstone undeleted_indexes_up_to(
+            const VersionMapEntry& entry, std::optional<AtomKey> first_key_to_tombstone
+    ) const {
         if (!first_key_to_tombstone)
-            first_key_to_tombstone = entry->get_first_index(false).first;
+            first_key_to_tombstone = entry.get_first_index(false).first;
 
-        std::vector<AtomKey> output;
-        for (const auto& key : entry->keys_) {
-            if (is_index_key_type(key.type()) && !entry->is_tombstoned(key) &&
+        std::vector<AtomKey> indexes;
+        for (const auto& key : entry.keys_) {
+            if (is_index_key_type(key.type()) && !entry.is_tombstoned(key) &&
                 key.version_id() <= first_key_to_tombstone->version_id()) {
-                output.emplace_back(key.to_atom_key(entry->stream_id_));
+                indexes.emplace_back(key.to_atom_key(entry.stream_id_));
             }
         }
 
-        const auto& latest_version = entry->get_first_index(true).first;
-        const VersionId version_id = latest_version ? latest_version->version_id() : 0;
+        const auto& latest_version = entry.get_first_index(true).first;
+        return {latest_version ? latest_version->version_id() : 0, std::move(first_key_to_tombstone), std::move(indexes)
+        };
+    }
 
-        if (!output.empty() && should_write_to_storage) {
-            auto tombstone_key = write_tombstone_all_key_internal(store, first_key_to_tombstone.value(), entry);
-            if (log_changes_) {
-                log_tombstone_all(store, stream_id, tombstone_key.version_id());
-            }
-        }
-
-        return {version_id, std::move(output)};
+    static void check_mutation_guards(const VersionMapEntry::Mutation& mutation, const VersionMapEntry& entry) {
+        util::check(mutation.guards(entry), "Version map entry for {} changed without its mutation", entry.stream_id_);
     }
 
     // Invalidates the cached undeleted entry if it got tombstoned either by a tombstone or by a tombstone_all
@@ -1299,14 +1379,14 @@ class VersionMapImpl {
 
     AtomKey write_tombstone_all_key_internal(
             const std::shared_ptr<Store>& store, const AtomKey& previous_key,
-            const std::shared_ptr<VersionMapEntry>& entry
+            const std::shared_ptr<VersionMapEntry>& entry, const VersionMapEntry::Mutation& mutation
     ) {
         auto tombstone_key = get_tombstone_all_key(previous_key, store->current_timestamp());
-        auto mutation = entry->begin_mutation();
         entry->try_set_tombstone_all(tombstone_key);
-        do_write(store, tombstone_key, entry);
+        write_to_chain(
+                store, tombstone_key.version_id(), tombstone_key.id(), std::span{&tombstone_key, 1}, entry, mutation
+        );
         maybe_invalidate_cached_undeleted(*entry);
-        mutation.commit();
         return tombstone_key;
     }
 };
