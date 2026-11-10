@@ -18,7 +18,9 @@
 
 #include <aws/core/client/DefaultRetryStrategy.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -66,6 +68,16 @@ std::string failure_trigger(const std::string& symbol, StorageOperation operatio
 
 } // namespace
 
+TEST_F(QueryStatsFixture, OutputPreservesLargeIntegerCounters) {
+    constexpr uint64_t value = (uint64_t{1} << 53) + 1;
+    add(TaskType::S3_PutObject, entity::KeyType::TABLE_DATA, StatType::COUNT, 1);
+    add(TaskType::S3_PutObject, entity::KeyType::TABLE_DATA, StatType::SIZE_BYTES, value);
+    add(TaskType::S3_PutObject, entity::KeyType::TABLE_DATA, StatType::ATTEMPT_TIME_MS, 1999999);
+    auto stats = stats_for("S3_PutObject", "TABLE_DATA");
+    ASSERT_EQ(stats["size_bytes"], value);
+    ASSERT_EQ(stats["attempt_time_ms"], 1);
+}
+
 TEST_F(QueryStatsFixture, TimerRecordsSuccessAndFailureSeparately) {
     add_task_count_and_time(TaskType::S3_PutObject, entity::KeyType::TABLE_DATA).finish(true);
     {
@@ -105,11 +117,13 @@ TEST_F(QueryStatsFixture, TimerCreatedDuringStackUnwindingIsNotAFailure) {
     struct TimesInDestructor {
         ~TimesInDestructor() { auto timer = add_task_count_and_time(TaskType::S3_HeadObject, entity::KeyType::LOCK); }
     };
-    try {
-        TimesInDestructor times_in_destructor;
-        throw std::runtime_error("unrelated");
-    } catch (const std::runtime_error&) {
-    }
+    ASSERT_THROW(
+            {
+                TimesInDestructor times_in_destructor;
+                throw std::runtime_error("unrelated");
+            },
+            std::runtime_error
+    );
 
     auto stats = stats_for("S3_HeadObject", "LOCK");
     ASSERT_EQ(stats["count"], 1);
@@ -281,7 +295,7 @@ class CannedHttpServer {
                 // Skip the request body, if any
                 size_t content_length = 0;
                 auto lower = received.substr(0, header_end);
-                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return std::tolower(c); });
                 if (auto pos = lower.find("content-length:"); pos != std::string::npos) {
                     content_length = std::stoul(lower.substr(pos + 15));
                 }

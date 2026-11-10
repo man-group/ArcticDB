@@ -89,8 +89,10 @@ def get_query_stats() -> Dict[str, Any]:
 
         Both times are of the whole call, including the retries in the AWS SDK and the waits between them.
 
-        The other stats are per HTTP attempt to S3, over the attempts of all the calls. They are not recorded for
-        S3_GetObjectAsync:
+        The other stats are per HTTP attempt to S3. They are recorded only for synchronous S3 calls using
+        ArcticCurlHttpClient on Linux and macOS. They remain zero on Windows, for S3_GetObjectAsync and for
+        storage backends without HTTP instrumentation. The retry and timing formulas below apply only when
+        per-attempt stats are recorded; the mean response time also requires attempts - network_errors > 0.
 
         - attempts, attempt_time_ms: HTTP attempts and the time spent in them. attempts - count - failure_count is
           the number of retries.

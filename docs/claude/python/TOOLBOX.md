@@ -286,6 +286,14 @@ is told to — not reachable from python, since every storage can list every key
 Only S3 and NFS-backed storages implement `do_visit_object_sizes`; the rest fall back to reading each key and summing
 segment sizes (`AsyncStore::visit_object_sizes`), which is why LMDB and in-memory libraries also report sizes.
 
+## Query statistics
+
+`toolbox/query_stats.py:get_query_stats` separates successful calls (`count`, `total_time_ms`) from failed calls
+(`failure_count`, `failure_time_ms`). Per-attempt metrics come from synchronous S3 calls through
+`storage/s3/s3_api.cpp:ArcticCurlHttpClient` on Linux and macOS. They remain zero on Windows, for async GETs and
+for backends without HTTP instrumentation. Derived retry and timing formulas require per-attempt instrumentation;
+mean response time additionally requires at least one completed HTTP response.
+
 ## Key Files
 
 | File | Purpose |

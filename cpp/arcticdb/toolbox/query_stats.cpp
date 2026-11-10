@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -103,10 +104,12 @@ std::string stat_type_to_string(StatType stat_type) {
     }
 }
 
+namespace {
 bool is_held_in_nanoseconds(StatType stat_type) {
     return stat_type == StatType::TOTAL_TIME_MS || stat_type == StatType::FAILURE_TIME_MS ||
            stat_type == StatType::ATTEMPT_TIME_MS;
 }
+} // namespace
 
 std::string get_key_type_str(entity::KeyType key) {
     const std::string token = "::";
@@ -134,7 +137,7 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
             for (size_t stat_idx = 0; stat_idx < static_cast<size_t>(StatType::END); ++stat_idx) {
                 auto stat_type = static_cast<StatType>(stat_idx);
                 uint64_t value = op_stats[stat_type].readFull();
-                op_output[stat_type_to_string(stat_type)] = is_held_in_nanoseconds(stat_type) ? value / 1e6 : value;
+                op_output[stat_type_to_string(stat_type)] = is_held_in_nanoseconds(stat_type) ? value / 1000000 : value;
             }
 
             result["storage_operations"][task_type_str][key_type_str] = std::move(op_output);
@@ -189,7 +192,7 @@ void RAIIAddTime::finish(bool succeeded) {
         return;
     }
     auto& calls = current_calls();
-    if (auto it = std::find(calls.rbegin(), calls.rend(), stats_); it != calls.rend()) {
+    if (auto it = std::ranges::find(calls | std::views::reverse, stats_); it != calls.rend()) {
         calls.erase(std::next(it).base());
     }
     const auto elapsed =

@@ -15,6 +15,7 @@
 #include <string>
 #include <chrono>
 #include <array>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -44,8 +45,10 @@ enum class TaskType : size_t {
 // Both times are of the whole SDK call, including every SDK retry and the backoff between them.
 //
 // The other stats are per HTTP attempt. ArcticCurlHttpClient records them below the SDK retry loop, and they are added
-// to the calls being timed on the same thread. So they are only recorded for synchronous S3 calls, not for
-// S3_GetObjectAsync whose attempts run on SDK threads:
+// to the calls being timed on the same thread. They are recorded only for synchronous S3 calls on Linux and macOS.
+// They remain zero on Windows, for S3_GetObjectAsync whose attempts run on SDK threads, and for uninstrumented
+// backends. The formulas below apply only when per-attempt stats are recorded; mean response time also requires
+// ATTEMPTS - NETWORK_ERRORS > 0.
 // - ATTEMPTS: HTTP attempts. ATTEMPTS - COUNT - FAILURE_COUNT is the number of retries.
 // - ATTEMPT_TIME_MS: time spent in HTTP attempts. TOTAL_TIME_MS + FAILURE_TIME_MS - ATTEMPT_TIME_MS is the time spent
 //   in backoff between retries and in the SDK outside of HTTP (e.g. signing).
@@ -57,7 +60,7 @@ enum class TaskType : size_t {
 //   the start of the attempt, so (TTFB_MS - CONNECT_MS) / (ATTEMPTS - NETWORK_ERRORS) is the mean time S3 took to
 //   answer, including sending the request. The SDK gives both per attempt in whole milliseconds, rounded down.
 // - NEW_CONNECTIONS: sockets opened by the attempts. An attempt that reuses a pooled connection opens none.
-enum class StatType : size_t {
+enum class StatType : std::uint8_t {
     TOTAL_TIME_MS = 0,
     COUNT = 1,
     SIZE_BYTES = 2,
