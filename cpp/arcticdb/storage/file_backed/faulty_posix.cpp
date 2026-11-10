@@ -19,11 +19,13 @@
 
 #define PROPAGATE_FAULT_IF_EXISTS(syscall_id)                                                                          \
     std::unique_lock lock(data_mutex_);                                                                                \
-    if (std::queue<Fault>& fault_sequence = faults_[syscall_id]; !fault_sequence.empty()) {                            \
-        const Fault front = fault_sequence.front();                                                                    \
-        errno = front.error_code;                                                                                      \
+    if (std::queue<std::optional<PosixError>>& fault_sequence = faults_[syscall_id]; !fault_sequence.empty()) {        \
+        const std::optional<PosixError> maybe_error = fault_sequence.front();                                          \
+        if (!maybe_error)                                                                                              \
+            return res;                                                                                                \
+        errno = *maybe_error;                                                                                          \
         fault_sequence.pop();                                                                                          \
-        return front.return_value;                                                                                     \
+        return -1;                                                                                                     \
     }                                                                                                                  \
     return res;
 
@@ -100,13 +102,13 @@ DIR* FaultyPosix::opendir(const char* name) { return ::opendir(name); }
 struct dirent* FaultyPosix::readdir(DIR* dirp) { return ::readdir(dirp); }
 int FaultyPosix::closedir(DIR* dirp) { return ::closedir(dirp); }
 
-void FaultyPosix::inject_fault(SyscallId syscall, Fault fault) {
+void FaultyPosix::inject_fault(SyscallId syscall, std::optional<PosixError> maybe_error) {
     std::unique_lock lock(data_mutex_);
-    faults_[syscall].push(fault);
+    faults_[syscall].push(maybe_error);
 }
 
 bool FaultyPosix::uncosumed_faults() const noexcept {
-    return !std::ranges::all_of(faults_ | std::ranges::views::values, &std::queue<Fault>::empty);
+    return !std::ranges::all_of(faults_ | std::ranges::views::values, &std::queue<std::optional<PosixError>>::empty);
 }
 
 } // namespace arcticdb::storage::file_backed

@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <asm-generic/errno.h>
 #include <cerrno>
 #include <gtest/gtest.h>
 
@@ -28,6 +27,8 @@ using namespace storage::file_backed;
 using namespace std::literals;
 
 namespace {
+
+static const std::string STREAM_ID{"symbol"};
 
 // TODO: This really needs a good home.
 class TempDir {
@@ -87,13 +88,12 @@ using FileStorageApi = FileBackedStorageFixture;
 
 TEST_F(FileStorageApi, WritesAreVisibleAndReadable) {
     Segment segment{storage::get_test_segment()};
-    const std::string symbol{"symbol"};
-    auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
+    auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
     storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
-    ASSERT_TRUE(exists_in_store(storage(), symbol, entity::KeyType::VERSION));
+    ASSERT_TRUE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
 
     auto result = storage().read(entity::VariantKey{key}, {});
-    ASSERT_EQ(std::get<StringId>(result.atom_key().id()), symbol);
+    ASSERT_EQ(std::get<StringId>(result.atom_key().id()), STREAM_ID);
     ASSERT_TRUE(segments_are_identical(segment, result.segment()));
 }
 
@@ -111,33 +111,27 @@ TEST_F(FileStorageApi, KeysDoNotCollide) {
             storage::get_test_segment(30),
             storage::get_test_segment(40)
     };
-    const std::array<entity::KeyType, 4> key_types = {
-            entity::KeyType::TABLE_DATA,
-            entity::KeyType::TABLE_INDEX,
-            entity::KeyType::VERSION,
-            entity::KeyType::VERSION_REF
+    const std::array<entity::AtomKey, 4> keys = {
+            arcticdb::atom_key_builder().content_hash(0).build(STREAM_ID, entity::KeyType::TABLE_DATA),
+            arcticdb::atom_key_builder().content_hash(1).build(STREAM_ID, entity::KeyType::TABLE_INDEX),
+            arcticdb::atom_key_builder().content_hash(2).build(STREAM_ID, entity::KeyType::VERSION),
+            arcticdb::atom_key_builder().content_hash(3).build(STREAM_ID, entity::KeyType::VERSION_REF)
     };
-    const std::string symbol{"symbol"};
-    for (size_t i = 0; i < key_types.size(); ++i) {
-        auto key = arcticdb::atom_key_builder().content_hash(i).build(symbol, key_types[i]);
-        storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segments[i].clone()));
-    }
+    for (size_t i = 0; i < segments.size(); ++i)
+        storage().write(storage::KeySegmentPair(entity::VariantKey{keys[i]}, segments[i].clone()));
 
-    for (size_t i = 0; i < key_types.size(); ++i) {
-        auto key = arcticdb::atom_key_builder().content_hash(i).build(symbol, key_types[i]);
-        ASSERT_TRUE(storage().key_exists(key));
-
-        auto result = storage().read(entity::VariantKey{key}, {});
+    for (size_t i = 0; i < segments.size(); ++i) {
+        ASSERT_TRUE(storage().key_exists(keys[i]));
+        storage::KeySegmentPair result = storage().read(entity::VariantKey{keys[i]}, {});
         ASSERT_TRUE(segments_are_identical(segments[i], result.segment()));
     }
 }
 
 TEST_F(FileStorageApi, ListSymbols) {
     Segment segment{storage::get_test_segment()};
-    const std::string symbol{"symbol"};
-    auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
+    auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
     storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
-    ASSERT_TRUE(exists_in_store(storage(), symbol, entity::KeyType::VERSION));
+    ASSERT_TRUE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
 
     bool executed_on_found = false;
     storage().iterate_type(arcticdb::entity::KeyType::VERSION, [&](entity::VariantKey&& found_key) {
@@ -154,7 +148,7 @@ TEST_F(FileStorageApi, ListSymbols) {
     ASSERT_FALSE(executed_on_missing);
 }
 
-using FaultParam = std::tuple<SyscallId, Fault, std::string_view>;
+using FaultParam = std::tuple<SyscallId, std::optional<PosixError>, std::string_view>;
 
 class FaultInjection : public FileBackedStorageFixture, public ::testing::WithParamInterface<FaultParam> {
     void SetUp() override {
@@ -163,34 +157,31 @@ class FaultInjection : public FileBackedStorageFixture, public ::testing::WithPa
     }
 
     void TearDown() override {
-        ASSERT_FALSE(posix().uncosumed_faults()
-        ) << "Tests were probably written with the expectation that all faults would be consumed, but they were not. "
-             "Double check.";
+        ASSERT_FALSE(posix().uncosumed_faults())
+                << "Tests were written with the expectation that all faults would be consumed, but they were not.";
     }
 };
 
 TEST_P(FaultInjection, NoSideEffect) {
     Segment segment{storage::get_test_segment()};
-    const std::string symbol{"symbol"};
-    auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
     ASSERT_THROW(
-            storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone())), QuotaExceededException
+            storage().write(storage::KeySegmentPair(storage::get_test_key(STREAM_ID), segment.clone())),
+            QuotaExceededException
     );
-    ASSERT_FALSE(exists_in_store(storage(), symbol, entity::KeyType::VERSION));
+    ASSERT_FALSE(exists_in_store(storage(), STREAM_ID));
     const size_t num_lingering_temporaries = storage().get_num_temporary_files();
-    ASSERT_EQ(num_lingering_temporaries, 0)
-            << fmt::format("{} temporary files were not cleaned up", num_lingering_temporaries);
+    ASSERT_EQ(num_lingering_temporaries, 0) << "Temporary files were not cleaned up.";
 }
 
 INSTANTIATE_TEST_SUITE_P(
         FileStorageResilience, FaultInjection,
-        testing::ValuesIn(
-                {std::make_tuple(SyscallId::WRITE, Fault{-1, ENOSPC}, "WriteNoSpace"sv),
-                 std::make_tuple(SyscallId::WRITE, Fault{-1, EDQUOT}, "WriteNoQuota"sv),
-                 std::make_tuple(SyscallId::SYNC, Fault{-1, ENOSPC}, "SyncNoSpace"sv),
-                 std::make_tuple(SyscallId::SYNC, Fault{-1, EDQUOT}, "SyncNoQuota"sv),
-                 std::make_tuple(SyscallId::CLOSE, Fault{-1, ENOSPC}, "CloseNoSpace"sv),
-                 std::make_tuple(SyscallId::CLOSE, Fault{-1, EDQUOT}, "CloseNoQuota"sv)}
+        testing::Values(
+                FaultParam(SyscallId::WRITE, ENOSPC, "WriteNoSpace"sv),
+                FaultParam(SyscallId::WRITE, EDQUOT, "WriteNoQuota"sv),
+                FaultParam(SyscallId::SYNC, ENOSPC, "SyncNoSpace"sv),
+                FaultParam(SyscallId::SYNC, EDQUOT, "SyncNoQuota"sv),
+                FaultParam(SyscallId::CLOSE, ENOSPC, "CloseNoSpace"sv),
+                FaultParam(SyscallId::CLOSE, EDQUOT, "CloseNoQuota"sv)
         ),
         [](const testing::TestParamInfo<FaultInjection::ParamType>& info) {
             return std::string(std::get<2>(info.param));

@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
@@ -23,10 +24,7 @@ namespace arcticdb::storage::file_backed {
 
 enum class SyscallId : std::uint8_t { OPEN, CLOSE, WRITE, READ, SYNC, RENAME, LINK, MKDIR, STAT, UNLINK };
 
-struct Fault {
-    int return_value;
-    int error_code;
-};
+using PosixError = int;
 
 /**
  * Interface interacts with the file system, but has additional public APIs to inject faults.
@@ -54,8 +52,7 @@ class FaultyPosix : public PosixInterface {
 
     // Fault injection API
   public:
-    void clear_faults();
-    void inject_fault(SyscallId, Fault);
+    void inject_fault(SyscallId, std::optional<PosixError>);
     bool uncosumed_faults() const noexcept;
 
   private:
@@ -63,7 +60,7 @@ class FaultyPosix : public PosixInterface {
     std::mutex data_mutex_;
     // TODO: Hmm, how will I tell we opened a temporary file? Need awareness of ".tmp" prefix.
     std::unordered_set<std::filesystem::path> temporary_files_;
-    std::unordered_map<SyscallId, std::queue<Fault>> faults_;
+    std::unordered_map<SyscallId, std::queue<std::optional<PosixError>>> faults_;
 };
 
 } // namespace arcticdb::storage::file_backed
