@@ -38,10 +38,10 @@ def test_arrow_streaming_reads_basic(in_memory_store_factory):
 
 
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
-def test_arrow_streaming_reads_invalid_prefetch_rows(in_memory_store_factory, prefetch_rows):
-    lib = in_memory_store_factory(segment_row_size=10)
+def test_arrow_streaming_reads_invalid_prefetch_rows(in_memory_version_store, prefetch_rows):
+    lib = in_memory_version_store
     sym = "test_arrow_streaming_reads_invalid_prefetch_rows"
-    df = pl.from_pandas(pd.DataFrame({"col": np.arange(20)}))
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(1)}))
     lib.write(sym, df)
     with pytest.raises(ArcticNativeException if isinstance(prefetch_rows, int) else TypeError):
         lib.read_streaming(sym, prefetch_rows=prefetch_rows)
