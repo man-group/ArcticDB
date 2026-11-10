@@ -231,6 +231,7 @@ class StorageGenerator {
             return std::make_unique<storage::memory::MemoryStorage>(library_path, storage::OpenMode::WRITE, cfg);
         } else if (storage_ == "file_backed") {
             arcticdb::proto::file_storage::Config cfg;
+            cfg.set_dir_path(TEST_DATABASES_PATH);
             return std::make_unique<storage::file_backed::FileBackedStorage>(
                     library_path, storage::OpenMode::WRITE, cfg
             );
