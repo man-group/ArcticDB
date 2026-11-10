@@ -9,6 +9,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Must precede project(), which is where the vcpkg toolchain reads VCPKG_MANIFEST_FEATURES
+option(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING "Build with Perfetto instrumented tracing" OFF)
+if(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING)
+    list(APPEND VCPKG_MANIFEST_FEATURES perfetto)
+endif()
+
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 project(arcticdb VERSION 0.0.1)
 
@@ -17,7 +23,6 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/pdb_generation.cmake)
 
 enable_testing()
 
-option(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING "Build with Perfetto instrumented tracing" OFF)
 if(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING)
     add_compile_definitions(ARCTICDB_PERFORMANCE_SAMPLING)
 endif()
