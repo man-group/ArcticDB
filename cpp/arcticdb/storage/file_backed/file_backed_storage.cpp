@@ -297,7 +297,7 @@ class File {
         }
 
         if (res < 0)
-            throw std::system_error(errno, std::generic_category(), "fsync failed");
+            raise_io_error(errno, "fsync failed");
     }
 
   private:
@@ -379,6 +379,7 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
                 std::vector<std::uint8_t> buffer(segment_size);
                 seg.write_to(buffer.data());
                 tmp_key_fd.write_all(*posix_, buffer);
+                tmp_key_fd.sync();
             }
             // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
             // No-op on NFS.
