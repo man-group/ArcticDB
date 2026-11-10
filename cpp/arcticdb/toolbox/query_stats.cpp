@@ -169,17 +169,14 @@ void QueryStats::add(TaskType task_type, entity::KeyType key_type, StatType stat
 namespace {
 // The stats of the calls being timed on this thread, which per-attempt stats are added to. Usually at most one, but a
 // DeleteObjects batch is timed once for each key type in it.
-std::vector<OperationStats*>& current_calls() {
-    thread_local std::vector<OperationStats*> calls;
-    return calls;
-}
+thread_local std::vector<OperationStats*> current_calls;
 } // namespace
 
 RAIIAddTime::RAIIAddTime(OperationStats& stats, TimePoint start) :
     stats_(&stats),
     start_(start),
     uncaught_exceptions_(std::uncaught_exceptions()) {
-    current_calls().push_back(stats_);
+    current_calls.push_back(stats_);
 }
 
 RAIIAddTime::RAIIAddTime(RAIIAddTime&& other) noexcept :
@@ -191,9 +188,8 @@ void RAIIAddTime::finish(bool succeeded) {
     if (stats_ == nullptr) {
         return;
     }
-    auto& calls = current_calls();
-    if (auto it = std::ranges::find(calls | std::views::reverse, stats_); it != calls.rend()) {
-        calls.erase(std::next(it).base());
+    if (auto it = std::ranges::find(current_calls | std::views::reverse, stats_); it != current_calls.rend()) {
+        current_calls.erase(std::next(it).base());
     }
     const auto elapsed =
             std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_).count();
@@ -205,7 +201,7 @@ void RAIIAddTime::finish(bool succeeded) {
 RAIIAddTime::~RAIIAddTime() { finish(std::uncaught_exceptions() <= uncaught_exceptions_); }
 
 void add_to_current_calls(StatType stat_type, uint64_t value) {
-    for (auto* stats : current_calls()) {
+    for (auto* stats : current_calls) {
         (*stats)[stat_type].increment(value);
     }
 }
