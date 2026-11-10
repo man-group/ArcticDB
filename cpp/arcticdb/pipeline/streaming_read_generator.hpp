@@ -36,7 +36,8 @@ class StreamingReadGenerator {
 
   private:
     void ensure_index_information();
-    void prefetch();
+    void fetch_next_slice();
+    void prefetch_slices();
 
     bool started_{false};
     uint64_t in_flight_rows_{0};

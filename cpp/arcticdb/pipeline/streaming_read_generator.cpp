@@ -43,36 +43,38 @@ ReadResult StreamingReadGenerator::read_result() {
             tsd.sorted()};
 }
 
-void StreamingReadGenerator::prefetch() {
-    util::check(prefetch_rows_.has_value(), "StreamingReadGenerator: prefetch_rows_ should be populated");
+void StreamingReadGenerator::fetch_next_slice() {
+    auto row_range = std::move(row_ranges_.front());
+    in_flight_rows_ += row_range.diff();
+    row_ranges_.pop_front();
+    // TODO: Make all of this async
+    // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when reading
+    // ahead
+    auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
+    read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
+    auto index_information_copy = std::make_shared<IndexInformation>(
+            std::make_pair(index_information_->index_.first, index_information_->index_.second.clone()), std::nullopt
+    );
+    index_information_copy->column_stats_ = index_information_->column_stats_;
+    auto read_version_output_fut = read_frame_for_version(
+            engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
+    );
+    frame_futs_.emplace_back(
+            std::move(row_range),
+            std::move(read_version_output_fut).thenValueInline([this](auto&& read_version_output) {
+                auto read_result = create_python_read_result(
+                        {},
+                        read_options_.output_format_for_frame(),
+                        std::move(read_version_output.frame_and_descriptor_)
+                );
+                return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
+            })
+    );
+}
+
+void StreamingReadGenerator::prefetch_slices() {
     while (in_flight_rows_ < *prefetch_rows_ && !row_ranges_.empty()) {
-        auto row_range = std::move(row_ranges_.front());
-        in_flight_rows_ += row_range.diff();
-        row_ranges_.pop_front();
-        // TODO: Make all of this async
-        // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when reading
-        // ahead
-        auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
-        read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
-        auto index_information_copy = std::make_shared<IndexInformation>(
-                std::make_pair(index_information_->index_.first, index_information_->index_.second.clone()),
-                std::nullopt
-        );
-        index_information_copy->column_stats_ = index_information_->column_stats_;
-        auto read_version_output_fut = read_frame_for_version(
-                engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
-        );
-        frame_futs_.emplace_back(
-                std::move(row_range),
-                std::move(read_version_output_fut).thenValueInline([this](auto&& read_version_output) {
-                    auto read_result = create_python_read_result(
-                            {},
-                            read_options_.output_format_for_frame(),
-                            std::move(read_version_output.frame_and_descriptor_)
-                    );
-                    return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
-                })
-        );
+        fetch_next_slice();
     }
 }
 
@@ -83,21 +85,20 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
         return std::nullopt;
     }
     if (!started_) {
-        prefetch();
+        prefetch_slices();
         started_ = true;
     }
-    // TODO: Remove this hack
-    if (in_flight_rows_ == 0) {
-        auto prefetch_rows_before = *prefetch_rows_;
-        prefetch_rows_ = 1;
-        prefetch();
-        prefetch_rows_ = prefetch_rows_before;
+    // Special case with no preloading - on each call to next the next row-slice is read
+    if (*prefetch_rows_ == 0) {
+        fetch_next_slice();
     }
     auto [row_range, frame_fut] = std::move(frame_futs_.front());
     frame_futs_.pop_front();
     in_flight_rows_ -= row_range.diff();
+    // Get the next slice before scheduling more work with prefetch_slices in case the newly scheduled work somehow
+    // delays us being able to return
     auto res = std::move(frame_fut).get();
-    prefetch();
+    prefetch_slices();
     return res;
 }
 
