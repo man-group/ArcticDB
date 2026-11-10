@@ -215,20 +215,17 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("index_seg"),
                  py::arg("column_stats_seg") = nullptr);
 
-    // TODO: Find a sensible place for this
     py::class_<StreamingReadGenerator, std::shared_ptr<StreamingReadGenerator>>(version, "StreamingReadGenerator")
             .def(
                     "read_result",
                     [&](StreamingReadGenerator& self) { return adapt_read_df(self.read_result(), nullptr); },
                     py::call_guard<SingleThreadMutexHolder>(),
-                    // TODO: Better description
-                    "Read the specified version of the dataframe from the store"
+                    "Fetch the index key level information (norm meta, user meta, etc)"
             )
             .def("next",
                  &StreamingReadGenerator::next,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 // TODO: Better description
-                 "Read the specified version of the dataframe from the store");
+                 "Fetch the next row-slice, and possibly trigger reading of more from disk");
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())

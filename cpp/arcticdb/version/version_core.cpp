@@ -3018,7 +3018,7 @@ VersionedItem defragment_symbol_data_impl(
     );
 }
 
-folly::Future<VersionIdentifier> fetch_index_and_column_stats(
+folly::Future<std::shared_ptr<IndexInformation>> fetch_index_and_column_stats(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadQuery& read_query
 ) {
     auto index_future = store->read(versioned_item.key_);
@@ -3040,7 +3040,7 @@ folly::Future<VersionIdentifier> fetch_index_and_column_stats(
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
             .via(&async::io_executor())
-            .thenValue([vi = versioned_item](auto&& results) -> VersionIdentifier {
+            .thenValue([vi = versioned_item](auto&& results) -> std::shared_ptr<IndexInformation> {
                 auto& [index_try, column_stats_try] = results;
 
                 if (index_try.hasException()) {

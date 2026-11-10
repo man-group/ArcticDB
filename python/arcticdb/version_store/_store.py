@@ -269,7 +269,6 @@ class VersionedItem:
         return iter(attr.astuple(self))
 
 
-# TODO: Move this somewhere else
 class StreamingReadGenerator:
     def __init__(self, nvs, generator_impl):
         self._nvs = nvs
@@ -302,7 +301,6 @@ class StreamingReadGenerator:
         data = self._generator_impl.next()
         if data is None:
             raise StopIteration
-        # TODO: Support pyarrow output format
         return self._nvs._adapt_frame_data(
             data, self._read_result.norm, OutputFormat.POLARS, self._read_result.sort_order
         )
@@ -2607,7 +2605,6 @@ class NativeVersionStore:
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
 
-    # TODO: Add V2 API equivalent
     def read_streaming(
         self,
         symbol: str,
@@ -2619,14 +2616,12 @@ class NativeVersionStore:
         prefetch_rows: Optional[int] = None,
         **kwargs,
     ) -> StreamingReadGenerator:
-        # TODO: All this stuff is shared with read/head/tail - factor it out
         self._validate_kwargs("read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
         # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
         query_builder = copy.deepcopy(query_builder)
-        # TODO: Reject Pandas, allow pyarrow
         kwargs["output_format"] = OutputFormat.POLARS
         version_query, read_options, read_query, output_format = self._get_queries(
             as_of=as_of,
@@ -2636,7 +2631,6 @@ class NativeVersionStore:
             query_builder=query_builder,
             **kwargs,
         )
-        # TODO: Add a test for this check
         check(
             prefetch_rows is None or prefetch_rows >= 0,
             "prefetch_rows must be None or a positive integer, received {}",

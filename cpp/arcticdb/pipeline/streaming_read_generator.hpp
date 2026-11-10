@@ -22,7 +22,6 @@
 namespace arcticdb::version_store {
 class StreamingReadGenerator {
   public:
-    // TODO: What is the right move/copy policy?
     StreamingReadGenerator(
             LocalVersionedEngine* engine, const StreamId& stream_id, const VersionQuery& version_query,
             const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
@@ -36,7 +35,6 @@ class StreamingReadGenerator {
     void ensure_index_information();
 
     size_t idx_{0};
-    // TODO: Make this shared_ptr
     LocalVersionedEngine* engine_;
     StreamId stream_id_;
     VersionQuery version_query_;

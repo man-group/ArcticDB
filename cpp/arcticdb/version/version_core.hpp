@@ -128,7 +128,7 @@ VersionedItem defragment_symbol_data_impl(
         const WriteOptions& options, size_t segment_size
 );
 
-folly::Future<VersionIdentifier> fetch_index_and_column_stats(
+folly::Future<std::shared_ptr<IndexInformation>> fetch_index_and_column_stats(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadQuery& read_query
 );
 

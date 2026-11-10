@@ -44,20 +44,16 @@ ReadResult StreamingReadGenerator::read_result() {
 }
 
 std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
-    // TODO: Consider thread-safety of this
     py::gil_scoped_release release_gil;
     ensure_index_information();
     if (idx_ >= row_ranges_.size()) {
         return std::nullopt;
     }
     const auto& row_range = row_ranges_[idx_++];
-    // TODO: Handle user-provided row-range filters by truncating row_ranges_
     // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when reading
     // ahead
     auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
     read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
-    // TODO: Async and read-ahead
-    // TODO: read_frame_for_version is destructive of the index segment, find a more elegant solution than this clone
     auto index_seg = index_information_->index_.second.clone();
     auto read_version_output =
             read_frame_for_version(engine_->store(), index_information_, read_query_copy, read_options_, handler_data_)
@@ -70,23 +66,21 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
 }
 
 void StreamingReadGenerator::ensure_index_information() {
-    // TODO: Consider thread-safety of this
     if (index_information_) {
         return;
     }
     auto opt_versioned_item = engine_->get_version_to_read(stream_id_, version_query_);
-    // TODO: Check this is the same exception type as the regular read path
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-            opt_versioned_item.has_value(), "TODO: Copy message from regular read path"
+    // E_NO_SUCH_VERSION probably more appropriate as we are not supporting incompletes, but this matches the regular
+    // read path
+    missing_data::check<ErrorCode::E_NO_SYMBOL_DATA>(
+            opt_versioned_item.has_value(),
+            "StreamingReadGenerator: no data for version {} of symbol {}",
+            version_query_,
+            stream_id_
     );
-    // TODO: Does fetch_index_and_column_stats always return IndexInformation? If so, change API
-    index_information_ = std::get<std::shared_ptr<IndexInformation>>(
-            fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get()
-    );
-    // TODO: Get rid of this clone
+    index_information_ = fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get();
     pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
     for (const auto& slice_and_key : isr) {
-        // TODO: Check this works with column slicing
         if (!row_ranges_.empty() && slice_and_key.slice().rows().first < row_ranges_.back().second) {
             break;
         }

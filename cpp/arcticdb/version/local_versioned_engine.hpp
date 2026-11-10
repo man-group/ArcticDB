@@ -451,7 +451,7 @@ class LocalVersionedEngine : public VersionedEngine {
     folly::Future<folly::Unit> delete_unreferenced_pruned_indexes(
             std::vector<AtomKey>&& pruned_indexes, const AtomKey& key_to_keep
     );
-    // TODO: Proper protection
+
   public:
     std::shared_ptr<Store>& store() override { return store_; }
 
