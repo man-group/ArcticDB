@@ -794,6 +794,11 @@ bool rows_match(
         const std::span<const ColumnWithSparseIndex> left_columns, const size_t left_row,
         const std::span<const ColumnWithSparseIndex> right_columns, const size_t right_row, const bool match_na
 ) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            left_columns.size() == right_columns.size(),
+            "Comparing two rows that hashed equally for merge update requires equal amount of columns (all columns to "
+            "match on) for the comparison."
+    );
     for (size_t col_idx = 0; col_idx < left_columns.size(); ++col_idx) {
         const auto& [left, left_sparse_index] = left_columns[col_idx];
         const auto& [right, right_sparse_index] = right_columns[col_idx];
