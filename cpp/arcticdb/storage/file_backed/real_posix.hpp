@@ -16,6 +16,7 @@ class RealPosix : public PosixInterface {
   public:
     int open(const char* pathname, int flags, mode_t mode) override;
     int openat(int dirfd, const char* pathname, int flags, mode_t mode) override;
+    int close(int fd) override;
     ssize_t write(int fd, const void* buf, size_t count) override;
     ssize_t read(int fd, void* buf, size_t count) override;
     int fsync(int fd) override;

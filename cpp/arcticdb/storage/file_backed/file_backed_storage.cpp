@@ -6,7 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include "entity/variant_key.hpp"
+#include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
 #include <arcticdb/storage/file_backed/posix_interface.hpp>
@@ -14,12 +14,15 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/error_code.hpp>
 
+#include <cstring>
 #include <fmt/format.h>
 
 #include <filesystem>
 #include <random>
 #include <sstream>
+#include <stack>
 #include <system_error>
 #include <unistd.h>
 
@@ -44,6 +47,22 @@ static constexpr std::string_view TMP_FILE_PREFIX(".tmp");
 static constexpr std::string_view SILLY_RENAME_FILE_PREFIX(".nfs");
 
 using arcticdb::storage::file_backed::PosixInterface;
+
+void raise_io_error(int error_code, std::string_view message) {
+    switch (error_code) {
+    case EACCES:
+    case EPERM:
+    case EROFS:
+        arcticdb::storage::raise<arcticdb::ErrorCode::E_PERMISSION>(
+                fmt::format("{}: {}", message, std::strerror(error_code))
+        );
+    case ENOSPC:
+    case EDQUOT:
+        arcticdb::storage::raise<arcticdb::ErrorCode::E_QUOTA_EXCEEDED>(message);
+    default:
+        throw arcticdb::StorageException(fmt::format("{}: {}", message, std::strerror(error_code)));
+    }
+}
 
 std::string generate_tmp_file_name() {
     // TODO: Is this enough randomness? Seems legit to me. PID + TID + 32-bit random value ensures
@@ -112,6 +131,80 @@ bool exists(
     return false;
 }
 
+class Directory {
+  public:
+    // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
+    Directory(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
+        posix_(posix) {
+        fd_ = posix.open(pathname.c_str(), flags, mode);
+        // TODO: Use a retry wrapper
+        if (fd_ < 0) {
+            if (errno == ENOENT) {
+                refresh_ancestors(storage_dir, pathname);
+                fd_ = posix.open(pathname.c_str(), flags, mode);
+            }
+        }
+        if (fd_ < 0) {
+            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to open {}", pathname.c_str()));
+        }
+    }
+
+    Directory(PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
+        posix_(posix) {
+        fd_ = posix.openat(dir_fd.fd_, pathname.c_str(), flags, mode);
+        // TODO Note that there is no retry here on ENOENT. It's awkward to refresh the ancestor directories, since we'd
+        // have to close the fd and reopen it. Technically doable from within here. Do it later.
+        if (fd_ < 0)
+            throw std::system_error(
+                    errno, std::generic_category(), fmt::format("Failed to openat {}", pathname.c_str())
+            );
+    }
+
+    ~Directory() {
+        // TODO: Check if there are any exceptions in flight. If anything goes wrong in here, we can't throw. If nothing
+        // in flight, we can safely throw.
+        // TODO: Check this
+        [[maybe_unused]] int res = ::close(fd_);
+    }
+
+    ARCTICDB_NO_MOVE_OR_COPY(Directory);
+
+    int fd() const noexcept { return fd_; }
+
+    void sync() const {
+        // TODO: Can this error? Yes... EINTR at the least should be retried. Then there's the usual ones
+        // which write can return.
+        int res = posix_.fsync(fd_);
+        if (res < 0) {
+            if (errno == EINTR) {
+                // Try one more time? TODO: Quick retries should be wrapped in a retry() that takes a lambda.
+                res = posix_.fsync(fd_);
+            }
+        }
+
+        if (res < 0)
+            throw std::system_error(errno, std::generic_category(), "fsync failed");
+    }
+
+    void mkdir(const fs::path& pathname, mode_t mode) const {
+        int res = posix_.mkdirat(fd_, pathname.c_str(), mode);
+        if (res < 0) {
+            if (errno != EEXIST)
+                throw std::system_error(
+                        errno, std::generic_category(), fmt::format("failed to create subdir {}", pathname.c_str())
+                );
+        }
+    }
+
+    // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
+    // errors.
+    void unlinkat_best_effort(const fs::path& pathname) const { ::unlinkat(fd_, pathname.c_str(), 0); }
+
+  private:
+    PosixInterface& posix_;
+    int fd_;
+};
+
 class File {
   public:
     // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
@@ -130,8 +223,9 @@ class File {
         }
     }
 
-    File(PosixInterface& posix, const File& dir_fd, const fs::path& pathname, int flags, mode_t mode) : posix_(posix) {
-        fd_ = posix.openat(dir_fd.fd_, pathname.c_str(), flags, mode);
+    File(PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
+        posix_(posix) {
+        fd_ = posix.openat(dir_fd.fd(), pathname.c_str(), flags, mode);
         // TODO Note that there is no retry here on ENOENT. It's awkward to refresh the ancestor directories, since we'd
         // have to close the fd and reopen it. Technically doable from within here. Do it later.
         if (fd_ < 0)
@@ -164,7 +258,7 @@ class File {
             if (n < 0) {
                 if (errno == EINTR)
                     continue;
-                throw std::system_error(errno, std::generic_category(), "write failed");
+                raise_io_error(errno, "write failed");
             }
             written += static_cast<size_t>(n);
         }
@@ -206,20 +300,6 @@ class File {
             throw std::system_error(errno, std::generic_category(), "fsync failed");
     }
 
-    void mkdir(const fs::path& pathname, mode_t mode) const {
-        int res = posix_.mkdirat(fd_, pathname.c_str(), mode);
-        if (res < 0) {
-            if (errno != EEXIST)
-                throw std::system_error(
-                        errno, std::generic_category(), fmt::format("failed to create subdir {}", pathname.c_str())
-                );
-        }
-    }
-
-    // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
-    // errors.
-    void unlinkat_best_effort(const fs::path& pathname) const { ::unlinkat(fd_, pathname.c_str(), 0); }
-
   private:
     PosixInterface& posix_;
     int fd_;
@@ -241,9 +321,12 @@ class DirCloser {
 
 namespace arcticdb::storage::file_backed {
 
-FileBackedStorage::FileBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
+FileBackedStorage::FileBackedStorage(
+        const LibraryPath& library_path, OpenMode mode, const Config& conf,
+        const std::shared_ptr<PosixInterface>& posix_interface
+) :
     Storage(library_path, mode),
-    posix_(std::make_unique<RealPosix>()) {
+    posix_(posix_interface) {
     const auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
     const fs::path root_path = conf.dir_path();
     storage_dir_ = root_path / lib_path_str;
@@ -267,6 +350,9 @@ FileBackedStorage::FileBackedStorage(const LibraryPath& library_path, OpenMode m
         );
 }
 
+FileBackedStorage::FileBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
+    FileBackedStorage(library_path, mode, conf, std::make_shared<RealPosix>()) {}
+
 FileBackedStorage::~FileBackedStorage() = default;
 
 std::string FileBackedStorage::name() const { return fmt::format("file_backed_storage-{}", storage_dir_.c_str()); }
@@ -281,9 +367,9 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
     const fs::path tmp_file_path = storage_dir_ / key_name / tmp_file_name;
     {
-        File storage_dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+        Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
         storage_dir_fd.mkdir(key_name, new_dir_mode_);
-        File key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+        Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
         try {
             {
                 File tmp_key_fd(
@@ -421,7 +507,7 @@ bool FileBackedStorage::do_iterate_type_until_match(
 ) {
     const fs::path keys_dir = storage_dir_ / entity::key_type_long_name(key_type);
     DIR* dirp = posix_->opendir(keys_dir.c_str());
-    if (!dirp)
+    if (!dirp) // TODO: read errno?
         return false;
 
     DirCloser close_dir(dirp);
@@ -437,6 +523,7 @@ bool FileBackedStorage::do_iterate_type_until_match(
         if (variant_key_type(key) == key_type && visitor(std::move(key)))
             return true;
     }
+    // TODO: Need to check errno here. read_dir can return NULL on error too.
 
     return false;
 }
@@ -471,6 +558,37 @@ void FileBackedStorage::do_visit_object_sizes(
     }
 #endif
     return std::nullopt;
+}
+
+size_t FileBackedStorage::get_num_temporary_files() const {
+    size_t num_temporary_files = 0;
+    std::stack<fs::path> directories_to_scan;
+    directories_to_scan.push(storage_dir_);
+    while (!directories_to_scan.empty()) {
+        fs::path current_dir = directories_to_scan.top();
+        directories_to_scan.pop();
+        DIR* dirp = posix_->opendir(current_dir.c_str());
+        if (!dirp) {
+            // TODO: does this happen when someone deletes the dir?
+            // TODO: Read errno, there
+            continue;
+        }
+
+        DirCloser close_dir(dirp);
+        struct dirent* dir_entry = nullptr;
+        while ((dir_entry = posix_->readdir(dirp))) {
+            std::string_view file_name(dir_entry->d_name);
+            if (is_pseudodir(file_name))
+                continue;
+            else if (is_tmp_file_name(file_name))
+                ++num_temporary_files;
+            else if (dir_entry->d_type == DT_DIR) {
+                directories_to_scan.push(current_dir / file_name);
+            }
+        }
+    }
+
+    return num_temporary_files;
 }
 
 } // namespace arcticdb::storage::file_backed

@@ -367,6 +367,7 @@ set(arcticdb_srcs
         storage/file/file_store.hpp
         storage/file/mapped_file_storage.hpp
         storage/file/file_store.hpp
+        storage/file_backed/faulty_posix.hpp
         storage/file_backed/file_backed_storage.hpp
         storage/file_backed/posix_interface.hpp
         storage/file_backed/real_posix.hpp
@@ -589,6 +590,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_error_handling.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
+        storage/file_backed/faulty_posix.cpp
         storage/file_backed/file_backed_storage.cpp
         storage/file_backed/posix_interface.cpp
         storage/file_backed/real_posix.cpp
