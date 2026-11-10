@@ -9,9 +9,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import polars as pl
+import pytest
 
-# import pyarrow as pa
-# import pytest
+from arcticdb.exceptions import ArcticNativeException
+
 #
 # from arcticdb import QueryBuilder
 # from arcticdb.exceptions import InternalException, NoSuchVersionException, SchemaException, UserInputException
@@ -34,3 +35,13 @@ def test_arrow_streaming_reads_basic(in_memory_store_factory):
     vit = lib.read(sym)
     vit.data = None
     assert vit == gen.versioned_item()
+
+
+@pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
+def test_arrow_streaming_reads_invalid_prefetch_rows(in_memory_store_factory, prefetch_rows):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_arrow_streaming_reads_invalid_prefetch_rows"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(20)}))
+    lib.write(sym, df)
+    with pytest.raises(ArcticNativeException if isinstance(prefetch_rows, int) else TypeError):
+        lib.read_streaming(sym, prefetch_rows=prefetch_rows)
