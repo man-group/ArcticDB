@@ -44,50 +44,52 @@ ReadResult StreamingReadGenerator::read_result() {
 }
 
 void StreamingReadGenerator::fetch_next_slice() {
-    auto row_slice = std::move(row_slices_.front());
+    auto row_slice = std::move(to_process_.front());
     in_flight_rows_ += row_slice.row_range_.diff();
-    row_slices_.pop_front();
-    auto arrow_output_frame_fut =
-            folly::via(&async::cpu_executor(), [this, row_range = row_slice.row_range_] {
-                // read_frame_for_version is destructive of IndexInformation. In the case of the index segment, this is
-                // purely through extracting the TSD though, and it does not seem like a hard-requirement for column
-                // stats info either. In addition, column stats at this point are represented by a compressed Segment,
-                // implying this will be decoded again for each slice, which is obviously inefficient. Address all of
-                // these as part of 13346982120.
-                auto index_information_copy = std::make_shared<IndexInformation>(index_information_->clone());
-                // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when
-                // reading ahead
-                auto read_query_copy = std::make_shared<ReadQuery>(read_query_->clone());
-                read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
-                if (!read_query_copy->clauses_.empty()) {
-                    RowRangeClause row_range_clause{row_range.first, row_range.second};
-                    auto clauses = util::reserve_vector<std::shared_ptr<Clause>>(read_query_copy->clauses_.size() + 1);
-                    clauses.emplace_back(std::make_shared<Clause>(std::move(row_range_clause)));
-                    clauses.insert(
-                            clauses.end(),
-                            std::make_move_iterator(read_query_copy->clauses_.begin()),
-                            std::make_move_iterator(read_query_copy->clauses_.end())
-                    );
-                    read_query_copy->clauses_ = std::move(clauses);
-                    // TODO 13346982120: Augment plan_query to merge adjacent RowRange clauses when possible, and then
-                    // call it again here
-                }
-                return read_frame_for_version(
-                        engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
-                );
-            }).thenValueInline([this](auto&& read_version_output) {
+    to_process_.pop_front();
+    row_slice.opt_arrow_output_frame_fut_
+            .emplace(folly::via(&async::cpu_executor(), [this, row_range = row_slice.row_range_] {
+                         // read_frame_for_version is destructive of IndexInformation. In the case of the index segment,
+                         // this is purely through extracting the TSD though, and it does not seem like a
+                         // hard-requirement for column stats info either. In addition, column stats at this point are
+                         // represented by a compressed Segment, implying this will be decoded again for each slice,
+                         // which is obviously inefficient. Address all of these as part of 13346982120.
+                         auto index_information_copy = std::make_shared<IndexInformation>(index_information_->clone());
+                         // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at
+                         // once when reading ahead
+                         auto read_query_copy = std::make_shared<ReadQuery>(read_query_->clone());
+                         read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
+                         if (!read_query_copy->clauses_.empty()) {
+                             RowRangeClause row_range_clause{row_range.first, row_range.second};
+                             auto clauses = util::reserve_vector<std::shared_ptr<Clause>>(
+                                     read_query_copy->clauses_.size() + 1
+                             );
+                             clauses.emplace_back(std::make_shared<Clause>(std::move(row_range_clause)));
+                             clauses.insert(
+                                     clauses.end(),
+                                     std::make_move_iterator(read_query_copy->clauses_.begin()),
+                                     std::make_move_iterator(read_query_copy->clauses_.end())
+                             );
+                             read_query_copy->clauses_ = std::move(clauses);
+                             // TODO 13346982120: Augment plan_query to merge adjacent RowRange clauses when possible,
+                             // and then call it again here
+                         }
+                         return read_frame_for_version(
+                                 engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
+                         );
+                     }).thenValueInline([this](auto&& read_version_output) {
                 auto read_result = create_python_read_result(
                         {},
                         read_options_.output_format_for_frame(),
                         std::move(read_version_output.frame_and_descriptor_)
                 );
                 return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
-            });
-    frame_futs_.emplace_back(std::move(row_slice.row_range_), std::move(arrow_output_frame_fut));
+            }));
+    being_processed_.emplace_back(std::move(row_slice));
 }
 
 void StreamingReadGenerator::prefetch_slices() {
-    while (in_flight_rows_ < *prefetch_rows_ && !row_slices_.empty()) {
+    while (in_flight_rows_ < *prefetch_rows_ && !to_process_.empty()) {
         fetch_next_slice();
     }
 }
@@ -95,7 +97,7 @@ void StreamingReadGenerator::prefetch_slices() {
 std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     py::gil_scoped_release release_gil;
     ensure_index_information();
-    if (frame_futs_.empty() && row_slices_.empty()) {
+    if (being_processed_.empty() && to_process_.empty()) {
         return std::nullopt;
     }
     if (!started_) {
@@ -106,12 +108,16 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     if (*prefetch_rows_ == 0) {
         fetch_next_slice();
     }
-    auto [row_range, frame_fut] = std::move(frame_futs_.front());
-    frame_futs_.pop_front();
-    in_flight_rows_ -= row_range.diff();
+    auto row_slice = std::move(being_processed_.front());
+    being_processed_.pop_front();
+    in_flight_rows_ -= row_slice.row_range_.diff();
     // Get the next slice before scheduling more work with prefetch_slices in case the newly scheduled work somehow
     // delays us being able to return
-    auto res = std::move(frame_fut).get();
+    util::check(
+            row_slice.opt_arrow_output_frame_fut_.has_value(),
+            "StreamingReadGenerator::next(): unexpected unscheduled future"
+    );
+    auto res = std::move(*row_slice.opt_arrow_output_frame_fut_).get();
     prefetch_slices();
     return res;
 }
@@ -132,10 +138,10 @@ void StreamingReadGenerator::ensure_index_information() {
     index_information_ = fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get();
     pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
     for (const auto& slice_and_key : isr) {
-        if (!row_slices_.empty() && slice_and_key.slice().rows().first < row_slices_.back().row_range_.second) {
+        if (!to_process_.empty() && slice_and_key.slice().rows().first < to_process_.back().row_range_.second) {
             break;
         }
-        row_slices_.emplace_back(
+        to_process_.emplace_back(
                 slice_and_key.slice().rows(), slice_and_key.key().start_time(), slice_and_key.key().end_time()
         );
     }
