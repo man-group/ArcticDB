@@ -367,7 +367,6 @@ set(arcticdb_srcs
         storage/file/file_store.hpp
         storage/file/mapped_file_storage.hpp
         storage/file/file_store.hpp
-        storage/file_backed/faulty_posix.hpp
         storage/file_backed/file_backed_storage.hpp
         storage/file_backed/posix_interface.hpp
         storage/file_backed/real_posix.hpp
@@ -590,7 +589,6 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_error_handling.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
-        storage/file_backed/faulty_posix.cpp
         storage/file_backed/file_backed_storage.cpp
         storage/file_backed/posix_interface.cpp
         storage/file_backed/real_posix.cpp
@@ -1037,10 +1035,10 @@ if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
         # symbol so statically-linked deps (AWS SDK, folly, ...) are localized and
         # cannot be coalesced/preempted by another extension's copy — e.g. pyarrow's
         # bundled AWS SDK in libarrow, which otherwise causes an aws_fatal_assert
-        # abort when libarrow is loaded first. 
+        # abort when libarrow is loaded first.
         set(_arcticdb_exported_symbols "${CMAKE_CURRENT_BINARY_DIR}/exported_symbols.txt")
         file(WRITE "${_arcticdb_exported_symbols}" "_PyInit_arcticdb_ext\n")
-        
+
         # -dead_strip == --gc-sections.
         target_link_options(arcticdb_ext PRIVATE
             -Wl,-dead_strip
@@ -1166,9 +1164,10 @@ if(${TEST})
             processing/test/test_type_comparison.cpp
             processing/test/test_unsorted_aggregation.cpp
             processing/test/test_merge_update.cpp
+            processing/test/test_structure_by_time_slice.cpp
+            storage/test/faulty_posix.cpp
             storage/test/test_lmdb_cve.cpp
             storage/test/test_lmdb_flags.cpp
-            processing/test/test_structure_by_time_slice.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
