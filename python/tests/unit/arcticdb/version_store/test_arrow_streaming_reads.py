@@ -12,7 +12,7 @@ import polars as pl
 import pytest
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import ArcticNativeException
+from arcticdb.exceptions import ArcticNativeException, UserInputException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import config_context, query_stats_operation_count
 
@@ -138,8 +138,15 @@ def test_arrow_streaming_reads_io_counts(
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
 def test_arrow_streaming_reads_invalid_prefetch_rows(in_memory_version_store, prefetch_rows):
     lib = in_memory_version_store
-    sym = "test_arrow_streaming_reads_invalid_prefetch_rows"
-    df = pl.from_pandas(pd.DataFrame({"col": np.arange(1)}))
-    lib.write(sym, df)
     with pytest.raises(ArcticNativeException if isinstance(prefetch_rows, int) else TypeError):
-        lib.read_streaming(sym, prefetch_rows=prefetch_rows)
+        lib.read_streaming("sym", prefetch_rows=prefetch_rows)
+
+
+def test_arrow_streaming_reads_with_invalid_clauses(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    q = QueryBuilder().groupby("group").agg({"agg": "sum"})
+    with pytest.raises(UserInputException):
+        lib.read_streaming("sym", query_builder=q)
+    q = QueryBuilder().resample("1s").agg({"agg": "sum"})
+    with pytest.raises(UserInputException):
+        lib.read_streaming("sym", query_builder=q)

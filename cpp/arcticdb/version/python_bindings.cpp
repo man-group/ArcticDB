@@ -561,15 +561,34 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_readwrite("row_filter", &ReadQuery::row_filter)
             .def_readonly("needs_post_processing", &ReadQuery::needs_post_processing)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
-            .def("add_clauses", [](ReadQuery& self, std::vector<ClauseVariant> clauses) {
+            .def("add_clauses", [](ReadQuery& self, std::vector<ClauseVariant> clauses, bool streaming) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 self.needs_post_processing = false;
                 for (auto&& clause : clauses) {
+                    //                    if (streaming) {
+                    //                        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    //                                std::holds_alternative<std::shared_ptr<FilterClause>>(clause) ||
+                    //                                std::holds_alternative<std::shared_ptr<ProjectClause>>(clause) ||
+                    //                                std::holds_alternative<std::shared_ptr<RowRangeClause>>(clause) ||
+                    //                                std::holds_alternative<std::shared_ptr<DateRangeClause>>(clause),
+                    //                                "read_streaming does not support resampling, groupbys, or
+                    //                                aggregations"
+                    //                        );
+                    //                    }
                     util::variant_match(clause, [&](auto&& clause) {
                         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 !clause->clause_info().multi_symbol_,
                                 "Multi-symbol clause cannot be used on a single symbol"
                         );
+                        if (streaming) {
+                            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                    std::is_same_v<decltype(clause), std::shared_ptr<FilterClause>> ||
+                                            std::is_same_v<decltype(clause), std::shared_ptr<ProjectClause>> ||
+                                            std::is_same_v<decltype(clause), std::shared_ptr<RowRangeClause>> ||
+                                            std::is_same_v<decltype(clause), std::shared_ptr<DateRangeClause>>,
+                                    "read_streaming only supports filter and projection processing operations"
+                            );
+                        }
                         _clauses.emplace_back(std::make_shared<Clause>(*clause));
                     });
                 }

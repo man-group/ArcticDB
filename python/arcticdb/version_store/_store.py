@@ -2300,6 +2300,7 @@ class NativeVersionStore:
         row_range: Tuple[int, int],
         columns: Optional[List[str]],
         query_builder: Optional[QueryBuilder],
+        streaming_read: bool = False,
     ):
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
@@ -2311,7 +2312,7 @@ class NativeVersionStore:
             query_builder.prepend(QueryBuilder().row_range(row_range))
 
         if query_builder is not None:
-            read_query.add_clauses(query_builder.clauses)
+            read_query.add_clauses(query_builder.clauses, streaming_read)
 
         if row_range is not None:
             read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
@@ -2493,11 +2494,17 @@ class NativeVersionStore:
         batch_read_options.set_output_format(output_format_to_internal(output_format))
         return batch_read_options, output_format
 
-    def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
+    def _get_queries(
+        self, as_of, date_range, row_range, columns=None, query_builder=None, streaming_read=False, **kwargs
+    ):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options, output_format = self._get_read_options_and_output_format(**kwargs)
         read_query = self._get_read_query(
-            date_range=date_range, row_range=row_range, columns=columns, query_builder=query_builder
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            streaming_read=streaming_read,
         )
         return version_query, read_options, read_query, output_format
 
@@ -2629,6 +2636,7 @@ class NativeVersionStore:
             row_range=row_range,
             columns=columns,
             query_builder=query_builder,
+            streaming_read=True,
             **kwargs,
         )
         check(
