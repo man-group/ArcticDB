@@ -40,7 +40,9 @@ class StreamingReadGenerator {
         // TODO: What about other index types?
         timestamp start_index_;
         timestamp end_index_;
-        ARCTICDB_UNUSED std::optional<folly::Future<ArrowOutputFrame>> opt_arrow_output_frame_fut_;
+        std::optional<folly::Future<ArrowOutputFrame>> opt_arrow_output_frame_fut_;
+
+        size_t row_count() const { return row_range_.diff(); }
     };
 
     void ensure_index_information();

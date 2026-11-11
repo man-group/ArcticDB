@@ -45,7 +45,7 @@ ReadResult StreamingReadGenerator::read_result() {
 
 void StreamingReadGenerator::fetch_next_slice() {
     auto row_slice = std::move(to_process_.front());
-    in_flight_rows_ += row_slice.row_range_.diff();
+    in_flight_rows_ += row_slice.row_count();
     to_process_.pop_front();
     row_slice.opt_arrow_output_frame_fut_
             .emplace(folly::via(&async::cpu_executor(), [this, row_range = row_slice.row_range_] {
@@ -110,7 +110,7 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     }
     auto row_slice = std::move(being_processed_.front());
     being_processed_.pop_front();
-    in_flight_rows_ -= row_slice.row_range_.diff();
+    in_flight_rows_ -= row_slice.row_count();
     // Get the next slice before scheduling more work with prefetch_slices in case the newly scheduled work somehow
     // delays us being able to return
     util::check(
