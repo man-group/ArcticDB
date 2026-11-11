@@ -57,17 +57,17 @@ void StreamingReadGenerator::fetch_next_slice() {
                 auto index_information_copy = std::make_shared<IndexInformation>(index_information_->clone());
                 // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when
                 // reading ahead
-                auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
+                auto read_query_copy = std::make_shared<ReadQuery>(read_query_->clone());
                 read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
                 if (!read_query_copy->clauses_.empty()) {
                     RowRangeClause row_range_clause{row_range.first, row_range.second};
-                    auto clauses = util::reserve_vector<std::shared_ptr<folly::Poly<IClause>>>(
-                            read_query_copy->clauses_.size() + 1
+                    auto clauses = util::reserve_vector<std::shared_ptr<Clause>>(read_query_copy->clauses_.size() + 1);
+                    clauses.emplace_back(std::make_shared<Clause>(std::move(row_range_clause)));
+                    clauses.insert(
+                            clauses.end(),
+                            std::make_move_iterator(read_query_copy->clauses_.begin()),
+                            std::make_move_iterator(read_query_copy->clauses_.end())
                     );
-                    clauses.emplace_back(std::make_shared<folly::Poly<IClause>>(std::move(row_range_clause)));
-                    for (const auto& clause : read_query_copy->clauses_) {
-                        clauses.emplace_back(std::make_shared<folly::Poly<IClause>>(*clause));
-                    }
                     read_query_copy->clauses_ = std::move(clauses);
                 }
                 return read_frame_for_version(

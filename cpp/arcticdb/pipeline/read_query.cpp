@@ -1,10 +1,33 @@
+/* Copyright 2026 Man Group Operations Limited
+ *
+ * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+ *
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
+ */
+
 #include <arcticdb/pipeline/read_query.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/query_planner.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 
 namespace arcticdb::pipelines {
 
 ReadQuery::ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses) : clauses_(plan_query(std::move(clauses))) {}
+
+ReadQuery ReadQuery::clone() const {
+    ReadQuery res;
+    res.columns = columns;
+    res.row_range = row_range;
+    res.row_filter = row_filter;
+    res.needs_post_processing = needs_post_processing;
+    // Deep copy clauses as processing pipeline modifies them (e.g. attaching ComponentManager)
+    res.clauses_ = util::reserve_vector<std::shared_ptr<Clause>>(clauses_.size());
+    std::ranges::transform(clauses_, std::back_inserter(res.clauses_), [](const std::shared_ptr<Clause>& clause) {
+        return std::make_shared<Clause>(*clause);
+    });
+    return res;
+}
 
 void ReadQuery::add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses) {
     clauses_ = plan_query(std::move(clauses));
