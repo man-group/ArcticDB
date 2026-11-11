@@ -58,8 +58,6 @@ class FileBackedStorageFixture : public ::testing::Test {
         faulty_posix_(std::make_shared<FaultyPosix>()) {
         arcticdb::proto::file_storage::Config cfg;
         cfg.set_dir_path(temp_dir_.get().generic_string());
-        // TODO: Rename the variable as use_mock_os_apis. It's okay to use actual storage, we just inject failures.
-        cfg.set_use_mock_storage_for_testing(true);
 
         // I copied the delim from elsewhere. I don't get it. The default is '.'.
         arcticdb::storage::LibraryPath library_path("test_lib", '/');
