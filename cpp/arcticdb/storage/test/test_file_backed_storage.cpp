@@ -9,9 +9,9 @@
 #include <cerrno>
 #include <gtest/gtest.h>
 
-#include <arcticdb/storage/file_backed/faulty_posix.hpp>
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
 #include <arcticdb/storage/test/common.hpp>
+#include <arcticdb/storage/test/faulty_posix.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/error_code.hpp>
