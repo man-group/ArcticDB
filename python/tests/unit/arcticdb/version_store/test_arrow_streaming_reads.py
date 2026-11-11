@@ -65,6 +65,19 @@ def test_arrow_streaming_reads_with_filter(in_memory_store_factory):
     assert vit == gen.versioned_item()
 
 
+def test_arrow_streaming_reads_with_projection(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_arrow_streaming_reads_with_projection"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q.apply("new_col", q["col"] * 2)
+    gen = lib.read_streaming(sym, query_builder=q)
+    expected_df = pl.from_pandas(pd.DataFrame({"col": np.arange(100), "new_col": np.arange(0, 200, 2)}))
+    for idx, df_slice in enumerate(gen):
+        assert df_slice.equals(expected_df.slice(idx * 10, 10))
+
+
 @pytest.mark.parametrize("call_versioned_item_before_loop", [True, False])
 @pytest.mark.parametrize("prefetch_rows", [None, 0, 7, 13, 20])
 def test_arrow_streaming_reads_io_counts(

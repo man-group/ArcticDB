@@ -69,6 +69,8 @@ void StreamingReadGenerator::fetch_next_slice() {
                             std::make_move_iterator(read_query_copy->clauses_.end())
                     );
                     read_query_copy->clauses_ = std::move(clauses);
+                    // TODO 13346982120: Augment plan_query to merge adjacent RowRange clauses when possible, and then
+                    // call it again here
                 }
                 return read_frame_for_version(
                         engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
