@@ -47,29 +47,30 @@ void StreamingReadGenerator::fetch_next_slice() {
     auto row_range = std::move(row_ranges_.front());
     in_flight_rows_ += row_range.diff();
     row_ranges_.pop_front();
-    // TODO: Make all of this async
-    // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when reading
-    // ahead
-    auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
-    read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
-    auto index_information_copy = std::make_shared<IndexInformation>(
-            std::make_pair(index_information_->index_.first, index_information_->index_.second.clone()), std::nullopt
-    );
-    index_information_copy->column_stats_ = index_information_->column_stats_;
-    auto read_version_output_fut = read_frame_for_version(
-            engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
-    );
-    frame_futs_.emplace_back(
-            std::move(row_range),
-            std::move(read_version_output_fut).thenValueInline([this](auto&& read_version_output) {
+    auto arrow_output_frame_fut =
+            folly::via(&async::cpu_executor(), [this, row_range] {
+                // read_frame_for_version is destructive of IndexInformation. In the case of the index segment, this is
+                // purely through extracting the TSD though, and it does not seem like a hard-requirement for column
+                // stats info either. In addition, column stats at this point are represented by a compressed Segment,
+                // implying this will be decoded again for each slice, which is obviously inefficient. Address all of
+                // these as part of 13346982120.
+                auto index_information_copy = std::make_shared<IndexInformation>(index_information_->clone());
+                // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at once when
+                // reading ahead
+                auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
+                read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
+                return read_frame_for_version(
+                        engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
+                );
+            }).thenValueInline([this](auto&& read_version_output) {
                 auto read_result = create_python_read_result(
                         {},
                         read_options_.output_format_for_frame(),
                         std::move(read_version_output.frame_and_descriptor_)
                 );
                 return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
-            })
-    );
+            });
+    frame_futs_.emplace_back(std::move(row_range), std::move(arrow_output_frame_fut));
 }
 
 void StreamingReadGenerator::prefetch_slices() {
