@@ -44,11 +44,11 @@ ReadResult StreamingReadGenerator::read_result() {
 }
 
 void StreamingReadGenerator::fetch_next_slice() {
-    auto row_range = std::move(row_ranges_.front());
-    in_flight_rows_ += row_range.diff();
-    row_ranges_.pop_front();
+    auto row_slice = std::move(row_slices_.front());
+    in_flight_rows_ += row_slice.row_range_.diff();
+    row_slices_.pop_front();
     auto arrow_output_frame_fut =
-            folly::via(&async::cpu_executor(), [this, row_range] {
+            folly::via(&async::cpu_executor(), [this, row_range = row_slice.row_range_] {
                 // read_frame_for_version is destructive of IndexInformation. In the case of the index segment, this is
                 // purely through extracting the TSD though, and it does not seem like a hard-requirement for column
                 // stats info either. In addition, column stats at this point are represented by a compressed Segment,
@@ -83,11 +83,11 @@ void StreamingReadGenerator::fetch_next_slice() {
                 );
                 return std::get<ArrowOutputFrame>(std::move(read_result.frame_data));
             });
-    frame_futs_.emplace_back(std::move(row_range), std::move(arrow_output_frame_fut));
+    frame_futs_.emplace_back(std::move(row_slice.row_range_), std::move(arrow_output_frame_fut));
 }
 
 void StreamingReadGenerator::prefetch_slices() {
-    while (in_flight_rows_ < *prefetch_rows_ && !row_ranges_.empty()) {
+    while (in_flight_rows_ < *prefetch_rows_ && !row_slices_.empty()) {
         fetch_next_slice();
     }
 }
@@ -95,7 +95,7 @@ void StreamingReadGenerator::prefetch_slices() {
 std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     py::gil_scoped_release release_gil;
     ensure_index_information();
-    if (frame_futs_.empty() && row_ranges_.empty()) {
+    if (frame_futs_.empty() && row_slices_.empty()) {
         return std::nullopt;
     }
     if (!started_) {
@@ -132,10 +132,12 @@ void StreamingReadGenerator::ensure_index_information() {
     index_information_ = fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get();
     pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
     for (const auto& slice_and_key : isr) {
-        if (!row_ranges_.empty() && slice_and_key.slice().rows().first < row_ranges_.back().second) {
+        if (!row_slices_.empty() && slice_and_key.slice().rows().first < row_slices_.back().row_range_.second) {
             break;
         }
-        row_ranges_.emplace_back(slice_and_key.slice().rows());
+        row_slices_.emplace_back(
+                slice_and_key.slice().rows(), slice_and_key.key().start_time(), slice_and_key.key().end_time()
+        );
     }
     prefetch_rows_ = prefetch_rows_.value_or(1'000'000);
 }

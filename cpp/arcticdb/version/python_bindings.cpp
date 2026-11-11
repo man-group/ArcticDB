@@ -572,10 +572,18 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         );
                         if (streaming) {
                             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                    std::is_same_v<decltype(clause), std::shared_ptr<FilterClause>> ||
-                                            std::is_same_v<decltype(clause), std::shared_ptr<ProjectClause>> ||
-                                            std::is_same_v<decltype(clause), std::shared_ptr<RowRangeClause>> ||
-                                            std::is_same_v<decltype(clause), std::shared_ptr<DateRangeClause>>,
+                                    std::is_same_v<
+                                            std::remove_cvref_t<decltype(clause)>,
+                                            std::shared_ptr<FilterClause>> ||
+                                            std::is_same_v<
+                                                    std::remove_cvref_t<decltype(clause)>,
+                                                    std::shared_ptr<ProjectClause>> ||
+                                            std::is_same_v<
+                                                    std::remove_cvref_t<decltype(clause)>,
+                                                    std::shared_ptr<RowRangeClause>> ||
+                                            std::is_same_v<
+                                                    std::remove_cvref_t<decltype(clause)>,
+                                                    std::shared_ptr<DateRangeClause>>,
                                     "read_streaming only supports filter and projection processing operations"
                             );
                         }

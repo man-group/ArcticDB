@@ -35,6 +35,13 @@ class StreamingReadGenerator {
     std::optional<ArrowOutputFrame> next();
 
   private:
+    struct RowSliceInfo {
+        RowRange row_range_;
+        // TODO: What about other index types
+        timestamp start_index_;
+        timestamp end_index_;
+    };
+
     void ensure_index_information();
     void fetch_next_slice();
     void prefetch_slices();
@@ -49,7 +56,7 @@ class StreamingReadGenerator {
     std::optional<uint64_t> prefetch_rows_;
     std::shared_ptr<std::any> handler_data_;
     std::shared_ptr<IndexInformation> index_information_;
-    std::list<RowRange> row_ranges_;
+    std::list<RowSliceInfo> row_slices_;
     std::list<std::pair<RowRange, folly::Future<ArrowOutputFrame>>> frame_futs_;
 };
 } // namespace arcticdb::version_store

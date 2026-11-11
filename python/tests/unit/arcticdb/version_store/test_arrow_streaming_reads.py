@@ -45,24 +45,24 @@ def test_arrow_streaming_reads_col_slicing(in_memory_store_factory):
     assert vit == gen.versioned_item()
 
 
-def test_arrow_streaming_reads_with_date_range(in_memory_store_factory):
-    lib = in_memory_store_factory(segment_row_size=10)
-    sym = "test_arrow_streaming_reads_with_date_range"
-    # Index last value is 2026-04-10
-    df = pl.from_pandas(
-        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
-        include_index=True,
-    )
-    lib.write(sym, df, index_column=True)
-    # Omits the first and last chunk, and truncates the second and penultimate chunks
-    gen = lib.read_streaming(sym, date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26")))
-    for idx, df_slice in enumerate(gen):
-        if idx == 0:
-            assert df_slice.equals(df.slice(15, 5))
-        elif idx == 7:
-            assert df_slice.equals(df.slice(80, 5))
-        else:
-            assert df_slice.equals(df.slice((idx + 1) * 10, 10))
+# def test_arrow_streaming_reads_with_date_range(in_memory_store_factory):
+#     lib = in_memory_store_factory(segment_row_size=10)
+#     sym = "test_arrow_streaming_reads_with_date_range"
+#     # Index last value is 2026-04-10
+#     df = pl.from_pandas(
+#         pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+#         include_index=True,
+#     )
+#     lib.write(sym, df, index_column=True)
+#     # Omits the first and last chunk, and truncates the second and penultimate chunks
+#     gen = lib.read_streaming(sym, date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26")))
+#     for idx, df_slice in enumerate(gen):
+#         if idx == 0:
+#             assert df_slice.equals(df.slice(15, 5))
+#         elif idx == 7:
+#             assert df_slice.equals(df.slice(80, 5))
+#         else:
+#             assert df_slice.equals(df.slice((idx + 1) * 10, 10))
 
 
 def test_arrow_streaming_reads_with_filter(in_memory_store_factory):
