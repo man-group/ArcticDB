@@ -65,7 +65,10 @@ void StreamingReadGenerator::fetch_next_slice() {
                             read_query_copy->clauses_.size() + 1
                     );
                     clauses.emplace_back(std::make_shared<folly::Poly<IClause>>(std::move(row_range_clause)));
-                    clauses.insert(clauses.end(), read_query_copy->clauses_.begin(), read_query_copy->clauses_.end());
+                    for (const auto& clause : read_query_copy->clauses_) {
+                        clauses.emplace_back(std::make_shared<folly::Poly<IClause>>(*clause));
+                    }
+                    read_query_copy->clauses_ = std::move(clauses);
                 }
                 return read_frame_for_version(
                         engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_

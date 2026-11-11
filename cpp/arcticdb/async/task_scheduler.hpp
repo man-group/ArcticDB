@@ -238,11 +238,11 @@ class TaskScheduler {
     using IOSchedulerType = folly::FutureExecutor<folly::IOThreadPoolExecutor>;
 
     explicit TaskScheduler(
-            const std::optional<size_t>& cpu_thread_count = std::nullopt,
-            const std::optional<size_t>& io_thread_count = std::nullopt
+            ARCTICDB_UNUSED const std::optional<size_t>& cpu_thread_count = std::nullopt,
+            ARCTICDB_UNUSED const std::optional<size_t>& io_thread_count = std::nullopt
     ) :
-        cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : get_default_cpu_count()),
-        io_thread_count_(io_thread_count ? *io_thread_count : get_default_io_count(cpu_thread_count_)),
+        cpu_thread_count_(1),
+        io_thread_count_(1),
         cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")),
         io_exec_(io_thread_count_, std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started)) {
         util::check(
