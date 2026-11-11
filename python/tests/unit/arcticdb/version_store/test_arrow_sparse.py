@@ -18,7 +18,7 @@ import polars as pl
 from polars.testing import assert_frame_equal as polars_assert_frame_equal
 
 from arcticdb import concat
-from arcticdb.options import LibraryOptions, OutputFormat
+from arcticdb.options import ArrowOutputStringFormat, LibraryOptions, OutputFormat
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow_for_sparse
 from arcticdb.version_store.processing import QueryBuilder
@@ -1076,6 +1076,8 @@ def test_sparse_arrow_many_rows(
 ):
     # Segments longer than a BitMagic block (65,536 rows), so the sparse maps have several blocks of every kind:
     # independent nulls give bit blocks, the null run in the middle GAP blocks
+    if any_arrow_string_format == ArrowOutputStringFormat.SMALL_STRING and arrow_output_format == OutputFormat.POLARS:
+        pytest.skip("Polars output does not support SMALL_STRING")
     num_rows = 150_003
     lib = in_memory_store_factory(segment_row_size=140_000)
     lib.set_arrow_string_format_default(any_arrow_string_format)

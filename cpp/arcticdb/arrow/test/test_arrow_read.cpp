@@ -316,9 +316,10 @@ std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
         }
     }
     // A segment with no stored values still decodes with a (empty) sparse map
-    if (!column.opt_sparse_map().has_value())
+    if (stored_count == 0)
         column.opt_sparse_map() = util::BitMagic();
-    column.sparse_map().optimize();
+    if (column.opt_sparse_map().has_value())
+        column.sparse_map().optimize();
     column.set_row_data(static_cast<ssize_t>(num_rows) - 1);
     return {std::move(column), std::move(expected)};
 }
