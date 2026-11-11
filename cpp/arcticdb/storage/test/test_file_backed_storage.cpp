@@ -100,9 +100,6 @@ TEST_F(FileStorageApi, WritesAreVisibleAndReadable) {
     auto result = storage().read(entity::VariantKey{key}, {});
     ASSERT_EQ(std::get<StringId>(result.atom_key().id()), STREAM_ID);
     ASSERT_TRUE(segments_are_identical(segment, result.segment()));
-
-    storage().remove(entity::VariantKey{key}, {});
-    ASSERT_FALSE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
 }
 
 TEST_F(FileStorageApi, KeyNotFoundException) {
@@ -110,20 +107,30 @@ TEST_F(FileStorageApi, KeyNotFoundException) {
     ASSERT_THROW(storage().read(entity::VariantKey{key}, {}), storage::KeyNotFoundException);
 }
 
+TEST_F(FileStorageApi, KeyDeletion) {
+    auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
+    storage().write(storage::KeySegmentPair(entity::VariantKey{key}, storage::get_test_segment()));
+    ASSERT_TRUE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
+
+    storage().remove(entity::VariantKey{key}, {});
+    ASSERT_FALSE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
+    ASSERT_THROW(storage().remove(entity::VariantKey{key}, {}), storage::KeyNotFoundException);
+}
+
+// An early bug in file path generation led to files being overwritten. Write a few different segments
+// to four files and then try to reread them and match them to original data.
 TEST_F(FileStorageApi, KeysDoNotCollide) {
-    // An early bug in file path generation led to files being overwritten. Write a few different segments
-    // to four files and then try to reread them and match them to original data.
-    const std::array<Segment, 4> segments{
+    static const std::array<Segment, 4> segments{
             storage::get_test_segment(10),
             storage::get_test_segment(20),
             storage::get_test_segment(30),
             storage::get_test_segment(40)
     };
-    const std::array<entity::AtomKey, 4> keys = {
-            arcticdb::atom_key_builder().content_hash(0).build(STREAM_ID, entity::KeyType::TABLE_DATA),
-            arcticdb::atom_key_builder().content_hash(1).build(STREAM_ID, entity::KeyType::TABLE_INDEX),
-            arcticdb::atom_key_builder().content_hash(2).build(STREAM_ID, entity::KeyType::VERSION),
-            arcticdb::atom_key_builder().content_hash(3).build(STREAM_ID, entity::KeyType::VERSION_REF)
+    static const std::array<entity::AtomKey, 4> keys = {
+            arcticdb::atom_key_builder().build(STREAM_ID, entity::KeyType::TABLE_DATA),
+            arcticdb::atom_key_builder().build(STREAM_ID, entity::KeyType::TABLE_INDEX),
+            arcticdb::atom_key_builder().build(STREAM_ID, entity::KeyType::VERSION),
+            arcticdb::atom_key_builder().build(STREAM_ID, entity::KeyType::VERSION_REF)
     };
     for (size_t i = 0; i < segments.size(); ++i)
         storage().write(storage::KeySegmentPair(entity::VariantKey{keys[i]}, segments[i].clone()));
@@ -171,7 +178,7 @@ class FaultInjection : public FileBackedStorageFixture, public ::testing::WithPa
     }
 };
 
-TEST_P(FaultInjection, NoSideEffect) {
+TEST_P(FaultInjection, QuotaExceededNoSideEffect) {
     Segment segment{storage::get_test_segment()};
     ASSERT_THROW(
             storage().write(storage::KeySegmentPair(storage::get_test_key(STREAM_ID), segment.clone())),
