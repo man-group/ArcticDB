@@ -67,6 +67,8 @@ class FileBackedStorageFixture : public ::testing::Test {
     }
 
     void TearDown() override {
+        ASSERT_EQ(storage().get_num_temporary_files(), 0) << "Temporary files were not cleaned up.";
+
         // TODO: This is really difficult to ensure.
         // ASSERT_EQ(faulty_posix_->num_open_file_descriptors(), 0);
     }
@@ -185,8 +187,6 @@ TEST_P(FaultInjection, QuotaExceededNoSideEffect) {
             QuotaExceededException
     );
     ASSERT_FALSE(exists_in_store(storage(), STREAM_ID));
-    const size_t num_lingering_temporaries = storage().get_num_temporary_files();
-    ASSERT_EQ(num_lingering_temporaries, 0) << "Temporary files were not cleaned up.";
 }
 
 INSTANTIATE_TEST_SUITE_P(
