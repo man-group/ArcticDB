@@ -75,6 +75,23 @@ Column
 - `is_sparse()` / `sparse_map()` - Sparse column support
 - `change_type(target)` - Type modification
 
+### Sparse Columns and Arrow Output
+
+A sparse column stores only its present values, densely, plus a BitMagic `sparse_map_` of the rows that have one
+(nullable columns written from Arrow are stored this way). Reading one into Arrow never walks the map one bit at a
+time:
+
+- `bitset_to_packed_bits` (`util/bitset.cpp`) exports the map as an Arrow validity bitmap a BitMagic block (65,536
+  bits) at a time: bit blocks are copied (BitMagic's 32-bit words have Arrow's LSB-first layout on little-endian),
+  full blocks are all ones, GAP blocks are converted, empty blocks stay zero.
+- Numeric columns (`decode_or_expand`, `pipeline/read_frame.cpp`) are scattered from the dense values with
+  `util::expand_dense_buffer_using_bitmap_words` (`util/sparse_utils.hpp`), a 64-row word at a time over that
+  bitmap. Null slots get an arbitrary value, which Arrow masks. Pandas output keeps the enumerator-based
+  `expand_dense_buffer_and_promote_type`, which leaves null slots at their default (NaN, NaT, 0).
+- Dynamic-string columns (`encode_dictionary` and `encode_variable_length`, `arrow/arrow_handlers.cpp`) walk the
+  map's words and the dense string-pool offsets together (`for_each_sparse_value`), and take the output validity
+  from the sparse map, clearing only the stored values that are not strings (None, NaN).
+
 ## String Pool
 
 ### Location

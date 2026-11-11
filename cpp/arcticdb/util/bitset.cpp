@@ -8,17 +8,40 @@
 
 #include <arcticdb/util/bitset.hpp>
 
+#include <algorithm>
+#include <bit>
+#include <cstring>
+
 namespace arcticdb {
 
-void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
-    std::memset(dest_ptr, 0, bitset_packed_size_bytes(bv.size()));
-    auto last = bv.end();
-    for (auto en = bv.first(); en != last; ++en) {
-        size_t bit_pos = *en;
-        size_t byte_idx = bit_pos / 8;
-        size_t bit_idx = bit_pos % 8;
-        dest_ptr[byte_idx] |= (uint8_t(1) << bit_idx);
+void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr, size_t num_bits) {
+    // BitMagic's bit blocks are arrays of 32-bit words with bit k of word w at position 32 * w + k, which on a
+    // little-endian host is the same byte layout as Arrow's LSB-first packed bits, so a block can be copied as is
+    static_assert(std::endian::native == std::endian::little);
+    const size_t num_bytes = bitset_packed_size_bytes(num_bits);
+    std::memset(dest_ptr, 0, num_bytes);
+    constexpr size_t block_bytes = bm::gap_max_bits / 8;
+    const auto& blocks = bv.get_blocks_manager();
+    alignas(32) bm::word_t gap_as_bits[bm::set_block_size];
+    for (size_t block = 0; block * block_bytes < num_bytes; ++block) {
+        unsigned i, j;
+        bm::get_block_coord(bm::bvector<>::block_idx_type(block), i, j);
+        // Full blocks come back as FULL_BLOCK_REAL_ADDR, a block of all ones
+        const bm::word_t* bits = blocks.get_block(i, j);
+        if (!bits)
+            continue;
+        if (BM_IS_GAP(bits)) {
+            bm::gap_convert_to_bitset(gap_as_bits, BMGAP_PTR(bits));
+            bits = gap_as_bits;
+        }
+        std::memcpy(dest_ptr + block * block_bytes, bits, std::min(block_bytes, num_bytes - block * block_bytes));
     }
+    if (num_bits % 8 != 0)
+        dest_ptr[num_bytes - 1] &= static_cast<uint8_t>((1u << (num_bits % 8)) - 1);
+}
+
+void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
+    bitset_to_packed_bits(bv, dest_ptr, bv.size());
 }
 
 void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t offset, uint8_t* dest_ptr) {

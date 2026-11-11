@@ -379,9 +379,17 @@ void decode_or_expand(
                 }
                 source_type_desc.visit_tag([&](auto src_tdt) {
                     using SrcType = typename decltype(src_tdt)::DataTypeTag::raw_type;
-                    util::expand_dense_buffer_and_promote_type<SrcType, DestType>(
-                            bv.value(), dense_buffer.data(), dest
-                    );
+                    if (is_arrow) {
+                        std::vector<uint64_t> words((mapping.num_rows_ + 63) / 64);
+                        bitset_to_packed_bits(*bv, reinterpret_cast<uint8_t*>(words.data()), mapping.num_rows_);
+                        util::expand_dense_buffer_using_bitmap_words<SrcType, DestType>(
+                                words.data(), mapping.num_rows_, dense_buffer.data(), dense_num_rows, dest
+                        );
+                    } else {
+                        util::expand_dense_buffer_and_promote_type<SrcType, DestType>(
+                                bv.value(), dense_buffer.data(), dest
+                        );
+                    }
                 });
             });
 

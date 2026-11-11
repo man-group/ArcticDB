@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include <sparrow/record_batch.hpp>
 
 #include <arcticdb/pipeline/column_mapping.hpp>
@@ -274,6 +276,105 @@ TEST_P(ArrowStringColumnRead, Basic) {
         auto value = arrow_arrays[chunk][pos];
         EXPECT_TRUE(value.has_value());
         EXPECT_EQ(std::get<sparrow::nullable<std::string_view>>(value).get(), column_values[row]);
+    }
+}
+
+namespace {
+// A sparse dynamic-string column of `num_rows` rows, `density` of them stored; `runs` stores them in runs (GAP and full
+// BitMagic blocks) rather than independently (bit blocks). Every 37th stored value is not a string. Returns the column
+// and the value each row should read back as
+std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
+        size_t num_rows, double density, bool runs, StringPool& pool, std::mt19937& rng
+) {
+    auto column = Column(
+            TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0}, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
+    );
+    std::vector<std::optional<std::string>> expected(num_rows);
+    std::bernoulli_distribution stored(density);
+    std::uniform_int_distribution<size_t> run_length(1, 5000);
+    bool in_run = stored(rng);
+    size_t run_left = run_length(rng);
+    size_t stored_count = 0;
+    for (size_t row = 0; row < num_rows; ++row) {
+        bool is_stored;
+        if (runs) {
+            if (run_left-- == 0) {
+                in_run = stored(rng);
+                run_left = run_length(rng);
+            }
+            is_stored = in_run;
+        } else {
+            is_stored = stored(rng);
+        }
+        if (!is_stored)
+            continue;
+        if (stored_count++ % 37 == 36) {
+            column.set_scalar(row, not_a_string());
+        } else {
+            expected[row] = fmt::format("s{}", row % 211);
+            column.set_scalar(row, pool.get(*expected[row]).offset());
+        }
+    }
+    // A segment with no stored values still decodes with a (empty) sparse map
+    if (!column.opt_sparse_map().has_value())
+        column.opt_sparse_map() = util::BitMagic();
+    column.sparse_map().optimize();
+    column.set_row_data(static_cast<ssize_t>(num_rows) - 1);
+    return {std::move(column), std::move(expected)};
+}
+} // namespace
+
+TEST_P(ArrowStringColumnRead, SparseColumn) {
+    // Three BitMagic blocks (65536 bits each), the last one partial
+    const size_t num_rows = 150'000;
+    std::mt19937 rng(17);
+    auto handler = ArrowStringHandler();
+    auto read_options = ReadOptions();
+    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
+    const auto source_type = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
+    auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
+    const auto dest_size = data_type_size(dest_type);
+    const std::vector<std::pair<size_t, size_t>> row_ranges{
+            {0, num_rows}, {1, num_rows}, {63, 65'601}, {64, 128}, {70'000, 70'001}, {65'536, num_rows - 3}
+    };
+    for (double density : {0.0, 0.05, 0.5, 0.95, 1.0}) {
+        for (bool runs : {false, true}) {
+            auto pool = std::make_shared<StringPool>();
+            auto [source, expected] = sparse_string_column(num_rows, density, runs, *pool, rng);
+            for (auto [start, end] : row_ranges) {
+                SCOPED_TRACE(fmt::format("density {} runs {} rows [{}, {})", density, runs, start, end));
+                auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
+                allocate_chunked_column(dest, num_rows, num_rows);
+                auto field_wrapper = FieldWrapper(dest_type, "col");
+                auto mapping = ColumnMapping(
+                        source_type,
+                        dest_type,
+                        field_wrapper.field(),
+                        dest_size,
+                        num_rows,
+                        0,
+                        0,
+                        dest_size * num_rows,
+                        0
+                );
+                if (start != 0 || end != num_rows)
+                    mapping.set_truncate(ColumnTruncation{start, end});
+                auto handler_data = std::any{};
+                handler.convert_type(source, dest, mapping, DecodePathData{}, handler_data, pool, read_options);
+                auto arrays = arrow_arrays_from_column(dest, "col");
+                ASSERT_EQ(arrays.size(), 1);
+                ASSERT_EQ(arrays[0].size(), end - start);
+                size_t mismatches = 0;
+                for (size_t row = start; row < end; ++row) {
+                    auto value = arrays[0][row - start];
+                    const bool ok = value.has_value() == expected[row].has_value() &&
+                                    (!value.has_value() ||
+                                     std::get<sparrow::nullable<std::string_view>>(value).get() == *expected[row]);
+                    mismatches += !ok;
+                }
+                EXPECT_EQ(mismatches, 0u);
+            }
+        }
     }
 }
 
