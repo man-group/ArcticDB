@@ -59,6 +59,14 @@ void StreamingReadGenerator::fetch_next_slice() {
                 // reading ahead
                 auto read_query_copy = std::make_shared<ReadQuery>(*read_query_);
                 read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
+                if (!read_query_copy->clauses_.empty()) {
+                    RowRangeClause row_range_clause{row_range.first, row_range.second};
+                    auto clauses = util::reserve_vector<std::shared_ptr<folly::Poly<IClause>>>(
+                            read_query_copy->clauses_.size() + 1
+                    );
+                    clauses.emplace_back(std::make_shared<folly::Poly<IClause>>(std::move(row_range_clause)));
+                    clauses.insert(clauses.end(), read_query_copy->clauses_.begin(), read_query_copy->clauses_.end());
+                }
                 return read_frame_for_version(
                         engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
                 );

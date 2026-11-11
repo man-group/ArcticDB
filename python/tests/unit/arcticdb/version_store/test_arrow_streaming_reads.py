@@ -11,17 +11,10 @@ import pandas as pd
 import polars as pl
 import pytest
 
+from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticNativeException
-
-#
-# from arcticdb import QueryBuilder
-# from arcticdb.exceptions import InternalException, NoSuchVersionException, SchemaException, UserInputException
-# from arcticdb.options import OutputFormat
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import config_context, query_stats_operation_count
-
-# from arcticdb.version_store import TimeFrame
-# from arcticdb_ext.storage import KeyType
 
 
 @pytest.mark.parametrize("prefetch_rows", [None, 0, 20])
@@ -47,6 +40,26 @@ def test_arrow_streaming_reads_col_slicing(in_memory_store_factory):
     gen = lib.read_streaming(sym)
     for idx, df_slice in enumerate(gen):
         assert df_slice.equals(df.slice(idx * 10, 10))
+    vit = lib.read(sym)
+    vit.data = None
+    assert vit == gen.versioned_item()
+
+
+def test_arrow_streaming_reads_with_filter(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_arrow_streaming_reads_with_filter"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["col"] < 25]
+    gen = lib.read_streaming(sym, query_builder=q)
+    for idx, df_slice in enumerate(gen):
+        if idx < 2:
+            assert df_slice.equals(df.slice(idx * 10, 10))
+        elif idx == 2:
+            assert df_slice.equals(df.slice(20, 5))
+        else:
+            assert not len(df_slice)
     vit = lib.read(sym)
     vit.data = None
     assert vit == gen.versioned_item()
