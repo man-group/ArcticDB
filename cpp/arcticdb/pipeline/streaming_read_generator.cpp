@@ -145,6 +145,29 @@ void StreamingReadGenerator::ensure_index_information() {
                 slice_and_key.slice().rows(), slice_and_key.key().start_time(), slice_and_key.key().end_time()
         );
     }
+    read_query_->convert_to_positive_row_filter(isr.tsd().total_rows());
+    // TODO: Use get_if
+    if (std::holds_alternative<RowRange>(read_query_->row_filter)) {
+        auto row_filter = std::get<RowRange>(read_query_->row_filter);
+        // TODO: Make this more efficient
+        for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
+            if (row_slice->row_range_.second <= row_filter.first) {
+                row_slice = to_process_.erase(row_slice);
+            } else if (row_slice->row_range_.first >= row_filter.second) {
+                row_slice = to_process_.erase(row_slice);
+            } else if (row_slice->row_range_.first <= row_filter.first &&
+                       row_filter.first < row_slice->row_range_.second) {
+                row_slice->row_range_.first = row_filter.first;
+                ++row_slice;
+            } else if (row_slice->row_range_.first < row_filter.second &&
+                       row_filter.second <= row_slice->row_range_.second) {
+                row_slice->row_range_.second = row_filter.second;
+                ++row_slice;
+            } else {
+                ++row_slice;
+            }
+        }
+    }
     prefetch_rows_ = prefetch_rows_.value_or(1'000'000);
 }
 } // namespace arcticdb::version_store
