@@ -77,6 +77,10 @@ std::string generate_tmp_file_name() {
     return ss.str();
 }
 
+fs::path get_key_subpath(const VariantKey& key) {
+    return fs::path(entity::key_type_long_name(variant_key_type(key))) / to_tokenized_key(key);
+}
+
 bool is_tmp_file_name(std::string_view file_name) noexcept { return file_name.starts_with(TMP_FILE_PREFIX); }
 bool is_silly_rename(std::string_view file_name) noexcept { return file_name.starts_with(SILLY_RENAME_FILE_PREFIX); }
 
@@ -316,12 +320,10 @@ class DirCloser {
     DIR* dirp_;
 };
 
-Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, VariantKey&& variant_key) {
+Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
     std::shared_ptr<Buffer> buffer;
     try {
-        const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
-        const fs::path dest_path =
-                storage_dir / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
+        const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
         File file(posix, storage_dir, dest_path, O_RDONLY | O_CLOEXEC, 0);
         // TODO: This try is wrong. read_all() can throw. That's not a KeyNotFoundException. And we wouldn't close().
         buffer = file.read_all();
@@ -330,6 +332,15 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, VariantKey
         throw storage::KeyNotFoundException(variant_key);
     }
     return Segment::from_buffer(buffer);
+}
+
+bool remove_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
+    const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
+    if (posix.unlink(dest_path.c_str()) < 0) {
+        // TODO: Special error handling? Retry?
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -446,49 +457,33 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
 }
 
 void FileBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
-    const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
-    const fs::path dest_path =
-            storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
-    int res = posix_->unlink(dest_path.c_str());
-    if (res) {
-        if (errno == ENOENT) {
-            if (!opts.ignores_missing_key_)
-                throw KeyNotFoundException(variant_key);
-            else
-                log::storage().warn("Failed to delete segment for key {}", variant_key_view(variant_key));
-        }
-        // TODO: Should we retry on some of the errors? e.g. EBUSY should be ignored -> silly rename.
+    const bool success = remove_impl(*posix_, storage_dir_, variant_key);
+    if (!success) {
+        if (!opts.ignores_missing_key_)
+            throw KeyNotFoundException(variant_key);
+        else
+            log::storage().warn("Key intended for deletion does not exist: {}", variant_key_view(variant_key));
     }
 }
 
 void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
-    // TODO: Factor out and reuse this code
     std::vector<VariantKey> failed_deletes;
     for (const VariantKey& variant_key : variant_keys) {
-        const std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
-        const fs::path dest_path =
-                storage_dir_ / entity::key_type_long_name(variant_key_type(variant_key)) / maybe_safe_file_name_for_key;
-        int res = posix_->unlink(dest_path.c_str());
-        if (res) {
-            if (errno == ENOENT) {
-                if (!opts.ignores_missing_key_)
-                    failed_deletes.emplace_back(variant_key);
-                else
-                    log::storage().warn("Failed to delete segment for key {}", variant_key_view(variant_key));
-            }
-            // TODO: Should we retry on some of the errors? e.g. EBUSY should be ignored -> silly rename.
-            //       I think the real bug here is that we just report back that the key is *missing*. It may exist
-            //       and we just be failing to delete. That needs to be reported.
+        const bool success = remove_impl(*posix_, storage_dir_, variant_key);
+        if (!success) {
+            if (!opts.ignores_missing_key_)
+                failed_deletes.emplace_back(variant_key);
+            else
+                log::storage().warn("Key intended for deletion does not exist: {}", variant_key_view(variant_key));
         }
-    }
 
-    if (!failed_deletes.empty())
-        throw KeyNotFoundException(std::move(failed_deletes));
+        if (!failed_deletes.empty())
+            throw KeyNotFoundException(std::move(failed_deletes));
+    }
 }
 
 bool FileBackedStorage::do_key_exists(const VariantKey& key) {
-    const fs::path subpath = fs::path(entity::key_type_long_name(variant_key_type(key))) / to_tokenized_key(key);
-    return exists(*posix_, storage_dir_, subpath);
+    return exists(*posix_, storage_dir_, get_key_subpath(key));
 }
 
 bool FileBackedStorage::do_fast_delete() { throw std::runtime_error("do_fast_delete not implemented"); }
@@ -526,9 +521,7 @@ void FileBackedStorage::do_visit_object_sizes(
     throw std::runtime_error("do_visit_object_sizes() not implemented");
 }
 
-[[nodiscard]] std::string FileBackedStorage::do_key_path(const VariantKey& key [[maybe_unused]]) const {
-    throw std::runtime_error("do_key_path not implemented");
-}
+[[nodiscard]] std::string FileBackedStorage::do_key_path(const VariantKey& key) const { return get_key_subpath(key); }
 
 [[nodiscard]] const std::set<char>& FileBackedStorage::do_unsupported_symbol_chars() const {
     // TODO: Revisit this, it's wrong. Compare with LMDB, think carefully about Windows.
