@@ -245,6 +245,7 @@ set(arcticdb_srcs
         column_store/column.hpp
         column_store/column_algorithms.hpp
         column_store/column_reslicer.hpp
+        column_store/column_with_strings.hpp
         column_store/column_utils.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
@@ -502,6 +503,7 @@ set(arcticdb_srcs
         column_store/column.cpp
         column_store/column_data.cpp
         column_store/column_reslicer.cpp
+        column_store/column_with_strings.cpp
         column_store/column_utils.cpp
         column_store/column_data_random_accessor.cpp
         column_store/key_segment.cpp

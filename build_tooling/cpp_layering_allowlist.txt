@@ -31,7 +31,6 @@ codec -> stream
 codec -> util
 column_store -> entity
 column_store -> pipeline
-column_store -> processing
 column_store -> python
 column_store -> storage
 column_store -> stream
@@ -118,7 +117,6 @@ util -> column_store
 util -> entity
 util -> log
 util -> pipeline
-util -> processing
 util -> storage
 util -> stream
 version -> arrow
