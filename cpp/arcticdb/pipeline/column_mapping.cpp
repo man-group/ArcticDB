@@ -148,6 +148,21 @@ void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate) {
     }
 }
 
+ColumnTruncation segment_truncation(const ColumnMapping& mapping) {
+    auto to_segment_row = [&mapping](std::optional<size_t> row) -> std::optional<size_t> {
+        if (!row)
+            return std::nullopt;
+        util::check(
+                *row >= mapping.first_row_,
+                "Truncation row {} is before the segment's first row {}",
+                *row,
+                mapping.first_row_
+        );
+        return *row - mapping.first_row_;
+    };
+    return {to_segment_row(mapping.truncate_.start_), to_segment_row(mapping.truncate_.end_)};
+}
+
 void create_dense_bitmap(
         size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type
 ) {
