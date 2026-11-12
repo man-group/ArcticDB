@@ -56,7 +56,6 @@ pipeline -> python
 pipeline -> storage
 pipeline -> stream
 pipeline -> util
-pipeline -> version
 processing -> async
 processing -> codec
 processing -> column_store

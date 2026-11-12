@@ -14,7 +14,6 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
-#include <arcticdb/version/version_utils.hpp>
 
 namespace arcticdb::pipelines::index {
 
