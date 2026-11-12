@@ -1,3 +1,7 @@
+import http.client
+import ssl
+import urllib.parse
+
 import botocore.exceptions
 import pytest
 import requests
@@ -81,3 +85,32 @@ def test_s3_has_batch_delete(s3_storage_factory: MotoS3StorageFixtureFactory):
     # Then
     # We're checking that our simulator does handle batch deletes (like AWS does)
     assert [k.key for k in boto_bucket.objects.all()] == []
+
+
+@pytest.mark.parametrize(
+    "factory_name", ["s3_storage_factory", "s3_ssl_disabled_storage_factory", "gcp_storage_factory"]
+)
+def test_mock_server_keeps_connections_alive(factory_name, request):
+    # A server that closes the connection after every response forces a new TCP connection per S3 request. Under
+    # xdist that piles up TIME_WAIT sockets and exhausts the loopback ports on Windows.
+    factory = request.getfixturevalue(factory_name)
+    url = urllib.parse.urlparse(factory.endpoint)
+    if url.scheme == "https":
+        conn = http.client.HTTPSConnection(
+            url.hostname, url.port, context=ssl.create_default_context(cafile=factory.client_cert_file)
+        )
+    else:
+        conn = http.client.HTTPConnection(url.hostname, url.port)
+    try:
+        conn.connect()
+        sock = conn.sock
+        for _ in range(50):
+            conn.request("GET", "/whoami")
+            response = conn.getresponse()
+            response.read()
+            assert response.status == 200
+            assert response.getheader("Connection", "").lower() != "close"
+            assert not response.will_close
+            assert conn.sock is sock
+    finally:
+        conn.close()

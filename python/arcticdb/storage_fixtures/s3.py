@@ -13,6 +13,7 @@ import multiprocessing
 import json
 import os
 import re
+import signal
 import sys
 import platform
 import pprint
@@ -26,7 +27,8 @@ from datetime import datetime
 import requests
 from typing import Optional, Any, Dict, Type
 
-import werkzeug
+import cheroot.ssl.builtin
+import cheroot.wsgi
 import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
 
@@ -906,24 +908,44 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
         return super().__call__(environ, start_response)
 
 
-def run_s3_server(port, key_file, cert_file):
-    werkzeug.run_simple(
-        "0.0.0.0",
-        port,
-        HostDispatcherApplication(create_backend_app),
-        threaded=True,
-        ssl_context=(cert_file, key_file) if cert_file and key_file else None,
+def _serve_moto(app, port, key_file, cert_file):
+    """Serves the moto app with HTTP/1.1 keep-alive.
+
+    werkzeug's development server closes the connection after every response, so every S3 request opens a new TCP
+    connection. Under pytest-xdist the resulting TIME_WAIT sockets exhaust the loopback ports on Windows."""
+
+    def wsgi_app(environ, start_response):
+        # moto matches S3 keys against the undecoded path, which it reads from werkzeug's RAW_URI
+        environ.setdefault("RAW_URI", environ.get("REQUEST_URI", ""))
+        return app(environ, start_response)
+
+    server = cheroot.wsgi.Server(
+        ("0.0.0.0", port),
+        wsgi_app,
+        numthreads=32,
+        request_queue_size=128,
+        # Longer than the clients' own idle limits (curl drops pooled connections after 118s), so that the client
+        # rather than the server retires an idle connection, and a request never races the server closing it.
+        timeout=300,
+        shutdown_timeout=1,
     )
+    server.keep_alive_conn_limit = None
+    if cert_file and key_file:
+        server.ssl_adapter = cheroot.ssl.builtin.BuiltinSSLAdapter(cert_file, key_file)
+    if sys.platform != "win32":
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        server.start()
+    finally:
+        server.stop()
+
+
+def run_s3_server(port, key_file, cert_file):
+    _serve_moto(HostDispatcherApplication(create_backend_app), port, key_file, cert_file)
 
 
 def run_gcp_server(port, key_file, cert_file):
-    werkzeug.run_simple(
-        "0.0.0.0",
-        port,
-        GcpHostDispatcherApplication(create_backend_app),
-        threaded=True,
-        ssl_context=(cert_file, key_file) if cert_file and key_file else None,
-    )
+    _serve_moto(GcpHostDispatcherApplication(create_backend_app), port, key_file, cert_file)
 
 
 def is_server_type(url: str, server_type: str):
