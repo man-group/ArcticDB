@@ -13,6 +13,7 @@ import multiprocessing
 import json
 import os
 import re
+import socket
 import sys
 import platform
 import pprint
@@ -27,6 +28,8 @@ import requests
 from typing import Optional, Any, Dict, Type
 
 import werkzeug
+from werkzeug.serving import WSGIRequestHandler
+from werkzeug.wsgi import LimitedStream
 import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
 
@@ -906,12 +909,57 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
         return super().__call__(environ, start_response)
 
 
+class KeepAliveRequestHandler(WSGIRequestHandler):
+    """werkzeug's dev server closes the connection after every response, so every S3 request opens a new connection
+    and leaves a TIME_WAIT entry behind. Across a test run that exhausts the loopback ports on Windows, and connects
+    then fail with WinError 10048. Keep connections open so that clients reuse them.
+
+    werkzeug closes because http.server does not skip a request body the application left unread, so do that here.
+    After each response werkzeug also reads whatever is waiting on the socket, which on a kept-alive connection would
+    swallow the next request, so it is shown a socket that never has data instead.
+    """
+
+    _never_readable = None
+
+    def make_environ(self):
+        environ = super().make_environ()
+        environ["werkzeug.socket"] = self._connection
+        if not environ.get("wsgi.input_terminated"):
+            environ["wsgi.input"] = LimitedStream(environ["wsgi.input"], int(environ.get("CONTENT_LENGTH") or 0))
+        self._request_body = environ["wsgi.input"]
+        return environ
+
+    def send_header(self, keyword, value):
+        if keyword.lower() == "connection" and value.lower() == "close" and self.request_version == "HTTP/1.1":
+            return
+        super().send_header(keyword, value)
+
+    def run_wsgi(self):
+        if KeepAliveRequestHandler._never_readable is None:
+            KeepAliveRequestHandler._never_readable = socket.socketpair()
+        self._request_body = None
+        self._connection = self.connection
+        self.connection = KeepAliveRequestHandler._never_readable[0]
+        try:
+            super().run_wsgi()
+        finally:
+            self.connection = self._connection
+        if self.close_connection or self._request_body is None:
+            return
+        try:
+            while self._request_body.read(1 << 16):
+                pass
+        except (OSError, ValueError):
+            self.close_connection = True
+
+
 def run_s3_server(port, key_file, cert_file):
     werkzeug.run_simple(
         "0.0.0.0",
         port,
         HostDispatcherApplication(create_backend_app),
         threaded=True,
+        request_handler=KeepAliveRequestHandler,
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
@@ -922,6 +970,7 @@ def run_gcp_server(port, key_file, cert_file):
         port,
         GcpHostDispatcherApplication(create_backend_app),
         threaded=True,
+        request_handler=KeepAliveRequestHandler,
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 

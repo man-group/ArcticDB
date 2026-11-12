@@ -1,3 +1,7 @@
+import http.client
+import ssl
+from urllib.parse import urlsplit
+
 import botocore.exceptions
 import pytest
 import requests
@@ -31,6 +35,32 @@ def test_rate_limit(s3_storage_factory: MotoS3StorageFixtureFactory):  # Don't n
 
     # Then working again
     requests.head(s3.endpoint, verify=s3.client_cert_file).raise_for_status()
+
+
+def test_mock_server_keeps_connections_alive(s3_storage_factory: MotoS3StorageFixtureFactory):
+    # A connection per request leaves a TIME_WAIT entry per request, which exhausts loopback ports on Windows CI
+    endpoint = urlsplit(s3_storage_factory.endpoint)
+    if endpoint.scheme == "https":
+        conn = http.client.HTTPSConnection(endpoint.hostname, endpoint.port, context=ssl._create_unverified_context())
+    else:
+        conn = http.client.HTTPConnection(endpoint.hostname, endpoint.port)
+    local_addresses = []
+
+    def send(method, path, body=None, headers={}):
+        conn.request(method, path, body, headers)
+        local_addresses.append(conn.sock.getsockname())
+        response = conn.getresponse()
+        return response.status, response.read()
+
+    try:
+        assert send("GET", "/whoami") == (200, b"Moto AWS S3")
+        # Rejected before the body is read, so the server must skip the body to find the next request
+        status, _ = send("PUT", "/bucket/key", b"x" * 100_000, {"x-amz-checksum-mode": "enabled"})
+        assert status == 411
+        assert send("GET", "/whoami") == (200, b"Moto AWS S3")
+    finally:
+        conn.close()
+    assert len(set(local_addresses)) == 1, local_addresses
 
 
 @SKIP_CONDA_MARK
