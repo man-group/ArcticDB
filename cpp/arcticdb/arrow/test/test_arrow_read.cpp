@@ -323,18 +323,36 @@ std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
     column.set_row_data(static_cast<ssize_t>(num_rows) - 1);
     return {std::move(column), std::move(expected)};
 }
+
+// Converts a dynamic-string column of num_rows rows, the only segment of its frame, to Arrow
+Column convert_to_arrow(
+        const Column& source, size_t num_rows, const std::shared_ptr<StringPool>& pool, ArrowOutputStringFormat format,
+        std::optional<ColumnTruncation> truncation = std::nullopt
+) {
+    auto handler = ArrowStringHandler();
+    auto read_options = ReadOptions();
+    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = format});
+    const auto source_type = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
+    auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
+    const auto dest_size = data_type_size(dest_type);
+    auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
+    allocate_chunked_column(dest, num_rows, num_rows);
+    auto field_wrapper = FieldWrapper(dest_type, "col");
+    auto mapping = ColumnMapping(
+            source_type, dest_type, field_wrapper.field(), dest_size, num_rows, 0, 0, dest_size * num_rows, 0
+    );
+    if (truncation)
+        mapping.set_truncate(*truncation);
+    auto handler_data = std::any{};
+    handler.convert_type(source, dest, mapping, DecodePathData{}, handler_data, pool, read_options);
+    return dest;
+}
 } // namespace
 
 TEST_P(ArrowStringColumnRead, SparseColumn) {
     // Three BitMagic blocks (65536 bits each), the last one partial
     const size_t num_rows = 150'000;
     std::mt19937 rng(17);
-    auto handler = ArrowStringHandler();
-    auto read_options = ReadOptions();
-    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
-    const auto source_type = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
-    auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
-    const auto dest_size = data_type_size(dest_type);
     const std::vector<std::pair<size_t, size_t>> row_ranges{
             {0, num_rows},
             {1, num_rows},
@@ -350,24 +368,13 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
             auto [source, expected] = sparse_string_column(num_rows, density, runs, *pool, rng);
             for (auto [start, end] : row_ranges) {
                 SCOPED_TRACE(fmt::format("density {} runs {} rows [{}, {})", density, runs, start, end));
-                auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
-                allocate_chunked_column(dest, num_rows, num_rows);
-                auto field_wrapper = FieldWrapper(dest_type, "col");
-                auto mapping = ColumnMapping(
-                        source_type,
-                        dest_type,
-                        field_wrapper.field(),
-                        dest_size,
+                auto dest = convert_to_arrow(
+                        source,
                         num_rows,
-                        0,
-                        0,
-                        dest_size * num_rows,
-                        0
+                        pool,
+                        output_string_format(),
+                        start != 0 || end != num_rows ? std::optional(ColumnTruncation{start, end}) : std::nullopt
                 );
-                if (start != 0 || end != num_rows)
-                    mapping.set_truncate(ColumnTruncation{start, end});
-                auto handler_data = std::any{};
-                handler.convert_type(source, dest, mapping, DecodePathData{}, handler_data, pool, read_options);
                 auto arrays = arrow_arrays_from_column(dest, "col");
                 ASSERT_EQ(arrays.size(), 1);
                 ASSERT_EQ(arrays[0].size(), end - start);
@@ -388,28 +395,17 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
 TEST_P(ArrowStringColumnRead, SparseMapWithMoreBitsThanValues) {
     // A corrupt segment: its sparse map claims more stored values than the column holds
     const size_t num_rows = 1'000;
-    auto handler = ArrowStringHandler();
-    auto read_options = ReadOptions();
-    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
-    const auto source_type = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
-    auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
-    const auto dest_size = data_type_size(dest_type);
     auto pool = std::make_shared<StringPool>();
-    auto source = Column(source_type, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    auto source = Column(
+            TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0}, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
+    );
     for (size_t row = 0; row < num_rows; row += 10)
         source.set_scalar(static_cast<ssize_t>(row), pool->get(fmt::format("s{}", row)).offset());
     source.set_row_data(static_cast<ssize_t>(num_rows) - 1);
     source.sparse_map().set_range(500, num_rows - 1);
-    auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
-    allocate_chunked_column(dest, num_rows, num_rows);
-    auto field_wrapper = FieldWrapper(dest_type, "col");
-    auto mapping = ColumnMapping(
-            source_type, dest_type, field_wrapper.field(), dest_size, num_rows, 0, 0, dest_size * num_rows, 0
-    );
-    auto handler_data = std::any{};
     // Release builds have no iterator bounds check, so the read itself must reject the map
     try {
-        handler.convert_type(source, dest, mapping, DecodePathData{}, handler_data, pool, read_options);
+        convert_to_arrow(source, num_rows, pool, output_string_format());
         FAIL() << "Expected the read to reject the sparse map";
     } catch (const ArcticException& e) {
         EXPECT_NE(std::string(e.what()).find("more set bits"), std::string::npos) << e.what();
