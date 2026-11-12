@@ -31,6 +31,8 @@
 // TODO: Because of Windows, all my usages of c_str() are bad. They return wchar_t*.
 // TODO: The usages of `to_tokenized_key` need to be reconsidered. They are not compatible with Windows.
 //       due to the use of '*' as separator.
+// TODO: Check that all return values are consistently checked as `... != 0`. It's confusing that sometimes I
+//       check < 0, or I just write if(syscall()) { handle error }.
 #ifndef _WIN32
 #include <fcntl.h>
 #include <linux/limits.h>
@@ -174,9 +176,17 @@ class Directory {
     int fd() const noexcept { return fd_; }
 
     void close() {
-        assert(fd_ >= 0 && "Closing a directory which was already closed");
+        assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
         if (posix_.close(fd_) < 0)
             throw std::system_error(errno, std::generic_category(), fmt::format("Failed to close directory"));
+        fd_ = -1;
+    }
+
+    // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
+    // errors.
+    void close_swallow_errors() {
+        assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
+        (void)posix_.close(fd_);
         fd_ = -1;
     }
 
@@ -207,7 +217,7 @@ class Directory {
 
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
     // errors.
-    void unlinkat_best_effort(const fs::path& pathname) const { ::unlinkat(fd_, pathname.c_str(), 0); }
+    void unlinkat_swallow_errors(const fs::path& pathname) const { ::unlinkat(fd_, pathname.c_str(), 0); }
 
   private:
     PosixInterface& posix_;
@@ -250,9 +260,17 @@ class File {
     ARCTICDB_NO_MOVE_OR_COPY(File);
 
     void close() {
-        assert(fd_ >= 0 && "Closing a file which was already closed");
+        assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
         if (posix_.close(fd_) < 0)
             raise_io_error(errno, fmt::format("Failed to close file"));
+        fd_ = -1;
+    }
+
+    // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
+    // errors.
+    void close_swallow_errors() {
+        assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
+        (void)posix_.close(fd_);
         fd_ = -1;
     }
 
@@ -272,7 +290,9 @@ class File {
 
     std::shared_ptr<arcticdb::Buffer> read_all() const {
         struct stat st;
-        posix_.fstat(fd_, &st);
+        int stat_res = posix_.fstat(fd_, &st);
+        if (stat_res != 0)
+            throw std::system_error(errno, std::generic_category(), "stat failed");
         const size_t buffer_size = st.st_size;
         auto buffer = std::make_shared<arcticdb::Buffer>(buffer_size);
         size_t read = 0;
@@ -282,6 +302,8 @@ class File {
                 read += static_cast<size_t>(n);
             else if (n == 0)
                 throw std::runtime_error(fmt::format("Unexpected EOF after {} of {} bytes", read, buffer_size));
+            // else if (errno == ESTALE)
+            //     throw std::system_error(errno, std::generic_category(), "stale file"); // TODO: retry, not throw
             else if (errno != EINTR)
                 throw std::system_error(errno, std::generic_category(), "read failed");
         }
@@ -309,6 +331,7 @@ class File {
     int fd_;
 };
 
+// TODO: Delete me
 class DirCloser {
   public:
     DirCloser(DIR* dirp) noexcept : dirp_(dirp) {}
@@ -322,16 +345,31 @@ class DirCloser {
 
 Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
     std::shared_ptr<Buffer> buffer;
-    try {
-        const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
-        File file(posix, storage_dir, dest_path, O_RDONLY | O_CLOEXEC, 0);
-        // TODO: This try is wrong. read_all() can throw. That's not a KeyNotFoundException. And we wouldn't close().
-        buffer = file.read_all();
-        file.close();
-    } catch (const std::system_error& e) {
-        throw storage::KeyNotFoundException(variant_key);
+    bool retried_stale = false;
+    while (true) {
+        try {
+            const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
+            File file(posix, storage_dir, dest_path, O_RDONLY | O_CLOEXEC, 0);
+            try {
+                buffer = file.read_all();
+            } catch (const std::system_error& e) {
+                file.close_swallow_errors();
+                if (e.code().value() == ESTALE && !retried_stale) {
+                    retried_stale = true;
+                    continue;
+                } else
+                    throw arcticdb::StorageException(fmt::format("read failed: {}", std::strerror(e.code().value())));
+            }
+            file.close();
+            return Segment::from_buffer(buffer);
+        } catch (const std::system_error& e) {
+            // File failed to open or to close.
+            if (e.code().value() == ENOENT) {
+                throw storage::KeyNotFoundException(variant_key);
+            } else
+                throw arcticdb::StorageException(fmt::format("read failed: {}", std::strerror(e.code().value())));
+        }
     }
-    return Segment::from_buffer(buffer);
 }
 
 bool remove_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
@@ -393,30 +431,39 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
     const fs::path tmp_file_path = storage_dir_ / key_name / tmp_file_name;
     {
+        // TODO: These directory opens can potentially fail too. No test catches that.
         Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
         storage_dir_fd.mkdir(key_name, new_dir_mode_);
         Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
         try {
-            {
-                File tmp_key_fd(
-                        *posix_, key_type_dir_fd, tmp_file_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
-                );
-                size_t segment_size = seg.calculate_size();
-                std::vector<std::uint8_t> buffer(segment_size);
-                seg.write_to(buffer.data());
+            File tmp_key_fd(
+                    *posix_, key_type_dir_fd, tmp_file_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
+            );
+            size_t segment_size = seg.calculate_size();
+            std::vector<std::uint8_t> buffer(segment_size);
+            seg.write_to(buffer.data());
+            try {
                 tmp_key_fd.write_all(*posix_, buffer);
                 tmp_key_fd.sync();
-                tmp_key_fd.close();
+            } catch (...) {
+                tmp_key_fd.close_swallow_errors();
+                throw;
             }
+            tmp_key_fd.close();
         } catch (...) {
-            storage_dir_fd.unlinkat_best_effort(tmp_file_path);
+            // TODO: THIS IS A BUG! The unlinkat should be on the key_type_dir_fd, but since I swallow
+            // errors I don't see it. The tests don't exercise this. Must be because the rename succeeds
+            // and then I misreport it.
+            storage_dir_fd.unlinkat_swallow_errors(tmp_file_path);
+            key_type_dir_fd.close_swallow_errors();
+            storage_dir_fd.close_swallow_errors();
             throw;
         }
         // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
         // No-op on NFS.
         key_type_dir_fd.sync();
-        key_type_dir_fd.close();
-        storage_dir_fd.close();
+        key_type_dir_fd.close_swallow_errors();
+        storage_dir_fd.close_swallow_errors();
     }
     // All file descriptors closed before rename.
     fs::path destination = storage_dir_ / key_name / maybe_safe_file_name_for_key;

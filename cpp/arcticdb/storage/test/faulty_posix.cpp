@@ -43,7 +43,7 @@ int FaultyPosix::open(const char* pathname, int flags, mode_t mode) {
     }
     int res = ::open(pathname, flags, mode);
     if (res >= 0)
-        ++num_open_file_descriptors_;
+        open_file_descriptors_.insert(res);
 
     return res;
 }
@@ -60,16 +60,21 @@ int FaultyPosix::openat(int dirfd, const char* pathname, int flags, mode_t mode)
     }
     int res = ::openat(dirfd, pathname, flags, mode);
     if (res >= 0)
-        ++num_open_file_descriptors_;
+        open_file_descriptors_.insert(res);
 
     return res;
 }
 
 int FaultyPosix::close(int fd) {
     int res = ::close(fd);
-    if (num_open_file_descriptors_ == 0)
-        throw std::runtime_error("Would underflow num_open_file_descriptors_");
-    --num_open_file_descriptors_;
+    auto open_fd_itr = open_file_descriptors_.find(fd);
+    auto stale_fd_itr = stale_file_descriptors_.find(fd);
+    if (open_fd_itr != open_file_descriptors_.end())
+        open_file_descriptors_.erase(fd);
+    else if (stale_fd_itr != stale_file_descriptors_.end())
+        stale_file_descriptors_.erase(fd);
+    else
+        throw std::runtime_error("Closing unknown file descriptor");
     PROPAGATE_FAULT_IF_EXISTS(SyscallId::CLOSE);
 }
 
@@ -134,10 +139,17 @@ void FaultyPosix::inject_fault(SyscallId syscall, std::optional<PosixError> mayb
     faults_[syscall].push(maybe_error);
 }
 
+void FaultyPosix::set_all_open_fds_to_stale() {
+    stale_file_descriptors_.insert(open_file_descriptors_.begin(), open_file_descriptors_.end());
+    open_file_descriptors_.clear();
+}
+
 bool FaultyPosix::uncosumed_faults() const noexcept {
     return !std::ranges::all_of(faults_ | std::ranges::views::values, &std::queue<std::optional<PosixError>>::empty);
 }
 
-size_t FaultyPosix::num_open_file_descriptors() const noexcept { return num_open_file_descriptors_; }
+size_t FaultyPosix::num_open_file_descriptors() const noexcept {
+    return open_file_descriptors_.size() + stale_file_descriptors_.size();
+}
 
 } // namespace arcticdb::storage::file_backed

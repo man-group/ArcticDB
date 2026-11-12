@@ -68,7 +68,7 @@ class FileBackedStorageFixture : public ::testing::Test {
         ASSERT_EQ(storage().get_num_temporary_files(), 0) << "Temporary files were not cleaned up.";
 
         // TODO: This is really difficult to ensure.
-        // ASSERT_EQ(faulty_posix_->num_open_file_descriptors(), 0);
+        ASSERT_EQ(faulty_posix_->num_open_file_descriptors(), 0);
     }
 
     FileBackedStorage& storage() { return *storage_; }
@@ -178,7 +178,9 @@ class FaultInjection : public FileBackedStorageFixture, public ::testing::WithPa
     }
 };
 
-TEST_P(FaultInjection, QuotaExceededNoSideEffect) {
+using QuotaExceeded = FaultInjection;
+
+TEST_P(QuotaExceeded, NoSideEffect) {
     Segment segment{storage::get_test_segment()};
     ASSERT_THROW(
             storage().write(storage::KeySegmentPair(storage::get_test_key(STREAM_ID), segment.clone())),
@@ -188,7 +190,7 @@ TEST_P(FaultInjection, QuotaExceededNoSideEffect) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        FileStorageResilience, FaultInjection,
+        FileStorageResilience, QuotaExceeded,
         testing::Values(
                 FaultParam(SyscallId::WRITE, ENOSPC, "WriteNoSpace"sv),
                 FaultParam(SyscallId::WRITE, EDQUOT, "WriteNoQuota"sv),
@@ -202,4 +204,28 @@ INSTANTIATE_TEST_SUITE_P(
         }
 );
 
+using RetryableFault = FaultInjection;
+
+TEST_P(RetryableFault, Succeeds) {
+    // TODO: This test implementation is identical to WritesAreVisibleAndReadable. Straighten out?
+    Segment segment{storage::get_test_segment()};
+    auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
+    storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
+    ASSERT_TRUE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
+
+    auto result = storage().read(entity::VariantKey{key}, {});
+    ASSERT_EQ(std::get<StringId>(result.atom_key().id()), STREAM_ID);
+    ASSERT_TRUE(segments_are_identical(segment, result.segment()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FileStorageResilience, RetryableFault,
+        testing::Values(
+                FaultParam(SyscallId::READ, ESTALE, "StaleFdOnRead"sv),
+                FaultParam(SyscallId::WRITE, ESTALE, "StaleFdOnWrite"sv)
+        ),
+        [](const testing::TestParamInfo<FaultInjection::ParamType>& info) {
+            return std::string(std::get<2>(info.param));
+        }
+);
 } // namespace

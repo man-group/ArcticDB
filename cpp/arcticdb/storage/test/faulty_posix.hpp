@@ -53,6 +53,7 @@ class FaultyPosix : public PosixInterface {
     // Fault injection API
   public:
     void inject_fault(SyscallId, std::optional<PosixError>);
+    void set_all_open_fds_to_stale();
     bool uncosumed_faults() const noexcept;
     size_t num_open_file_descriptors() const noexcept;
 
@@ -62,7 +63,9 @@ class FaultyPosix : public PosixInterface {
     // TODO: Hmm, how will I tell we opened a temporary file? Need awareness of ".tmp" prefix.
     std::unordered_set<std::filesystem::path> temporary_files_;
     std::unordered_map<SyscallId, std::queue<std::optional<PosixError>>> faults_;
-    size_t num_open_file_descriptors_ = 0;
+    // size_t num_open_file_descriptors_ = 0;
+    std::unordered_set<int> open_file_descriptors_;
+    std::unordered_set<int> stale_file_descriptors_;
 };
 
 } // namespace arcticdb::storage::file_backed
