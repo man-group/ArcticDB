@@ -337,6 +337,7 @@ set(arcticdb_srcs
         processing/expression_context.hpp
         processing/expression_node.hpp
         processing/mem_segment_processing_task.hpp
+        processing/merge_options.hpp
         processing/query_planner.hpp
         processing/sorted_aggregation.hpp
         processing/ternary_utils.hpp
@@ -565,6 +566,7 @@ set(arcticdb_srcs
         processing/schema_combine.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
+        processing/merge_options.cpp
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp
@@ -644,7 +646,6 @@ set(arcticdb_srcs
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
-        version/merge_options.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
         version/version_core.cpp

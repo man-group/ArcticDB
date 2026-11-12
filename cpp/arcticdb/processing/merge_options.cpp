@@ -6,7 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/version/merge_options.hpp>
+#include <arcticdb/processing/merge_options.hpp>
 
 namespace arcticdb {
 bool MergeStrategy::update_only() const {
