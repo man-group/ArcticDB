@@ -237,20 +237,24 @@ inline FilterQuery<ContainerType> create_index_filter(
 
 template<typename ContainerType>
 inline void build_row_read_query_filters(
-        const FilterRange& range, bool dynamic_schema, bool column_groups,
+        const ReadQuery& query, bool dynamic_schema, bool column_groups,
         std::vector<FilterQuery<ContainerType>>& queries
 ) {
     util::variant_match(
-            range,
-            [&](const RowRange& row_range) {
-                queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
-            },
+            query.row_filter,
             [&](const IndexRange& index_range) {
                 if (index_range.specified_) {
                     queries.emplace_back(
                             create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups, true)
                     );
                 }
+            },
+            [](const auto&) {}
+    );
+    util::variant_match(
+            query.row_range,
+            [&](const RowRange& row_range) {
+                queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
             },
             [](const auto&) {}
     );
@@ -294,13 +298,13 @@ void build_col_read_query_filters(
 
 template<typename ContainerType>
 inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
-        const std::shared_ptr<PipelineContext>& pipeline_context, const FilterRange& range, bool dynamic_schema,
+        const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& query, bool dynamic_schema,
         bool column_groups
 ) {
     using namespace arcticdb::pipelines;
     std::vector<FilterQuery<ContainerType>> queries;
 
-    build_row_read_query_filters(range, dynamic_schema, column_groups, queries);
+    build_row_read_query_filters(query, dynamic_schema, column_groups, queries);
     build_col_read_query_filters(pipeline_context, dynamic_schema, column_groups, queries);
 
     return queries;

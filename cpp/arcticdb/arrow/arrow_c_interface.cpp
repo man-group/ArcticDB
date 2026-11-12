@@ -17,6 +17,8 @@ namespace arcticdb {
 
 RecordBatchData::RecordBatchData(ArrowArray array, ArrowSchema schema) : array_(array), schema_(schema) {}
 
+ArrowOutputFrame::ArrowOutputFrame() = default;
+
 ArrowOutputFrame::ArrowOutputFrame(std::vector<sparrow::record_batch>&& data) : data_(std::move(data)) {}
 
 ArrowOutputFrame::~ArrowOutputFrame() = default;

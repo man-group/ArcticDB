@@ -33,6 +33,7 @@
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
+#include <arcticdb/pipeline/streaming_read_generator.hpp>
 
 namespace arcticdb::version_store {
 
@@ -213,6 +214,18 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("index_key"),
                  py::arg("index_seg"),
                  py::arg("column_stats_seg") = nullptr);
+
+    py::class_<StreamingReadGenerator, std::shared_ptr<StreamingReadGenerator>>(version, "StreamingReadGenerator")
+            .def(
+                    "read_result",
+                    [&](StreamingReadGenerator& self) { return adapt_read_df(self.read_result(), nullptr); },
+                    py::call_guard<SingleThreadMutexHolder>(),
+                    "Fetch the index key level information (norm meta, user meta, etc)"
+            )
+            .def("next",
+                 &StreamingReadGenerator::next,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Fetch the next row-slice, and possibly trigger reading of more from disk");
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())
@@ -548,7 +561,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_readwrite("row_filter", &ReadQuery::row_filter)
             .def_readonly("needs_post_processing", &ReadQuery::needs_post_processing)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
-            .def("add_clauses", [](ReadQuery& self, std::vector<ClauseVariant> clauses) {
+            .def("add_clauses", [](ReadQuery& self, std::vector<ClauseVariant> clauses, bool streaming) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 self.needs_post_processing = false;
                 for (auto&& clause : clauses) {
@@ -557,6 +570,23 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 !clause->clause_info().multi_symbol_,
                                 "Multi-symbol clause cannot be used on a single symbol"
                         );
+                        if (streaming) {
+                            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                    std::is_same_v<
+                                            std::remove_cvref_t<decltype(clause)>,
+                                            std::shared_ptr<FilterClause>> ||
+                                            std::is_same_v<
+                                                    std::remove_cvref_t<decltype(clause)>,
+                                                    std::shared_ptr<ProjectClause>> ||
+                                            std::is_same_v<
+                                                    std::remove_cvref_t<decltype(clause)>,
+                                                    std::shared_ptr<RowRangeClause>> ||
+                                            std::is_same_v<
+                                                    std::remove_cvref_t<decltype(clause)>,
+                                                    std::shared_ptr<DateRangeClause>>,
+                                    "read_streaming only supports filter and projection processing operations"
+                            );
+                        }
                         _clauses.emplace_back(std::make_shared<Clause>(*clause));
                     });
                 }
@@ -920,6 +950,26 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         return adapt_read_df(
                                 v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
                                 handler_data.get()
+                        );
+                    },
+                    py::call_guard<SingleThreadMutexHolder>(),
+                    "Read the specified version of the dataframe from the store"
+            )
+            .def(
+                    "read_streaming",
+                    [&](PythonVersionStore& v,
+                        StreamId sid,
+                        const VersionQuery& version_query,
+                        const std::shared_ptr<ReadQuery>& read_query,
+                        const ReadOptions& read_options,
+                        std::optional<uint64_t>
+                                prefetch_rows) {
+                        auto handler_data =
+                                std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(
+                                        read_options.output_format_for_frame()
+                                ));
+                        return v.read_streaming(
+                                sid, version_query, read_query, read_options, prefetch_rows, handler_data
                         );
                     },
                     py::call_guard<SingleThreadMutexHolder>(),

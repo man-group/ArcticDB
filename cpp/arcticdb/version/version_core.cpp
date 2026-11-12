@@ -1672,7 +1672,7 @@ void check_can_perform_processing(
     }
 
     const bool is_query_empty =
-            (!read_query.columns && !read_query.row_range &&
+            (!read_query.columns && std::holds_alternative<std::monostate>(read_query.row_range) &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
     const bool is_pickled = pipeline_context->has_normalization() && pipeline_context->is_pickled();
     const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->is_numpy_array();
@@ -2302,8 +2302,8 @@ void create_column_stats_impl(
 ) {
     using namespace arcticdb::pipelines;
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
-    const bool range_given =
-            read_query->row_range.has_value() || !std::holds_alternative<std::monostate>(read_query->row_filter);
+    const bool range_given = !std::holds_alternative<std::monostate>(read_query->row_range) ||
+                             !std::holds_alternative<std::monostate>(read_query->row_filter);
 
     auto index_future = store->read(versioned_item.key_);
     std::optional<folly::Try<std::pair<VariantKey, SegmentInMemory>>> column_stats_try;
@@ -3018,7 +3018,7 @@ VersionedItem defragment_symbol_data_impl(
     );
 }
 
-static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
+folly::Future<std::shared_ptr<IndexInformation>> fetch_index_and_column_stats(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadQuery& read_query
 ) {
     auto index_future = store->read(versioned_item.key_);
@@ -3040,7 +3040,7 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
             .via(&async::io_executor())
-            .thenValue([vi = versioned_item](auto&& results) -> VersionIdentifier {
+            .thenValue([vi = versioned_item](auto&& results) -> std::shared_ptr<IndexInformation> {
                 auto& [index_try, column_stats_try] = results;
 
                 if (index_try.hasException()) {

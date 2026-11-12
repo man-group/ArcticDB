@@ -269,6 +269,43 @@ class VersionedItem:
         return iter(attr.astuple(self))
 
 
+class StreamingReadGenerator:
+    def __init__(self, nvs, generator_impl):
+        self._nvs = nvs
+        self._generator_impl = generator_impl
+        self._read_result = None
+        self._versioned_item = None
+
+    def _ensure_read_result(self):
+        if self._read_result is None:
+            self._read_result = ReadResult(*self._generator_impl.read_result())
+            self._versioned_item = VersionedItem(
+                symbol=self._read_result.version.symbol,
+                library=self._nvs._library.library_path,
+                data=None,
+                version=self._read_result.version.version,
+                metadata=denormalize_user_metadata(self._read_result.udm, self._nvs._normalizer),
+                host=self._nvs.env,
+                timestamp=self._read_result.version.timestamp,
+            )
+
+    def versioned_item(self):
+        self._ensure_read_result()
+        return self._versioned_item
+
+    def __iter__(self):
+        self._ensure_read_result()
+        return self
+
+    def __next__(self):
+        data = self._generator_impl.next()
+        if data is None:
+            raise StopIteration
+        return self._nvs._adapt_frame_data(
+            data, self._read_result.norm, OutputFormat.POLARS, self._read_result.sort_order
+        )
+
+
 @dataclass
 class VersionedItemWithJoin:
     """
@@ -2263,6 +2300,7 @@ class NativeVersionStore:
         row_range: Tuple[int, int],
         columns: Optional[List[str]],
         query_builder: Optional[QueryBuilder],
+        streaming_read: bool = False,
     ):
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
@@ -2274,7 +2312,7 @@ class NativeVersionStore:
             query_builder.prepend(QueryBuilder().row_range(row_range))
 
         if query_builder is not None:
-            read_query.add_clauses(query_builder.clauses)
+            read_query.add_clauses(query_builder.clauses, streaming_read)
 
         if row_range is not None:
             read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
@@ -2456,11 +2494,17 @@ class NativeVersionStore:
         batch_read_options.set_output_format(output_format_to_internal(output_format))
         return batch_read_options, output_format
 
-    def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
+    def _get_queries(
+        self, as_of, date_range, row_range, columns=None, query_builder=None, streaming_read=False, **kwargs
+    ):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options, output_format = self._get_read_options_and_output_format(**kwargs)
         read_query = self._get_read_query(
-            date_range=date_range, row_range=row_range, columns=columns, query_builder=query_builder
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            streaming_read=streaming_read,
         )
         return version_query, read_options, read_query, output_format
 
@@ -2567,6 +2611,42 @@ class NativeVersionStore:
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
+
+    def read_streaming(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+        prefetch_rows: Optional[int] = None,
+        **kwargs,
+    ) -> StreamingReadGenerator:
+        self._validate_kwargs("read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+
+        implement_read_index = kwargs.get("implement_read_index", False)
+        columns = self._resolve_empty_columns(columns, implement_read_index)
+        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
+        kwargs["output_format"] = OutputFormat.POLARS
+        version_query, read_options, read_query, output_format = self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            streaming_read=True,
+            **kwargs,
+        )
+        check(
+            prefetch_rows is None or prefetch_rows >= 0,
+            "prefetch_rows must be None or a positive integer, received {}",
+            prefetch_rows,
+        )
+
+        generator = self.version_store.read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
+        return StreamingReadGenerator(self, generator)
 
     def rename_columns_arrow_compat(
         self,

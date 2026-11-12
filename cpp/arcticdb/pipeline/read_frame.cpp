@@ -513,14 +513,15 @@ ColumnTruncation get_truncate_range(
                     truncate_rows.start_ = adjusted_row_range.second;
                 }
             },
-            [&truncate_rows, &adjusted_row_range, &first_row_offset](const RowRange& row_filter) {
-                // The row_filter is with respect to global offset. Column truncation works on column row indices.
-                auto row_filter_start = row_filter.first - first_row_offset;
-                auto row_filter_end = row_filter.second - first_row_offset;
-                truncate_rows = get_truncate_range_from_rows(adjusted_row_range, row_filter_start, row_filter_end);
-            },
-            [](const auto&) {
-                // Do nothing
+            [&truncate_rows, &adjusted_row_range, &first_row_offset, &read_query](const auto&) {
+                // TODO: Make less hacky
+                if (std::holds_alternative<RowRange>(read_query.row_range)) {
+                    const auto& row_filter = std::get<RowRange>(read_query.row_range);
+                    // The row_filter is with respect to global offset. Column truncation works on column row indices.
+                    auto row_filter_start = row_filter.first - first_row_offset;
+                    auto row_filter_end = row_filter.second - first_row_offset;
+                    truncate_rows = get_truncate_range_from_rows(adjusted_row_range, row_filter_start, row_filter_end);
+                }
             }
     );
     return truncate_rows;
