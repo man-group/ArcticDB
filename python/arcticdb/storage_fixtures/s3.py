@@ -14,6 +14,7 @@ import json
 import os
 import re
 import signal
+import socket
 import sys
 import platform
 import pprint
@@ -27,6 +28,7 @@ from datetime import datetime
 import requests
 from typing import Optional, Any, Dict, Type
 
+import cheroot.server
 import cheroot.ssl.builtin
 import cheroot.wsgi
 import botocore.exceptions
@@ -908,6 +910,14 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
         return super().__call__(environ, start_response)
 
 
+class _NoDelayHTTPConnection(cheroot.server.HTTPConnection):
+    def __init__(self, server, sock, *args, **kwargs):
+        # Windows does not reliably carry TCP_NODELAY over from the listening socket. Without it, a response written in
+        # several sends stalls on the client's delayed ACK, which is ~200ms per request on a kept-alive connection.
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        super().__init__(server, sock, *args, **kwargs)
+
+
 def _serve_moto(app, port, key_file, cert_file):
     """Serves the moto app with HTTP/1.1 keep-alive.
 
@@ -930,6 +940,7 @@ def _serve_moto(app, port, key_file, cert_file):
         shutdown_timeout=1,
     )
     server.keep_alive_conn_limit = None
+    server.ConnectionClass = _NoDelayHTTPConnection
     if cert_file and key_file:
         server.ssl_adapter = cheroot.ssl.builtin.BuiltinSSLAdapter(cert_file, key_file)
     if sys.platform != "win32":
