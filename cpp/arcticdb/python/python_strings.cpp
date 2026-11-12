@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/python/python_strings.hpp>
+#include <optional>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
@@ -119,6 +120,19 @@ static auto assign_python_strings(
         for (const auto& [offset, count] : unique_counts) {
             const auto sv = get_string_from_pool(offset, string_pool);
             auto obj = StringCreator::create(sv, has_type_conversion);
+            // A corrupt string pool can hold bytes that are invalid for the column's string type
+            // (e.g. invalid UTF-8); the constructor then returns null with a Python error set.
+            // Raise a decode error rather than inc_ref-ing null, releasing what we already built.
+            if (ARCTICDB_UNLIKELY(obj == nullptr)) {
+                PyErr_Clear();
+                for (const auto& [built_offset, built_obj] : py_strings) {
+                    for (size_t c = 0; c < unique_counts.at(built_offset); ++c)
+                        Py_DECREF(built_obj);
+                }
+                codec::raise<ErrorCode::E_DECODE_ERROR>(
+                        "Corrupt segment: invalid string in string pool failed to decode"
+                );
+            }
             for (auto c = 1U; c < count; ++c)
                 inc_ref(obj);
 
@@ -177,6 +191,15 @@ static void assign_strings_shared(
                     obj = shared->second;
                 } else {
                     obj = StringCreator::create(sv, has_type_conversion);
+                    // Invalid bytes in a corrupt pool make the constructor return null; raise
+                    // instead of caching/inc_ref-ing null. References already taken for earlier
+                    // offsets in this call leak on this (corrupt-input-only) path.
+                    if (ARCTICDB_UNLIKELY(obj == nullptr)) {
+                        PyErr_Clear();
+                        codec::raise<ErrorCode::E_DECODE_ERROR>(
+                                "Corrupt segment: invalid string in string pool failed to decode"
+                        );
+                    }
                     shared_map.try_emplace(sv, obj);
                 }
 
@@ -273,8 +296,9 @@ static void process_string_views(
 }
 
 void write_python_dynamic_strings_to_dest(
-        PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping, const StringPool& string_pool,
-        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasMissingValue none_value
+        PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping,
+        const std::shared_ptr<StringPool>& string_pool, const DecodePathData& shared_data,
+        PythonHandlerData& handler_data, PandasMissingValue none_value
 ) {
     util::check(handler_data.is_nan_initialized(), "Got null nan in string reducer");
     util::check(is_py_nan(handler_data.non_owning_nan_handle()), "Got the wrong value in global nan");
@@ -290,6 +314,16 @@ void write_python_dynamic_strings_to_dest(
             target_type
     );
 
+    // An all-None/NaN string column legitimately has no string pool (the encoder omits an empty
+    // pool field). A missing pool is only corruption when the column references a real string.
+    // Guard here so the decode raises instead of dereferencing a null pool and crashing.
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            static_cast<bool>(string_pool) || !column_references_pooled_string(source_column),
+            "Corrupt segment: string column references a missing string pool"
+    );
+    std::optional<StringPool> empty_pool;
+    const StringPool& pool = string_pool ? *string_pool : empty_pool.emplace();
+
     auto is_utf = is_utf_type(slice_value_type(source_type.data_type()));
     const auto has_type_conversion = source_type != target_type;
     process_string_views(
@@ -298,7 +332,7 @@ void write_python_dynamic_strings_to_dest(
             is_utf,
             mapping.num_rows_,
             source_column,
-            string_pool,
+            pool,
             shared_data,
             handler_data,
             none_value

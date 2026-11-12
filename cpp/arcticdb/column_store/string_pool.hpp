@@ -107,6 +107,15 @@ class StringBlock {
     }
 
     [[nodiscard]] const StringHead* const_head_at(position_t pos) const {
+        // pos comes from a stored string column; the buffer's own bound check is debug-only.
+        const auto pool_bytes = data_.buffer().bytes();
+        codec::check<ErrorCode::E_DECODE_ERROR>(
+                pos >= 0 && static_cast<size_t>(pos) <= pool_bytes &&
+                        sizeof(StringHead) <= pool_bytes - static_cast<size_t>(pos),
+                "Corrupt segment: string offset {} is outside the {}-byte string pool",
+                pos,
+                pool_bytes
+        );
         auto data = data_.buffer().internal_ptr_cast<uint8_t>(pos, sizeof(StringHead));
         auto head = reinterpret_cast<const StringHead*>(data);
         data_.buffer().assert_size(pos + StringHead::calc_size(head->size()));

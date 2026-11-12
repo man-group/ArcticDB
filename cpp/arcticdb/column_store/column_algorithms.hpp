@@ -13,8 +13,24 @@
 #include <functional>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/lambda_inlining.hpp>
+#include <arcticdb/util/offset_string.hpp>
 
 namespace arcticdb {
+
+// True if any row of a string-offset column references a real pooled string (i.e. not None/NaN),
+// meaning the column needs a string pool to decode. Short-circuits on the first such row, so it
+// is O(1) for the common non-empty column. An all-None/NaN string column needs no pool.
+inline bool column_references_pooled_string(const Column& column) {
+    auto data = column.data();
+    auto it =
+            data.cbegin<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>();
+    auto end = data.cend<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>();
+    for (; it != end; ++it) {
+        if (is_a_string(static_cast<entity::position_t>(*it)))
+            return true;
+    }
+    return false;
+}
 
 template<typename input_tdt, typename functor>
 requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&

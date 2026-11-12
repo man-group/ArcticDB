@@ -145,52 +145,57 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, 
 
 size_t get_index_field_count(const SegmentInMemory& frame) { return frame.descriptor().index().field_count(); }
 
-const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& data) {
+namespace {
+const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& data, const uint8_t* end) {
     const auto has_magic_numbers = hdr.encoding_version() == EncodingVersion::V2;
     const auto start [[maybe_unused]] = data;
     if (has_magic_numbers)
-        util::check_magic<MetadataMagic>(data);
+        check_magic_bounded<MetadataMagic>(data, end);
 
     if (hdr.has_metadata_field()) {
         auto metadata_size = encoding_sizes::ndarray_field_compressed_size(hdr.metadata_field().ndarray());
         ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of metadata", metadata_size);
+        check_input_available(data, end, metadata_size, "metadata");
         data += metadata_size;
     }
 
     if (has_magic_numbers) {
-        util::check_magic<SegmentDescriptorMagic>(data);
-        data += sizeof(SegmentDescriptor);
-        skip_identifier(data);
-        util::check_magic<DescriptorFieldsMagic>(data);
-    }
-
-    if (hdr.has_descriptor_field()) {
+        skip_descriptor(data, hdr, end);
+    } else if (hdr.has_descriptor_field()) {
         auto descriptor_field_size = encoding_sizes::ndarray_field_compressed_size(hdr.descriptor_field().ndarray());
         ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of descriptor", descriptor_field_size);
+        check_input_available(data, end, descriptor_field_size, "descriptor fields");
         data += descriptor_field_size;
     }
 
     if (has_magic_numbers)
-        util::check_magic<IndexMagic>(data);
+        check_magic_bounded<IndexMagic>(data, end);
 
     if (hdr.has_index_descriptor_field()) {
         auto index_fields_size = encoding_sizes::ndarray_field_compressed_size(hdr.index_descriptor_field().ndarray());
         ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of index descriptor", index_fields_size);
+        check_input_available(data, end, index_fields_size, "index descriptor fields");
         data += index_fields_size;
     }
     ARCTICDB_DEBUG(log::version(), "Skip header fields skipped {} bytes", data - start);
     return data;
 }
 
-const uint8_t* skip_to_string_pool(const SegmentHeader& hdr, const uint8_t* data) {
+// Walks every column field's stored size. Bounding the walk against `end` also bounds every later skip and decode of
+// those columns, since they consume exactly these sizes.
+const uint8_t* skip_to_string_pool(const SegmentHeader& hdr, const uint8_t* data, const uint8_t* end) {
     const uint8_t* output = data;
     const auto& body_fields = hdr.body_fields();
     const auto magic_number_size = hdr.encoding_version() == EncodingVersion::V2 ? sizeof(ColumnMagic) : 0;
-    for (auto i = 0U; i < body_fields.size(); ++i)
-        output += encoding_sizes::field_compressed_size(hdr.body_fields().at(i)) + magic_number_size;
+    for (auto i = 0U; i < body_fields.size(); ++i) {
+        const auto field_size = encoding_sizes::field_compressed_size(body_fields.at(i)) + magic_number_size;
+        check_input_available(output, end, field_size, "column");
+        output += field_size;
+    }
 
     return output;
 }
+} // namespace
 
 void decode_string_pool(
         const SegmentHeader& hdr, const uint8_t*& data, const uint8_t* begin ARCTICDB_UNUSED, const uint8_t* end,
@@ -204,9 +209,15 @@ void decode_string_pool(
 
         // Note that this will decode the entire string pool into a ChunkedBuffer with exactly 1 chunk
         if (EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
-            util::check_magic<StringPoolMagic>(data);
+            check_magic_bounded<StringPoolMagic>(data, end);
 
         util::check(hdr.string_pool_field().has_ndarray(), "Expected string pool field to be ndarray");
+        check_input_available(
+                data,
+                end,
+                encoding_sizes::ndarray_field_compressed_size(hdr.string_pool_field().ndarray()),
+                "string pool"
+        );
         data += decode_ndarray(
                 string_pool_descriptor().type(),
                 hdr.string_pool_field().ndarray(),
@@ -380,7 +391,7 @@ void decode_or_expand(
                 source_type_desc.visit_tag([&](auto src_tdt) {
                     using SrcType = typename decltype(src_tdt)::DataTypeTag::raw_type;
                     util::expand_dense_buffer_and_promote_type<SrcType, DestType>(
-                            bv.value(), dense_buffer.data(), dest
+                            bv.value(), dense_buffer.data(), dense_num_rows, dest, dest_bytes / sizeof(DestType)
                     );
                 });
             });
@@ -634,7 +645,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
     const uint8_t* end = begin + seg.buffer().bytes();
     auto& hdr = seg.header();
     auto index_fieldcount = get_index_field_count(frame);
-    data = skip_heading_fields(hdr, data);
+    data = skip_heading_fields(hdr, data, end);
     context.set_descriptor(seg.descriptor());
     context.set_compacted(hdr.compacted());
     ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.descriptor().field_count());
@@ -645,7 +656,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
     // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
     // in storage as they can be reconstructed in the type handler on the read path.
     if (data != end || !fields.empty()) {
-        auto string_pool_data = skip_to_string_pool(hdr, data);
+        auto string_pool_data = skip_to_string_pool(hdr, data, end);
         decode_string_pool(hdr, string_pool_data, begin, end, context);
 
         auto& index_field = fields.at(0u);
@@ -747,7 +758,7 @@ void decode_into_frame_dynamic(
     const uint8_t* end = begin + seg.buffer().bytes();
     auto& hdr = seg.header();
     auto index_fieldcount = get_index_field_count(frame);
-    data = skip_heading_fields(hdr, data);
+    data = skip_heading_fields(hdr, data, end);
     context.set_descriptor(std::make_shared<StreamDescriptor>(seg.descriptor()));
     context.set_compacted(hdr.compacted());
 
@@ -755,7 +766,7 @@ void decode_into_frame_dynamic(
     const bool has_magic_numbers = encoding_version == EncodingVersion::V2;
 
     if (!hdr.body_fields().empty()) {
-        auto string_pool_data = skip_to_string_pool(hdr, data);
+        auto string_pool_data = skip_to_string_pool(hdr, data, end);
         decode_string_pool(hdr, string_pool_data, begin, end, context);
 
         const auto& fields = hdr.body_fields();

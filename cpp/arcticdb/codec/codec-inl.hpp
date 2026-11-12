@@ -18,6 +18,7 @@
 #include <arcticdb/codec/magic_words.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
+#include <arcticdb/codec/input_bounds.hpp>
 #include <type_traits>
 
 namespace arcticdb {
@@ -137,10 +138,27 @@ std::size_t decode_ndarray(
 
         if (field.sparse_map_bytes()) {
             util::check(!is_empty_type(type_desc_tag.data_type()), "Empty typed columns should not have sparse map");
+            codec::check<ErrorCode::E_DECODE_ERROR>(
+                    field.sparse_map_bytes() >= util::combined_bit_magic_delimiters_size(),
+                    "Corrupt segment: sparse map size {} is smaller than its delimiters",
+                    field.sparse_map_bytes()
+            );
             util::check_magic<util::BitMagicStart>(data_in);
             const auto bitmap_size = field.sparse_map_bytes() - util::combined_bit_magic_delimiters_size();
             bv = util::deserialize_bytes_to_bitmap(data_in, bitmap_size);
             util::check_magic<util::BitMagicEnd>(data_in);
+            if constexpr (TD::DimensionTag::value == Dimension::Dim0) {
+                // Each set bit addresses one stored dense value; more set bits than values would make consumers
+                // read past the decoded data.
+                const auto set_bits = bv->count();
+                const auto stored_values = data_size / sizeof(T);
+                codec::check<ErrorCode::E_DECODE_ERROR>(
+                        set_bits <= stored_values,
+                        "Corrupt segment: sparse map has {} set bits but only {} values are stored",
+                        set_bits,
+                        stored_values
+                );
+            }
             data_sink.set_allow_sparse(Sparsity::PERMITTED);
         }
 
@@ -160,6 +178,16 @@ std::size_t decode_ndarray(
         );
     });
     return read_bytes;
+}
+
+// The bytes decode_field will consume for this field (V2 column magic plus shapes, values and sparse map, all sizes
+// read from the stored encoded field) must fit in the remaining input.
+inline void check_encoded_field_input_available(
+        const EncodedFieldImpl& field, const std::uint8_t* input, const std::uint8_t* end,
+        EncodingVersion encoding_version, std::string_view what
+) {
+    const size_t magic_size = encoding_version != EncodingVersion::V1 ? sizeof(ColumnMagic) : 0;
+    check_input_available(input, end, magic_size + encoding_sizes::field_compressed_size(field), what);
 }
 
 template<class DataSink>

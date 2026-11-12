@@ -23,8 +23,9 @@ class StringPool;
 inline PythonHandlerData& cast_handler_data(std::any& any) { return std::any_cast<PythonHandlerData&>(any); }
 
 void write_python_dynamic_strings_to_dest(
-        PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping, const StringPool& string_pool,
-        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasMissingValue none_value
+        PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping,
+        const std::shared_ptr<StringPool>& string_pool, const DecodePathData& shared_data,
+        PythonHandlerData& handler_data, PandasMissingValue none_value
 );
 
 } // namespace arcticdb
