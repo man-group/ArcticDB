@@ -168,7 +168,8 @@ class Directory {
     }
 
     ~Directory() {
-        // TODO: Check if the file descriptor hasn't been closed
+        if (fd_ >= 0)
+            close_swallow_errors();
     }
 
     ARCTICDB_NO_MOVE_OR_COPY(Directory);
@@ -177,9 +178,10 @@ class Directory {
 
     void close() {
         assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
-        if (posix_.close(fd_) < 0)
-            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to close directory"));
+        int true_fd = fd_;
         fd_ = -1;
+        if (posix_.close(true_fd) != 0)
+            raise_io_error(errno, "Failed to close directory");
     }
 
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
@@ -254,16 +256,18 @@ class File {
     }
 
     ~File() {
-        // TODO: log if the file handle hasn't been closed?
+        if (fd_ >= 0)
+            close_swallow_errors();
     }
 
     ARCTICDB_NO_MOVE_OR_COPY(File);
 
     void close() {
         assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
-        if (posix_.close(fd_) < 0)
-            raise_io_error(errno, fmt::format("Failed to close file"));
+        int true_fd = fd_;
         fd_ = -1;
+        if (posix_.close(true_fd) != 0)
+            raise_io_error(errno, fmt::format("Failed to close file"));
     }
 
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
@@ -350,21 +354,14 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
         try {
             const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
             File file(posix, storage_dir, dest_path, O_RDONLY | O_CLOEXEC, 0);
-            try {
-                buffer = file.read_all();
-            } catch (const std::system_error& e) {
-                file.close_swallow_errors();
-                if (e.code().value() == ESTALE && !retried_stale) {
-                    retried_stale = true;
-                    continue;
-                } else
-                    throw arcticdb::StorageException(fmt::format("read failed: {}", std::strerror(e.code().value())));
-            }
+            buffer = file.read_all();
             file.close();
             return Segment::from_buffer(buffer);
         } catch (const std::system_error& e) {
-            // File failed to open or to close.
-            if (e.code().value() == ENOENT) {
+            if (e.code().value() == ESTALE && !retried_stale) {
+                retried_stale = true;
+                continue;
+            } else if (e.code().value() == ENOENT) {
                 throw storage::KeyNotFoundException(variant_key);
             } else
                 throw arcticdb::StorageException(fmt::format("read failed: {}", std::strerror(e.code().value())));
@@ -424,57 +421,44 @@ std::string FileBackedStorage::name() const { return fmt::format("file_backed_st
 void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     std::string maybe_safe_file_name_for_key = to_tokenized_key(key_seg.variant_key());
     Segment& seg = *key_seg.segment_ptr();
-    // TODO: With bucketizer, may have to create new directories with O_CREAT. Essential to set the directory
-    // permissions.
-
     const std::string tmp_file_name = generate_tmp_file_name();
     const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
     const fs::path tmp_file_path = storage_dir_ / key_name / tmp_file_name;
     {
-        // TODO: These directory opens can potentially fail too. No test catches that.
         Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
-        storage_dir_fd.mkdir(key_name, new_dir_mode_);
-        Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
         try {
+            storage_dir_fd.mkdir(key_name, new_dir_mode_);
+            Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
             File tmp_key_fd(
                     *posix_, key_type_dir_fd, tmp_file_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
             );
             size_t segment_size = seg.calculate_size();
             std::vector<std::uint8_t> buffer(segment_size);
             seg.write_to(buffer.data());
-            try {
-                tmp_key_fd.write_all(*posix_, buffer);
-                tmp_key_fd.sync();
-            } catch (...) {
-                tmp_key_fd.close_swallow_errors();
-                throw;
-            }
+            tmp_key_fd.write_all(*posix_, buffer);
+            tmp_key_fd.sync();
             tmp_key_fd.close();
+
+            // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
+            // No-op on NFS.
+            key_type_dir_fd.sync();
+            key_type_dir_fd.close();
+            storage_dir_fd.close();
         } catch (...) {
             // TODO: THIS IS A BUG! The unlinkat should be on the key_type_dir_fd, but since I swallow
             // errors I don't see it. The tests don't exercise this. Must be because the rename succeeds
             // and then I misreport it.
             storage_dir_fd.unlinkat_swallow_errors(tmp_file_path);
-            key_type_dir_fd.close_swallow_errors();
-            storage_dir_fd.close_swallow_errors();
             throw;
         }
-        // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
-        // No-op on NFS.
-        key_type_dir_fd.sync();
-        key_type_dir_fd.close_swallow_errors();
-        storage_dir_fd.close_swallow_errors();
     }
     // All file descriptors closed before rename.
     fs::path destination = storage_dir_ / key_name / maybe_safe_file_name_for_key;
     if (posix_->rename(tmp_file_path.c_str(), destination.c_str())) {
-        const int err = errno;
         ::unlink(tmp_file_path.c_str());
-        throw std::system_error(
-                err,
-                std::generic_category(),
-                fmt::format("Failed to move {} to {}", tmp_file_path.c_str(), destination.c_str())
-        );
+        throw arcticdb::StorageException(fmt::format(
+                "Failed to move {} to {}: {}", tmp_file_path.c_str(), destination.c_str(), std::strerror(errno)
+        ));
     }
 }
 void FileBackedStorage::do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) {
