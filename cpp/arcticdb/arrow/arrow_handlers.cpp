@@ -106,7 +106,8 @@ util::BitSet append_sparse_strings(const Column& column, size_t first_idx, size_
     const size_t first_value = first_idx == 0 ? 0 : sparse_map.count_range(0, util::BitSetSizeType(first_idx - 1));
     const auto value_count = static_cast<size_t>(column.row_count());
     util::check(
-            first_value + validity.count() <= value_count,
+            first_value + sparse_map.count_range(util::BitSetSizeType(first_idx), util::BitSetSizeType(end_idx - 1)) <=
+                    value_count,
             "Sparse map has more set bits than the column's {} values",
             value_count
     );
