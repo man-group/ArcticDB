@@ -387,6 +387,7 @@ set(arcticdb_srcs
         storage/storage_override.hpp
         storage/store.hpp
         storage/storage_utils.hpp
+        stream/de_dup_map.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
         stream/incompletes.hpp

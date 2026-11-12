@@ -12,7 +12,7 @@
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/version/de_dup_map.hpp>
+#include <arcticdb/stream/de_dup_map.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 
 #include <folly/synchronization/NativeSemaphore.h>
