@@ -70,9 +70,9 @@ try:
     from pandas._libs.tslibs.timezones import is_utc as check_is_utc_if_newer_pandas
 except ImportError:
     # not present in pandas==0.22. Safe to remove when all clients upgrade.
-    assert pd.__version__.startswith(
-        "0"
-    ), "is_utc not present in this Pandas - has it been changed in latest Pandas release?"
+    assert pd.__version__.startswith("0"), (
+        "is_utc not present in this Pandas - has it been changed in latest Pandas release?"
+    )
 
     def check_is_utc_if_newer_pandas(*args, **kwargs):
         return False  # the UTC specific issue is not present in old Pandas so no need to go down special case
@@ -1371,7 +1371,13 @@ class MsgPackNormalizer(Normalizer):
     Fall back plan for the time being to store arbitrary data
     """
 
-    def __init__(self, cfg=None):
+    def __init__(self, cfg: VersionStoreConfig.MsgPack | None = None):
+        """
+        Parameters
+        ----------
+        cfg : VersionStoreConfig.MsgPack
+            Is the the VersionStoreConfig.MsgPack protobuf object
+        """
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
     def normalize(self, obj, **kwargs):
@@ -1899,8 +1905,7 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
         data = data[
-            start.to_pydatetime(warn=False)
-            - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
+            start.to_pydatetime(warn=False) - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
             + timedelta(microseconds=1)
         ]
     return data

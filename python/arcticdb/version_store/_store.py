@@ -402,21 +402,35 @@ class NativeVersionStore:
         self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg, runtime_options)
 
     def _init_norm_failure_handler(self):
-        # init normalization failure handler
-        nfh = self._cfg.WhichOneof("norm_failure_handler") if self._cfg is not None else None
-        if nfh is None or nfh == "msg_pack":
-            if nfh is not None:
-                nfh = getattr(self._cfg, nfh, None)
+        normalization_failure_handler = self._get_normalization_failure_handler()
+        use_norm_failure_handler_known_types = (
+            self._cfg.use_norm_failure_handler_known_types if self._cfg is not None else False
+        )
+        self._normalizer = CompositeNormalizer(
+            normalization_failure_handler,
+            use_norm_failure_handler_known_types=use_norm_failure_handler_known_types,
+        )
 
-            use_norm_failure_handler_known_types = (
-                self._cfg.use_norm_failure_handler_known_types if self._cfg is not None else False
-            )
-
-            self._normalizer = CompositeNormalizer(
-                MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
-            )
-        else:
+    def _get_normalization_failure_handler(self):
+        selected_normalization_failure_handler_id = (
+            self._cfg.WhichOneof("norm_failure_handler") if self._cfg is not None else None
+        )
+        if not NativeVersionStore._is_normalization_failure_handler_allowed(selected_normalization_failure_handler_id):
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
+        normalization_failure_handler_options = (
+            None
+            if selected_normalization_failure_handler_id is None
+            else getattr(self._cfg, selected_normalization_failure_handler_id, None)
+        )
+        return MsgPackNormalizer(normalization_failure_handler_options)
+
+    @staticmethod
+    def _is_normalization_failure_handler_allowed(normalization_failure_handler_id):
+        allowed_normalization_failure_handlers = ["msg_pack"]
+        return (
+            normalization_failure_handler_id is None
+            or normalization_failure_handler_id in allowed_normalization_failure_handlers
+        )
 
     def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None, runtime_options=None):
         self._library = library
