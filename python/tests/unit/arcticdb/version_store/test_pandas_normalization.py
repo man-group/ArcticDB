@@ -197,6 +197,36 @@ def test_unnamed_index_sets_fake_name(in_memory_version_store, series_or_df):
     _assert_df_or_series_roundtrip(lib, sym, obj)
 
 
+def _write_with_cleared_index_name(lib, sym, obj):
+    """Write ``obj`` with its stored index name cleared and ``fake_name`` left unset."""
+    udm, item, norm_meta = lib._try_normalize(sym, obj, None, False, None, None)
+    common = getattr(norm_meta, norm_meta.WhichOneof("input_type")).common
+    common.index.name = ""
+    assert not common.index.fake_name
+    lib.version_store.write_versioned_dataframe(sym, item, norm_meta, udm, False, False, False)
+
+
+@pytest.mark.parametrize("series_or_df", ["df", "series"])
+@pytest.mark.parametrize("operation", ["update", "append"])
+def test_cleared_index_name_takes_descriptor_name(in_memory_version_store, series_or_df, operation):
+    lib = in_memory_version_store
+    sym = "test_cleared_index_name_takes_descriptor_name"
+    index = pd.date_range("2025-01-01", periods=6, name="Date")
+    full = _build_df_or_series(series_or_df, index)
+    _write_with_cleared_index_name(lib, sym, full.iloc[:3])
+    assert lib.read(sym).data.index.name == "Date"
+
+    if operation == "update":
+        lib.update(sym, full.iloc[2:])
+    else:
+        lib.append(sym, full.iloc[3:])
+    _assert_df_or_series_roundtrip(lib, sym, full)
+
+    renamed = _build_df_or_series(series_or_df, index.rename("Other"))
+    with pytest.raises(SchemaException):
+        getattr(lib, operation)(sym, renamed.iloc[5:])
+
+
 @pytest.mark.parametrize("series_or_df", ["df", "series"])
 def test_index_name_int(in_memory_version_store, series_or_df):
     """An integer index name sets ``is_int`` so it is cast back to int on read."""

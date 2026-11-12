@@ -102,18 +102,28 @@ struct PandasName {
     // Owned rather than a view, so that mutating the protobuf it came from cannot dangle it.
     std::string name{};
 
-    // A faked name is a placeholder for "this index has no name".
-    static PandasName of_index(const PandasIndex& index) {
-        return {.has_name = !index.fake_name(), .is_int = index.is_int(), .name = index.name()};
+    // A faked name is a placeholder for "this index has no name". A stored index with an empty name that is not faked
+    // reads back under its descriptor field name, so that is its name.
+    static PandasName of_index(const PandasIndex& index, std::optional<std::string_view> field_name) {
+        const bool has_name = !index.fake_name();
+        const bool named_by_field = has_name && index.name().empty() && field_name.has_value();
+        return {.has_name = has_name,
+                .is_int = index.is_int(),
+                .name = named_by_field ? std::string{*field_name} : index.name()};
     }
 
     // A multi-index records its unnamed levels in fake_field_pos rather than with a fake_name flag. Only level 0 has
-    // a name and an is_int flag of its own; the rest are named by their descriptor field alone.
-    static PandasName of_multi_index_level_0(const PandasMultiIndex& multi_index) {
+    // a name and an is_int flag of its own; the rest are named by their descriptor field alone. As for a single
+    // index, an empty level 0 name that is not faked reads back under the descriptor field name.
+    static PandasName of_multi_index_level_0(
+            const PandasMultiIndex& multi_index, std::optional<std::string_view> field_name
+    ) {
         const auto& unnamed = multi_index.fake_field_pos();
-        return {.has_name = std::ranges::find(unnamed, 0u) == unnamed.end(),
+        const bool has_name = std::ranges::find(unnamed, 0u) == unnamed.end();
+        const bool named_by_field = has_name && multi_index.name().empty() && field_name.has_value();
+        return {.has_name = has_name,
                 .is_int = multi_index.is_int(),
-                .name = multi_index.name()};
+                .name = named_by_field ? std::string{*field_name} : multi_index.name()};
     }
 
     // A Series name is never an integer. A client older than the has_name field wrote the name without setting it and
@@ -927,10 +937,20 @@ std::optional<NormalizationMetadata> pandas_metadata(const NormalizationMetadata
     return is_pandas_convertible_to_arrow(norm) ? std::optional{norm} : std::nullopt;
 }
 
+// The descriptor field holding index level 0, if there is one.
+std::optional<std::string_view> index_field_name(const OutputSchema& schema, const RequiredFieldInfo& info) {
+    if (info.num_physical_indices == 0 || schema.stream_descriptor().field_count() == 0) {
+        return std::nullopt;
+    }
+    return schema.stream_descriptor().field(0).name();
+}
+
 void add_normalization_name_mismatches(
-        const NormalizationMetadata& base, const NormalizationMetadata& other, const RequiredFieldInfo& info,
+        const OutputSchema& base_schema, const OutputSchema& other_schema, const RequiredFieldInfo& info,
         RequiredNameMismatches& mismatches
 ) {
+    const auto& base = base_schema.norm_metadata_;
+    const auto& other = other_schema.norm_metadata_;
     const auto* base_common = pandas_common(base);
     const auto* other_common = pandas_common(other);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -947,10 +967,12 @@ void add_normalization_name_mismatches(
         return;
     }
 
+    const auto base_field = index_field_name(base_schema, info);
+    const auto other_field = index_field_name(other_schema, info);
     if (info.has_multi_index) {
         if (const auto error = compare_pandas_names(
-                    PandasName::of_multi_index_level_0(base_common->multi_index()),
-                    PandasName::of_multi_index_level_0(other_common->multi_index())
+                    PandasName::of_multi_index_level_0(base_common->multi_index(), base_field),
+                    PandasName::of_multi_index_level_0(other_common->multi_index(), other_field)
             )) {
             mismatches.add_index(0, true, *error);
         }
@@ -960,7 +982,8 @@ void add_normalization_name_mismatches(
             }
         }
     } else if (const auto error = compare_pandas_names(
-                       PandasName::of_index(base_common->index()), PandasName::of_index(other_common->index())
+                       PandasName::of_index(base_common->index(), base_field),
+                       PandasName::of_index(other_common->index(), other_field)
                )) {
         mismatches.add_index(0, false, *error);
     }
@@ -1035,7 +1058,7 @@ RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, c
                 plan.info.num_physical_indices,
                 other_info.num_physical_indices
         );
-        add_normalization_name_mismatches(base.norm_metadata_, other.norm_metadata_, plan.info, plan.name_mismatches);
+        add_normalization_name_mismatches(base, other, plan.info, plan.name_mismatches);
     }
 
     const auto required_fields = plan.info.num_physical_required_columns();
