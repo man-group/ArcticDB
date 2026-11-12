@@ -8,6 +8,7 @@
 
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 
 #include <aws/s3/S3Client.h>
 

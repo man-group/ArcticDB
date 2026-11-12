@@ -335,6 +335,7 @@ set(arcticdb_srcs
         processing/schema_combine.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        processing/mem_segment_processing_task.hpp
         processing/query_planner.hpp
         processing/sorted_aggregation.hpp
         processing/ternary_utils.hpp

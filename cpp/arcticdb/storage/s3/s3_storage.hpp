@@ -10,6 +10,7 @@
 
 #include <aws/sts/STSClient.h>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_retry_strategy.hpp>

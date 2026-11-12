@@ -99,7 +99,6 @@ stream -> column_store
 stream -> entity
 stream -> log
 stream -> pipeline
-stream -> processing
 stream -> python
 stream -> storage
 stream -> util
