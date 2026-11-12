@@ -90,7 +90,7 @@ void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr, size_t nu
 
 // Calls f(position) for each set bit in [from, to) of a packed bitmap read as 64-bit words
 template<typename F>
-void for_each_set_bit(const uint64_t* words, size_t from, size_t to, F&& f) {
+void for_each_set_bit(const uint64_t* words, size_t from, size_t to, F f) {
     if (from >= to)
         return;
     const size_t first_word = from / 64;

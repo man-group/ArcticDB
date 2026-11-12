@@ -89,7 +89,7 @@ namespace {
 // Calls f(row, value) for each row in [first_idx, end_idx) set in a sparse column's map, with its stored value. Walks
 // the map as packed 64-bit words and the dense values block by block, instead of a BitMagic enumerator per value
 template<typename TDT, typename F>
-void for_each_sparse_value(const Column& column, size_t first_idx, size_t end_idx, F&& f) {
+void for_each_sparse_value(const Column& column, size_t first_idx, size_t end_idx, F f) {
     const auto& sparse_map = column.sparse_map();
     std::vector<uint64_t> words((end_idx + 63) / 64);
     bitset_to_packed_bits(sparse_map, reinterpret_cast<uint8_t*>(words.data()), end_idx);
@@ -336,7 +336,7 @@ void encode_dictionary(
                                                          }
                                                  )
                                                  .first;
-                            bytes += entry->second.str.size();
+                            bytes += static_cast<int64_t>(entry->second.str.size());
                             unique_offsets_in_order.push_back(offset);
                             ++unique_offset_count;
                             return entry->second.offset_buffer_pos_;

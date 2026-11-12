@@ -309,10 +309,10 @@ std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
         if (!is_stored)
             continue;
         if (stored_count++ % 37 == 36) {
-            column.set_scalar(row, not_a_string());
+            column.set_scalar(static_cast<ssize_t>(row), not_a_string());
         } else {
             expected[row] = fmt::format("s{}", row % 211);
-            column.set_scalar(row, pool.get(*expected[row]).offset());
+            column.set_scalar(static_cast<ssize_t>(row), pool.get(expected[row].value()).offset());
         }
     }
     // A segment with no stored values still decodes with a (empty) sparse map
@@ -369,8 +369,8 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
                 for (size_t row = start; row < end; ++row) {
                     auto value = arrays[0][row - start];
                     const bool ok = value.has_value() == expected[row].has_value() &&
-                                    (!value.has_value() ||
-                                     std::get<sparrow::nullable<std::string_view>>(value).get() == *expected[row]);
+                                    (!value.has_value() || std::get<sparrow::nullable<std::string_view>>(value).get() ==
+                                                                   expected[row].value());
                     mismatches += !ok;
                 }
                 EXPECT_EQ(mismatches, 0u);
@@ -397,7 +397,7 @@ TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
         auto pool = std::make_shared<StringPool>();
         auto first = Column(source_type, 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
         for (size_t row = 0; row < first_segment_rows; ++row)
-            first.set_scalar(row, pool->get(fmt::format("f{}", row % 13)).offset());
+            first.set_scalar(static_cast<ssize_t>(row), pool->get(fmt::format("f{}", row % 13)).offset());
         auto [second, expected] = [&]() -> std::pair<Column, std::vector<std::optional<std::string>>> {
             if (sparse)
                 return sparse_string_column(num_rows, 0.5, false, *pool, rng);
@@ -405,7 +405,7 @@ TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
             std::vector<std::optional<std::string>> values(num_rows);
             for (size_t row = 0; row < num_rows; ++row) {
                 values[row] = fmt::format("s{}", row % 211);
-                column.set_scalar(row, pool->get(*values[row]).offset());
+                column.set_scalar(static_cast<ssize_t>(row), pool->get(values[row].value()).offset());
             }
             return {std::move(column), std::move(values)};
         }();
@@ -457,7 +457,7 @@ TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
             mismatches +=
                     !(value.has_value() == expected[row].has_value() &&
                       (!value.has_value() ||
-                       std::get<sparrow::nullable<std::string_view>>(value).get() == *expected[row]));
+                       std::get<sparrow::nullable<std::string_view>>(value).get() == expected[row].value()));
         }
         EXPECT_EQ(mismatches, 0u);
     }
