@@ -66,7 +66,9 @@ void expand_dense_buffer_and_promote_type(const BitMagic& bv, const uint8_t* den
     auto src = reinterpret_cast<const SrcType*>(dense_ptr);
     auto dst = reinterpret_cast<DestType*>(expanded_ptr);
     size_t dense_pos = 0;
-    // A BitMagic visitor decodes a block at a time, which is much faster than an enumerator at any density
+    // A BitMagic visitor decodes a block at a time, which is much faster than an enumerator at any density.
+    // The cast is the requested type promotion, also for signed char sources.
+    // NOLINTNEXTLINE(bugprone-signed-char-misuse)
     iterate_over_set_positions(bv, [&](size_t pos) { dst[pos] = static_cast<DestType>(src[dense_pos++]); });
 }
 
