@@ -348,15 +348,14 @@ class DirCloser {
 };
 
 Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
-    std::shared_ptr<Buffer> buffer;
+    const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
     bool retried_stale = false;
     while (true) {
         try {
-            const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
             File file(posix, storage_dir, dest_path, O_RDONLY | O_CLOEXEC, 0);
-            buffer = file.read_all();
+            Segment result = Segment::from_buffer(file.read_all());
             file.close();
-            return Segment::from_buffer(buffer);
+            return result;
         } catch (const std::system_error& e) {
             if (e.code().value() == ESTALE && !retried_stale) {
                 retried_stale = true;
@@ -505,6 +504,7 @@ void FileBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
     }
 }
 
+// TODO: Need unit test for multi-key removal and exception handling.
 void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
     std::vector<VariantKey> failed_deletes;
     for (const VariantKey& variant_key : variant_keys) {
@@ -515,10 +515,9 @@ void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts
             else
                 log::storage().warn("Key intended for deletion does not exist: {}", variant_key_view(variant_key));
         }
-
-        if (!failed_deletes.empty())
-            throw KeyNotFoundException(std::move(failed_deletes));
     }
+    if (!failed_deletes.empty())
+        throw KeyNotFoundException(std::move(failed_deletes));
 }
 
 bool FileBackedStorage::do_key_exists(const VariantKey& key) {
