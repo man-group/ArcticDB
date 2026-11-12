@@ -103,8 +103,14 @@ util::BitSet append_sparse_strings(const Column& column, size_t first_idx, size_
     util::BitSet not_strings;
     util::BitSet::bulk_insert_iterator not_strings_inserter(not_strings);
     const auto data = column.data();
-    auto value =
-            data.citerator_at<TDT>(first_idx == 0 ? 0 : sparse_map.count_range(0, util::BitSetSizeType(first_idx - 1)));
+    const size_t first_value = first_idx == 0 ? 0 : sparse_map.count_range(0, util::BitSetSizeType(first_idx - 1));
+    const size_t value_count = data.buffer().bytes() / sizeof(typename TDT::DataTypeTag::raw_type);
+    util::check(
+            first_value + validity.count() <= value_count,
+            "Sparse map has more set bits than the column's {} values",
+            value_count
+    );
+    auto value = data.citerator_at<TDT>(first_value);
     iterate_over_set_positions(sparse_map, first_idx, end_idx, [&](size_t row) {
         if (!append(static_cast<ssize_t>(row), *value))
             not_strings_inserter = util::BitSetSizeType(row);

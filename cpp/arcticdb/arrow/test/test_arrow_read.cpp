@@ -385,6 +385,37 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
     }
 }
 
+TEST_P(ArrowStringColumnRead, SparseMapWithMoreBitsThanValues) {
+    // A corrupt segment: its sparse map claims more stored values than the column holds
+    const size_t num_rows = 1'000;
+    auto handler = ArrowStringHandler();
+    auto read_options = ReadOptions();
+    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
+    const auto source_type = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
+    auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
+    const auto dest_size = data_type_size(dest_type);
+    auto pool = std::make_shared<StringPool>();
+    auto source = Column(source_type, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    for (size_t row = 0; row < num_rows; row += 10)
+        source.set_scalar(static_cast<ssize_t>(row), pool->get(fmt::format("s{}", row)).offset());
+    source.set_row_data(static_cast<ssize_t>(num_rows) - 1);
+    source.sparse_map().set_range(500, num_rows - 1);
+    auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
+    allocate_chunked_column(dest, num_rows, num_rows);
+    auto field_wrapper = FieldWrapper(dest_type, "col");
+    auto mapping = ColumnMapping(
+            source_type, dest_type, field_wrapper.field(), dest_size, num_rows, 0, 0, dest_size * num_rows, 0
+    );
+    auto handler_data = std::any{};
+    // Release builds have no iterator bounds check, so the read itself must reject the map
+    try {
+        handler.convert_type(source, dest, mapping, DecodePathData{}, handler_data, pool, read_options);
+        FAIL() << "Expected the read to reject the sparse map";
+    } catch (const ArcticException& e) {
+        EXPECT_NE(std::string(e.what()).find("more set bits"), std::string::npos) << e.what();
+    }
+}
+
 TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
     // The truncation is in frame rows, so for a segment that does not start the frame it must be shifted before it is
     // applied to the segment's validity bitmap
