@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 
