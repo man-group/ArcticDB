@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import re
 import time
-from multiprocessing import Queue, Process
+import multiprocessing
 
 import pytest
 import pandas as pd
@@ -91,7 +91,7 @@ def test_nfs_backed_s3_storage(lib_name, nfs_clean_bucket):
         assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
 
 
-def read_repeatedly(version_store, queue: Queue):
+def read_repeatedly(version_store, queue):
     while True:
         try:
             version_store.list_versions("tst")
@@ -116,9 +116,12 @@ def test_racing_list_and_delete_nfs(nfs_backed_s3_storage, lib_name):
     lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
     lib.write("tst", [1, 2, 3])
 
-    exceptions_in_reader = Queue()
-    reader = Process(target=read_repeatedly, args=(lib, exceptions_in_reader))
-    writer = Process(target=write_repeatedly, args=(lib,))
+    # Forked children would share the parent's pooled keep-alive connections to the mock, and interleave their requests
+    # on the same sockets
+    ctx = multiprocessing.get_context("spawn")
+    exceptions_in_reader = ctx.Queue()
+    reader = ctx.Process(target=read_repeatedly, args=(lib, exceptions_in_reader))
+    writer = ctx.Process(target=write_repeatedly, args=(lib,))
 
     try:
         reader.start()
