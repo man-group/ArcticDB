@@ -370,9 +370,7 @@ set(arcticdb_srcs
         storage/mock/mongo_mock_client.hpp
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
-        storage/file/file_store.hpp
         storage/file/mapped_file_storage.hpp
-        storage/file/file_store.hpp
         storage/single_file_storage.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_interface.hpp
@@ -466,6 +464,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/admission_handler.hpp
         version/de_dup_map.hpp
+        version/file_store.hpp
         version/op_log.hpp
         version/merge_options.hpp
         version/schema_checks.hpp

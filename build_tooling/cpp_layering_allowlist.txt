@@ -90,7 +90,6 @@ storage -> python
 storage -> stream
 storage -> toolbox
 storage -> util
-storage -> version
 stream -> async
 stream -> codec
 stream -> column_store
