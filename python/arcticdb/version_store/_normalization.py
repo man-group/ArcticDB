@@ -1371,12 +1371,12 @@ class MsgPackNormalizer(Normalizer):
     Fall back plan for the time being to store arbitrary data
     """
 
-    def __init__(self, cfg: VersionStoreConfig.MsgPack | None = None):
+    def __init__(self, cfg: Optional[VersionStoreConfig.MsgPack] = None):
         """
         Parameters
         ----------
         cfg : VersionStoreConfig.MsgPack
-            Is the the VersionStoreConfig.MsgPack protobuf object
+            The VersionStoreConfig.MsgPack protobuf object
         """
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
@@ -1609,22 +1609,9 @@ class CompositeNormalizer(Normalizer):
     def get_normalizer_for_type(self, item):
         # TODO: this should use customcompositenormalizer as well.
         if isinstance(item, DataFrame):
-            if (
-                item.empty
-                and not isinstance(self.df, KnownTypeFallbackOnError)
-                and self.fallback_normalizer is not None
-            ):
-                return KnownTypeFallbackOnError(self.df, self.fallback_normalizer).normalize
             return self.df.normalize
 
         if isinstance(item, Series):
-            if (
-                item.empty
-                and not isinstance(self.series, KnownTypeFallbackOnError)
-                and self.fallback_normalizer is not None
-            ):
-                return KnownTypeFallbackOnError(self.series, self.fallback_normalizer).normalize
-
             return self.series.normalize
 
         if isinstance(item, TimeFrame):

@@ -20,6 +20,7 @@ import dateutil as du
 import pytest
 import pytz
 from arcticdb_ext.types import IndexKind
+from arcticdb.version_store.library import Library
 
 if sys.version_info >= (3, 9):
     import zoneinfo
@@ -255,6 +256,63 @@ def test_empty_df():
         assert_equal(d.index.to_numpy(), D.index.to_numpy())
     D.index = d.index
     assert_frame_equal(d, D)
+
+
+@pytest.mark.parametrize("use_norm_failure_handler_known_types", [True, False])
+@pytest.mark.parametrize("api", ["v1", "v2"])
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(),
+        pd.DataFrame({"a": []}),
+        pd.DataFrame(columns=[None]),
+        pd.DataFrame(columns=[pd.NaT]),
+        pd.DataFrame(columns=[np.nan]),
+    ],
+)
+def test_write_empty_df_to_library_is_not_normalized(
+    in_memory_store_factory, use_norm_failure_handler_known_types, api, df
+):
+    lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types)
+    lib = lib if api == "v1" else Library("test_write_empty_df_to_library_is_not_normalized", lib)
+    lib.write("test", df)
+    is_pickled = lib.is_symbol_pickled("test") if api == "v1" else lib._nvs.is_symbol_pickled("test")
+    assert is_pickled == False
+
+
+@pytest.mark.parametrize("use_norm_failure_handler_known_types", [True, False])
+@pytest.mark.parametrize("api", ["v1", "v2"])
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(columns=[pd.Timestamp("2026-10-10")]),
+        pd.DataFrame([[1.0]], columns=[pd.Timestamp("2026-10-10")]),
+        pd.DataFrame(
+            np.arange(0, 9).reshape(3, 3),
+            index=pd.date_range("2025-01-01", "2025-01-3"),
+            columns=pd.date_range("2025-01-01", "2025-01-3"),
+        ),
+    ],
+    ids=["empty", "non-empty", "multiindex"],
+)
+def test_non_normalizable_column_names_require_pickling(
+    in_memory_store_factory, use_norm_failure_handler_known_types, api, df
+):
+    """
+    When the dataframe contains columns whose name is not normalizable (not a string, int or None) it must be pickled.
+    Make sure that if the global option is not set pickling does not happen. Older version of ArcticDB (pre v7) used
+    to unconditionally allow pickling of empty dataframes with non-normalizable names. V2 API's write allows only
+    msgpack and does not allow python pickling
+    """
+    lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types)
+    assert lib.will_item_be_pickled(df)
+    lib = lib if api == "v1" else Library("test_write_empty_df_to_library_is_not_normalized", lib)
+    is_python_pickling_allowed_on_write = use_norm_failure_handler_known_types and api == "v1"
+    if is_python_pickling_allowed_on_write:
+        lib.write("test", df)
+    else:
+        with pytest.raises(ArcticException, match="normalizing"):
+            lib.write("test", df)
 
 
 timezone_params = [

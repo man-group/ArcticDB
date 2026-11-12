@@ -1081,7 +1081,7 @@ class Library:
         prune_previous_versions: Optional[bool] = None,
         validate_index=True,
         index_column: bool = False,
-        recursive_normalizers: bool = None,
+        recursive_normalizers: Optional[bool] = None,
     ) -> VersionedItem:
         """
         Write ``data`` to the specified ``symbol``.
@@ -1179,12 +1179,13 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w)
         """
-        if not self._allowed_input_type(data):
-            if not self._nvs._is_recursive_normalizers_enabled(**{"recursive_normalizers": recursive_normalizers}):
-                raise ArcticUnsupportedDataTypeException(
-                    "Data is of a type that cannot be normalized. Consider using "
-                    f"write_pickle instead. type(data)=[{type(data)}]"
-                )
+        if not self._allowed_input_type(data) and not self._nvs._is_recursive_normalizers_enabled(
+            recursive_normalizers=recursive_normalizers
+        ):
+            raise ArcticUnsupportedDataTypeException(
+                "Data is of a type that cannot be normalized. Consider using "
+                f"write_pickle instead. type(data)=[{type(data)}]"
+            )
 
         return self._nvs.write(
             symbol=symbol,

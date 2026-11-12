@@ -3787,11 +3787,11 @@ class NativeVersionStore:
                 dynamic_strings=False,  # TODO: Enable it when on by default.
                 coerce_columns=None,
             )
+            result = norm_meta.WhichOneof("input_type") == "msg_pack_frame"
         except Exception:
             # This will also log the exception inside composite normalizer's normalize
             result = True
 
-        result |= norm_meta.WhichOneof("input_type") == "msg_pack_frame"
         log_warning_message = get_config_int("VersionStore.WillItemBePickledWarningMsg") != 0 and log.is_active(
             _LogLevel.WARN
         )
