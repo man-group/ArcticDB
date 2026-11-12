@@ -28,7 +28,6 @@ def set_library_options(
     write_options.fast_tombstone_all = True
     lib_desc.version.symbol_list = True
 
-    write_options.pickle_on_failure = False
     write_options.snapshot_dedup = False
     write_options.delayed_deletes = False
 

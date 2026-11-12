@@ -54,7 +54,8 @@ message VersionStoreConfig {
         bool de_duplication = 8;
         bool dynamic_strings = 9;
         bool recursive_normalizers = 10;
-        bool pickle_on_failure = 11;
+        reserved 11;
+        reserved "pickle_on_failure";
         bool use_tombstones = 12;
         bool delayed_deletes = 13;
         bool allow_sparse = 50;
