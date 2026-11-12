@@ -78,54 +78,23 @@ RC_GTEST_PROP(BitSet, PackedBitsMatchBitByBit, ()) {
     std::vector<uint8_t> packed(bitset_packed_size_bytes(num_bits), 0xAB);
     bitset_to_packed_bits(bitset, packed.data());
     RC_ASSERT(packed == packed_bits_one_at_a_time(bitset, num_bits));
-
-    // A prefix, and more bits than the bitset holds
-    const auto prefix = *rc::gen::inRange(size_t(0), num_bits + 100);
-    std::vector<uint8_t> prefix_packed(bitset_packed_size_bytes(prefix), 0xAB);
-    bitset_to_packed_bits(bitset, prefix_packed.data(), prefix);
-    RC_ASSERT(prefix_packed == packed_bits_one_at_a_time(bitset, prefix));
 }
 
-RC_GTEST_PROP(BitSet, ForEachSetBitMatchesEnumerator, ()) {
-    using namespace arcticdb;
-    const auto num_bits = *rc::gen::element(size_t(1), size_t(64), size_t(65), size_t(65'537), size_t(130'000));
-    const auto bitset = random_bitset(num_bits, *rc::gen::arbitrary<bool>());
-    std::vector<uint64_t> words((num_bits + 63) / 64);
-    bitset_to_packed_bits(bitset, reinterpret_cast<uint8_t*>(words.data()), num_bits);
-    const auto from = *rc::gen::inRange(size_t(0), num_bits + 1);
-    const auto to = *rc::gen::inRange(from, num_bits + 1);
-    std::vector<size_t> visited;
-    for_each_set_bit(words.data(), from, to, [&](size_t pos) { visited.push_back(pos); });
-    std::vector<size_t> expected;
-    for (auto en = bitset.first(); en != bitset.end(); ++en)
-        if (*en >= from && *en < to)
-            expected.push_back(*en);
-    RC_ASSERT(visited == expected);
-}
-
-RC_GTEST_PROP(BitSet, WordWiseExpansionMatchesEnumerator, ()) {
+RC_GTEST_PROP(BitSet, ExpansionMatchesBitByBit, ()) {
     using namespace arcticdb;
     const auto num_rows = *rc::gen::element(size_t(1), size_t(63), size_t(64), size_t(1000), size_t(65'537));
     const auto bitset = random_bitset(num_rows, *rc::gen::arbitrary<bool>());
-    const auto count = bitset.count();
-    std::vector<int32_t> dense(count);
-    for (size_t i = 0; i < count; ++i)
+    std::vector<int32_t> dense(bitset.count());
+    for (size_t i = 0; i < dense.size(); ++i)
         dense[i] = static_cast<int32_t>(i * 7 - 3);
-    std::vector<uint64_t> words((num_rows + 63) / 64);
-    bitset_to_packed_bits(bitset, reinterpret_cast<uint8_t*>(words.data()), num_rows);
-
     std::vector<double> expected(num_rows, -1.0);
-    util::expand_dense_buffer_and_promote_type<int32_t, double>(
-            bitset, reinterpret_cast<const uint8_t*>(dense.data()), reinterpret_cast<uint8_t*>(expected.data())
-    );
+    size_t dense_pos = 0;
+    for (size_t row = 0; row < num_rows; ++row)
+        if (bitset.test(bv_size(row)))
+            expected[row] = dense[dense_pos++];
     std::vector<double> received(num_rows, -1.0);
-    util::expand_dense_buffer_using_bitmap_words<int32_t, double>(
-            words.data(),
-            num_rows,
-            reinterpret_cast<const uint8_t*>(dense.data()),
-            count,
-            reinterpret_cast<uint8_t*>(received.data())
+    util::expand_dense_buffer_and_promote_type<int32_t, double>(
+            bitset, reinterpret_cast<const uint8_t*>(dense.data()), reinterpret_cast<uint8_t*>(received.data())
     );
-    for (auto en = bitset.first(); en != bitset.end(); ++en)
-        RC_ASSERT(received[*en] == expected[*en]);
+    RC_ASSERT(received == expected);
 }

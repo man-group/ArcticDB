@@ -86,23 +86,17 @@ PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& map
 }
 
 namespace {
-// Calls f(row, value) for each row in [first_idx, end_idx) set in a sparse column's map, with its stored value. Walks
-// the map as packed 64-bit words and the dense values block by block, instead of a BitMagic enumerator per value
+// Calls f(row, value) for each row in [first_idx, end_idx) set in a sparse column's map, with its stored value, walking
+// the dense values block by block
 template<typename TDT, typename F>
 void for_each_sparse_value(const Column& column, size_t first_idx, size_t end_idx, F f) {
     const auto& sparse_map = column.sparse_map();
-    std::vector<uint64_t> words((end_idx + 63) / 64);
-    bitset_to_packed_bits(sparse_map, reinterpret_cast<uint8_t*>(words.data()), end_idx);
     size_t dense_idx = first_idx == 0 ? 0 : sparse_map.count_range(0, util::BitSetSizeType(first_idx - 1));
     auto data = column.data();
     auto block = data.template next<TDT>();
     size_t block_start = 0;
-    while (block && dense_idx >= block_start + block->row_count()) {
-        block_start += block->row_count();
-        block = data.template next<TDT>();
-    }
-    size_t block_end = block ? block_start + block->row_count() : block_start;
-    for_each_set_bit(words.data(), first_idx, end_idx, [&](size_t row) {
+    size_t block_end = block ? block->row_count() : 0;
+    iterate_over_set_positions(sparse_map, first_idx, end_idx, [&](size_t row) {
         while (dense_idx >= block_end) {
             util::check(block.has_value(), "Sparse column has fewer values than set bits in its sparse map");
             block_start = block_end;
@@ -114,19 +108,11 @@ void for_each_sparse_value(const Column& column, size_t first_idx, size_t end_id
     });
 }
 
-// The output validity of a sparse string column: its sparse map within [first_idx, end_idx), less the stored values
-// that are not strings
-util::BitSet sparse_string_validity(
-        const util::BitSet& sparse_map, size_t first_idx, size_t end_idx, const std::vector<size_t>& not_strings
-) {
-    util::BitSet validity = sparse_map;
-    if (first_idx > 0)
-        validity.set_range(0, util::BitSetSizeType(first_idx - 1), false);
-    if (end_idx < validity.size())
-        validity.set_range(util::BitSetSizeType(end_idx), validity.size() - 1, false);
-    for (auto row : not_strings)
-        validity.set(util::BitSetSizeType(row), false);
-    return validity;
+// The rows of [first_idx, end_idx) set in a sparse map, copying only the BitMagic blocks in that range
+util::BitSet sparse_map_in_range(const util::BitSet& sparse_map, size_t first_idx, size_t end_idx) {
+    if (first_idx >= end_idx)
+        return util::BitSet();
+    return util::BitSet(sparse_map, util::BitSetSizeType(first_idx), util::BitSetSizeType(end_idx - 1));
 }
 } // namespace
 
@@ -155,49 +141,39 @@ void encode_variable_length(
                 if constexpr (is_sequence_type(source_type_info::data_type)) {
                     if constexpr (is_dynamic_string_type(source_type_info::data_type)) {
                         std::vector<std::string_view> strings;
+                        // Appends the row's string and returns true, or returns false if the value is not a string
+                        auto append = [&](ssize_t row, auto offset) {
+                            if (!is_a_string(offset))
+                                return false;
+                            // According to arrow spec offsets must be monotonic even for null values. Hence, we fill
+                            // missing values up to `row` so that they contain 0 rows in string buffer
+                            while (last_idx <= row)
+                                dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
+                            auto strv = string_pool->get_const_view(offset);
+                            bytes += static_cast<int64_t>(strv.size());
+                            strings.emplace_back(strv);
+                            return true;
+                        };
                         if (!populate_inverted_bitset && string_pool) {
                             const auto first_idx = positions.first_idx_after_truncation.value_or(0);
                             const auto end_idx = positions.end_idx_after_truncation.value_or(mapping.num_rows_);
-                            std::vector<size_t> not_strings;
+                            dest_bitset = sparse_map_in_range(source_column.sparse_map(), first_idx, end_idx);
                             for_each_sparse_value<typename source_type_info::TDT>(
                                     source_column,
                                     first_idx,
                                     end_idx,
                                     [&](size_t row, auto offset) {
-                                        if (!is_a_string(offset)) {
-                                            not_strings.push_back(row);
-                                            return;
-                                        }
-                                        while (last_idx <= static_cast<ssize_t>(row))
-                                            dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
-                                        auto strv = string_pool->get_const_view(offset);
-                                        bytes += strv.size();
-                                        strings.emplace_back(strv);
+                                        if (!append(static_cast<ssize_t>(row), offset))
+                                            dest_bitset.set(util::BitSetSizeType(row), false);
                                     }
                             );
-                            dest_bitset =
-                                    sparse_string_validity(source_column.sparse_map(), first_idx, end_idx, not_strings);
                             return strings;
                         }
                         for_each_enumerated_flattened<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
-                                    if (is_a_string(en.value())) {
-                                        while (last_idx <= en.idx()) {
-                                            // According to arrow spec offsets must be monotonic even for null values.
-                                            // Hence, we fill missing values between `last_idx` and `en.idx` so that
-                                            // they contain 0 rows in string buffer
-                                            dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
-                                        }
-                                        auto strv = string_pool->get_const_view(en.value());
-                                        bytes += strv.size();
-                                        strings.emplace_back(strv);
-                                        if (!populate_inverted_bitset) {
-                                            inserter = en.idx();
-                                        }
-                                    } else if (populate_inverted_bitset) {
+                                    if (append(en.idx(), en.value()) != populate_inverted_bitset)
                                         inserter = en.idx();
-                                    }
                                 },
                                 positions.first_idx_after_truncation,
                                 positions.end_idx_after_truncation
@@ -341,36 +317,34 @@ void encode_dictionary(
                             ++unique_offset_count;
                             return entry->second.offset_buffer_pos_;
                         };
+                        // Writes the row's dictionary key and returns true, or returns false if the value is not a
+                        // string
+                        auto append = [&](ssize_t row, StringPool::offset_t offset) {
+                            if (!is_a_string(offset))
+                                return false;
+                            dest_ptr[row] = key_of(offset);
+                            return true;
+                        };
                         if (!populate_inverted_bitset && string_pool) {
                             const auto first_idx = positions.first_idx_after_truncation.value_or(0);
                             const auto end_idx = positions.end_idx_after_truncation.value_or(mapping.num_rows_);
-                            std::vector<size_t> not_strings;
+                            dest_bitset = sparse_map_in_range(source_column.sparse_map(), first_idx, end_idx);
                             for_each_sparse_value<typename source_type_info::TDT>(
                                     source_column,
                                     first_idx,
                                     end_idx,
                                     [&](size_t row, auto offset) {
-                                        if (is_a_string(offset))
-                                            dest_ptr[row] = key_of(offset);
-                                        else
-                                            not_strings.push_back(row);
+                                        if (!append(static_cast<ssize_t>(row), offset))
+                                            dest_bitset.set(util::BitSetSizeType(row), false);
                                     }
                             );
-                            dest_bitset =
-                                    sparse_string_validity(source_column.sparse_map(), first_idx, end_idx, not_strings);
                             return unique_offsets_view;
                         }
                         for_each_enumerated_flattened<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
-                                    if (is_a_string(en.value())) {
-                                        dest_ptr[en.idx()] = key_of(en.value());
-                                        if (!populate_inverted_bitset) {
-                                            inserter = en.idx();
-                                        }
-                                    } else if (populate_inverted_bitset) {
+                                    if (append(en.idx(), en.value()) != populate_inverted_bitset)
                                         inserter = en.idx();
-                                    }
                                 },
                                 positions.first_idx_after_truncation,
                                 positions.end_idx_after_truncation

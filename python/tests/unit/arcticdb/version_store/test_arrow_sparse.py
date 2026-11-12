@@ -1069,8 +1069,8 @@ def test_sparse_arrow_sort_and_finalize_staged_data(arrow_library, values, mask)
         assert_frame_equal(received, expected)
 
 
-@pytest.mark.parametrize("null_fraction", [0.0, 0.05, 0.5, 0.95, 1.0])
-@pytest.mark.parametrize("row_range", [None, (1, 150_000), (63, 65_601), (70_000, 70_001)])
+@pytest.mark.parametrize("null_fraction", [0.0, 0.05, 0.5, 0.95, 0.999, 1.0])
+@pytest.mark.parametrize("row_range", [None, (1, 150_000), (63, 65_601), (70_000, 70_001), (149_003, 150_003)])
 def test_sparse_arrow_many_rows(
     in_memory_store_factory, any_arrow_string_format, arrow_output_format, null_fraction, row_range
 ):

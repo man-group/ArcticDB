@@ -84,13 +84,15 @@ time:
 - `bitset_to_packed_bits` (`util/bitset.cpp`) exports the map as an Arrow validity bitmap a BitMagic block (65,536
   bits) at a time: bit blocks are copied (BitMagic's 32-bit words have Arrow's LSB-first layout on little-endian),
   full blocks are all ones, GAP blocks are converted, empty blocks stay zero.
-- Numeric columns (`decode_or_expand`, `pipeline/read_frame.cpp`) are scattered from the dense values with
-  `util::expand_dense_buffer_using_bitmap_words` (`util/sparse_utils.hpp`), a 64-row word at a time over that
-  bitmap. Null slots get an arbitrary value, which Arrow masks. Pandas output keeps the enumerator-based
-  `expand_dense_buffer_and_promote_type`, which leaves null slots at their default (NaN, NaT, 0).
-- Dynamic-string columns (`encode_dictionary` and `encode_variable_length`, `arrow/arrow_handlers.cpp`) walk the
-  map's words and the dense string-pool offsets together (`for_each_sparse_value`), and take the output validity
-  from the sparse map, clearing only the stored values that are not strings (None, NaN).
+- Numeric columns (`decode_or_expand`, `pipeline/read_frame.cpp`) are scattered from the dense values by
+  `util::expand_dense_buffer_and_promote_type` (`util/sparse_utils.hpp`), for Arrow and pandas output alike. It uses
+  `iterate_over_set_positions`, a BitMagic visitor that decodes a block at a time (whole runs for full and GAP
+  blocks), so its cost follows the number of present values. Pandas output default-initialises the null slots first
+  (NaN, NaT, 0); Arrow leaves them unset, as its validity bitmap masks them.
+- Dynamic-string columns (`encode_dictionary` and `encode_variable_length`, `arrow/arrow_handlers.cpp`) visit only
+  the requested row range of the map (`for_each_sparse_value`, over `iterate_over_set_positions`) together with the
+  dense string-pool offsets. The output validity is a copy of the sparse map with the stored values that are not
+  strings (None, NaN) cleared; the usual bitmap truncation clips it to the row range.
 
 ## String Pool
 

@@ -10,9 +10,7 @@
 
 #include <arcticdb/util/magic_num.hpp>
 
-#include <bit>
 #include <concepts>
-#include <cstdint>
 #include <type_traits>
 
 #include <bitmagic/bm.h>
@@ -84,27 +82,6 @@ constexpr size_t bitset_packed_size_bytes(size_t num_bits) { return (num_bits + 
 
 // Writes bv's bits as Arrow-style packed bits (LSB first), a BitMagic block at a time
 void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr);
-
-// The first num_bits of bv; bits past bv.size() are zero
-void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr, size_t num_bits);
-
-// Calls f(position) for each set bit in [from, to) of a packed bitmap read as 64-bit words
-template<typename F>
-void for_each_set_bit(const uint64_t* words, size_t from, size_t to, F f) {
-    if (from >= to)
-        return;
-    const size_t first_word = from / 64;
-    const size_t end_word = (to + 63) / 64;
-    for (size_t w = first_word; w < end_word; ++w) {
-        uint64_t word = words[w];
-        if (w == first_word)
-            word &= ~uint64_t(0) << (from % 64);
-        if (w == end_word - 1 && to % 64 != 0)
-            word &= (uint64_t(1) << (to % 64)) - 1;
-        for (; word != 0; word &= word - 1)
-            f(w * 64 + static_cast<size_t>(std::countr_zero(word)));
-    }
-}
 
 void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t offset, uint8_t* dest_ptr);
 

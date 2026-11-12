@@ -20,9 +20,6 @@
 #include <arcticdb/pipeline/value.hpp>
 #include <fmt/ranges.h>
 
-#include <algorithm>
-#include <bit>
-
 #include <bitmagic/bmserial.h>
 
 namespace arcticdb::util {
@@ -69,50 +66,8 @@ void expand_dense_buffer_and_promote_type(const BitMagic& bv, const uint8_t* den
     auto src = reinterpret_cast<const SrcType*>(dense_ptr);
     auto dst = reinterpret_cast<DestType*>(expanded_ptr);
     size_t dense_pos = 0;
-    for (auto en = bv.first(), en_end = bv.end(); en != en_end; ++en, ++dense_pos) {
-        dst[*en] = static_cast<DestType>(src[dense_pos]);
-    }
-}
-
-/// Expand packed source-type values to the set positions of a packed bitmap (64-bit words covering num_rows), casting
-/// to DestType, a word at a time. Positions whose bit is clear also get a value (one of the word's), so this is only
-/// for output whose validity bitmap masks them, such as Arrow.
-template<typename SrcType, typename DestType = SrcType>
-void expand_dense_buffer_using_bitmap_words(
-        const uint64_t* words, size_t num_rows, const uint8_t* dense_ptr, size_t dense_count, uint8_t* expanded_ptr
-) {
-    util::check(dense_ptr != expanded_ptr, "Expansion of dense buffer is not safe inline");
-    auto src = reinterpret_cast<const SrcType*>(dense_ptr);
-    auto dst = reinterpret_cast<DestType*>(expanded_ptr);
-    const size_t full_words = num_rows / 64;
-    size_t set_bits = 0;
-    for (size_t w = 0; w < full_words; ++w)
-        set_bits += std::popcount(words[w]);
-    for_each_set_bit(words, full_words * 64, num_rows, [&set_bits](size_t) { ++set_bits; });
-    util::check(set_bits <= dense_count, "Sparse map has {} set bits but only {} values", set_bits, dense_count);
-    size_t pos = 0;
-    for (size_t w = 0; w < full_words; ++w) {
-        const uint64_t word = words[w];
-        DestType* out = dst + w * 64;
-        const SrcType* in = src + pos;
-        if (word == ~uint64_t(0)) {
-            for (size_t j = 0; j < 64; ++j)
-                out[j] = static_cast<DestType>(in[j]);
-            pos += 64;
-        } else if (word != 0) {
-            // Branchless: clear positions take the next set position's value (or the word's last one)
-            const size_t last = static_cast<size_t>(std::popcount(word)) - 1;
-            size_t k = 0;
-            for (size_t j = 0; j < 64; ++j) {
-                out[j] = static_cast<DestType>(in[std::min(k, last)]);
-                k += (word >> j) & 1;
-            }
-            pos += last + 1;
-        }
-    }
-    for_each_set_bit(words, full_words * 64, num_rows, [&](size_t row) {
-        dst[row] = static_cast<DestType>(src[pos++]);
-    });
+    // A BitMagic visitor decodes a block at a time, which is much faster than an enumerator at any density
+    iterate_over_set_positions(bv, [&](size_t pos) { dst[pos] = static_cast<DestType>(src[dense_pos++]); });
 }
 
 template<typename TagType>

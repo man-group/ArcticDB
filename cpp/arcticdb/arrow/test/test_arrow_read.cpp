@@ -336,9 +336,15 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
     auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
     const auto dest_size = data_type_size(dest_type);
     const std::vector<std::pair<size_t, size_t>> row_ranges{
-            {0, num_rows}, {1, num_rows}, {63, 65'601}, {64, 128}, {70'000, 70'001}, {65'536, num_rows - 3}
+            {0, num_rows},
+            {1, num_rows},
+            {63, 65'601},
+            {64, 128},
+            {70'000, 70'001},
+            {65'536, num_rows - 3},
+            {num_rows - 1'000, num_rows}
     };
-    for (double density : {0.0, 0.05, 0.5, 0.95, 1.0}) {
+    for (double density : {0.0, 0.001, 0.01, 0.05, 0.5, 0.95, 1.0}) {
         for (bool runs : {false, true}) {
             auto pool = std::make_shared<StringPool>();
             auto [source, expected] = sparse_string_column(num_rows, density, runs, *pool, rng);
