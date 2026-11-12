@@ -130,26 +130,40 @@ void StreamingReadGenerator::ensure_index_information() {
                 slice_and_key.slice().rows(), slice_and_key.key().start_time(), slice_and_key.key().end_time()
         );
     }
-    read_query_->convert_to_positive_row_filter(isr.tsd().total_rows());
-    // TODO: Use get_if
-    if (std::holds_alternative<RowRange>(read_query_->row_filter)) {
-        auto row_filter = std::get<RowRange>(read_query_->row_filter);
+    if (auto row_filter = read_query_->convert_to_positive_row_filter(isr.tsd().total_rows()); row_filter.has_value()) {
         // TODO: Make this more efficient
         for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
-            if (row_slice->row_range_.second <= row_filter.first) {
+            if (row_slice->row_range_.second <= row_filter->first) {
                 row_slice = to_process_.erase(row_slice);
-            } else if (row_slice->row_range_.first >= row_filter.second) {
+            } else if (row_slice->row_range_.first >= row_filter->second) {
                 row_slice = to_process_.erase(row_slice);
-            } else if (row_slice->row_range_.first <= row_filter.first &&
-                       row_filter.first < row_slice->row_range_.second) {
-                row_slice->row_range_.first = row_filter.first;
+            } else if (row_slice->row_range_.first <= row_filter->first &&
+                       row_filter->first < row_slice->row_range_.second) {
+                row_slice->row_range_.first = row_filter->first;
                 ++row_slice;
-            } else if (row_slice->row_range_.first < row_filter.second &&
-                       row_filter.second <= row_slice->row_range_.second) {
-                row_slice->row_range_.second = row_filter.second;
+            } else if (row_slice->row_range_.first < row_filter->second &&
+                       row_filter->second <= row_slice->row_range_.second) {
+                row_slice->row_range_.second = row_filter->second;
                 ++row_slice;
             } else {
                 ++row_slice;
+            }
+        }
+    } else if (std::holds_alternative<IndexRange>(read_query_->row_filter)) {
+        auto index_range = std::get<IndexRange>(read_query_->row_filter);
+        if (std::holds_alternative<timestamp>(index_range.start_) &&
+            std::holds_alternative<timestamp>(index_range.end_)) {
+            auto start_ts = std::get<timestamp>(index_range.start_);
+            auto end_ts = std::get<timestamp>(index_range.end_);
+            // TODO: Make this more efficient
+            for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
+                if (row_slice->end_index_ <= start_ts) {
+                    row_slice = to_process_.erase(row_slice);
+                } else if (row_slice->start_index_ > end_ts) {
+                    row_slice = to_process_.erase(row_slice);
+                } else {
+                    ++row_slice;
+                }
             }
         }
     }

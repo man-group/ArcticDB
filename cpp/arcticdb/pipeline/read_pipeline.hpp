@@ -132,7 +132,7 @@ std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_functions(
 ) {
     using namespace arcticdb::pipelines::index;
     get_column_bitset_in_context(query, pipeline_context);
-    return build_read_query_filters<ContainerType>(pipeline_context, query.row_filter, dynamic_schema, column_groups);
+    return build_read_query_filters<ContainerType>(pipeline_context, query, dynamic_schema, column_groups);
 }
 
 } // namespace arcticdb::pipelines

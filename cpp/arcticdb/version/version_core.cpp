@@ -1672,7 +1672,7 @@ void check_can_perform_processing(
     }
 
     const bool is_query_empty =
-            (!read_query.columns && !read_query.row_range &&
+            (!read_query.columns && std::holds_alternative<std::monostate>(read_query.row_range) &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
     const bool is_pickled = pipeline_context->has_normalization() && pipeline_context->is_pickled();
     const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->is_numpy_array();
@@ -2302,8 +2302,8 @@ void create_column_stats_impl(
 ) {
     using namespace arcticdb::pipelines;
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
-    const bool range_given =
-            read_query->row_range.has_value() || !std::holds_alternative<std::monostate>(read_query->row_filter);
+    const bool range_given = !std::holds_alternative<std::monostate>(read_query->row_range) ||
+                             !std::holds_alternative<std::monostate>(read_query->row_filter);
 
     auto index_future = store->read(versioned_item.key_);
     std::optional<folly::Try<std::pair<VariantKey, SegmentInMemory>>> column_stats_try;
