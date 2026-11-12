@@ -937,7 +937,6 @@ jobs:
       SAME: ${{ needs.plan.outputs.aws_same }}
       CROSS: ${{ needs.plan.outputs.aws_cross }}
       CREATED: ${{ needs.plan.outputs.aws_created }}
-      PREFIX: dfpoc-bench/${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: delete the run's objects and bucket
         run: |
@@ -946,7 +945,9 @@ jobs:
           for target in "$SAME" "$CROSS"; do
             [ -n "$target" ] || continue
             IFS=: read -r bucket region prefix <<< "$target"
-            [ "$prefix" = "$PREFIX" ] || { echo "::error::refusing to delete $prefix, not this run's prefix"; rc=1; continue; }
+            # any attempt of this run: a `rerun --failed` keeps plan's outputs from an earlier attempt
+            [[ "$prefix" =~ ^dfpoc-bench/$GITHUB_RUN_ID-[0-9]+$ ]] \
+              || { echo "::error::refusing to delete $prefix, not this run's prefix"; rc=1; continue; }
             if aws s3 rm --region "$region" --recursive --only-show-errors "s3://$bucket/$prefix/"; then
               echo "deleted s3://$bucket/$prefix/"
             else
@@ -955,8 +956,13 @@ jobs:
           done
           if [ -n "$CREATED" ]; then
             IFS=: read -r bucket region <<< "$CREATED"
-            [[ "$bucket" == "arcticdb-dfpoc-$GITHUB_RUN_ID-"* ]] || { echo "::error::refusing to delete $bucket"; exit 1; }
-            if aws s3 rb --region "$region" --force "s3://$bucket"; then echo "deleted bucket s3://$bucket"; else rc=1; fi
+            if [[ ! "$bucket" =~ ^arcticdb-dfpoc-$GITHUB_RUN_ID-[0-9]+$ ]]; then
+              echo "::error::refusing to delete $bucket, not this run's bucket"; rc=1
+            elif aws s3 rb --region "$region" --force "s3://$bucket"; then
+              echo "deleted bucket s3://$bucket"
+            else
+              rc=1
+            fi
           fi
           [ $rc -eq 0 ] || echo "::error::cleanup incomplete: see above for what is left"
           exit $rc
