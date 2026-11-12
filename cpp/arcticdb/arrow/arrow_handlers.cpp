@@ -86,45 +86,29 @@ PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& map
 }
 
 namespace {
-// Calls f(row, value) for each row in [first_idx, end_idx) set in a sparse column's map, with its stored value, walking
-// the dense values block by block
-template<typename TDT, typename F>
-void for_each_sparse_value(const Column& column, size_t first_idx, size_t end_idx, F f) {
-    const auto& sparse_map = column.sparse_map();
-    size_t dense_idx = first_idx == 0 ? 0 : sparse_map.count_range(0, util::BitSetSizeType(first_idx - 1));
-    auto data = column.data();
-    auto block = data.template next<TDT>();
-    size_t block_start = 0;
-    size_t block_end = block ? block->row_count() : 0;
-    iterate_over_set_positions(sparse_map, first_idx, end_idx, [&](size_t row) {
-        while (dense_idx >= block_end) {
-            util::check(block.has_value(), "Sparse column has fewer values than set bits in its sparse map");
-            block_start = block_end;
-            block = data.template next<TDT>();
-            block_end = block ? block_start + block->row_count() : block_start;
-        }
-        f(row, block->data()[dense_idx - block_start]);
-        ++dense_idx;
-    });
-}
-
 // Calls append(row, value) for each stored value of a sparse column in [first_idx, end_idx), and returns the output
 // validity: the sparse map's rows in that range, less those for which append returned false (values that are not
 // strings)
 template<typename TDT, typename F>
 util::BitSet append_sparse_strings(const Column& column, size_t first_idx, size_t end_idx, F append) {
     util::BitSet validity;
-    if (first_idx >= end_idx)
+    const auto& sparse_map = column.sparse_map();
+    if (first_idx >= end_idx ||
+        !sparse_map.any_range(util::BitSetSizeType(first_idx), util::BitSetSizeType(end_idx - 1)))
         return validity;
     util::BitSet range;
     range.set_range(util::BitSetSizeType(first_idx), util::BitSetSizeType(end_idx - 1));
     // Unlike BitSet's range constructor, this does not copy the blocks after the range
-    validity.bit_and(column.sparse_map(), range, util::BitSet::opt_none);
+    validity.bit_and(sparse_map, range, util::BitSet::opt_none);
     util::BitSet not_strings;
     util::BitSet::bulk_insert_iterator not_strings_inserter(not_strings);
-    for_each_sparse_value<TDT>(column, first_idx, end_idx, [&](size_t row, auto value) {
-        if (!append(static_cast<ssize_t>(row), value))
+    const auto data = column.data();
+    auto value =
+            data.citerator_at<TDT>(first_idx == 0 ? 0 : sparse_map.count_range(0, util::BitSetSizeType(first_idx - 1)));
+    iterate_over_set_positions(sparse_map, first_idx, end_idx, [&](size_t row) {
+        if (!append(static_cast<ssize_t>(row), *value))
             not_strings_inserter = util::BitSetSizeType(row);
+        ++value;
     });
     not_strings_inserter.flush();
     if (not_strings.any())
@@ -132,13 +116,13 @@ util::BitSet append_sparse_strings(const Column& column, size_t first_idx, size_
     return validity;
 }
 
-// Calls append(row, value) for each stored value of a dynamic-string column in the mapping's row range. For a sparse
-// column, sets dest_bitset to the output validity. For a dense one, inserts the rows that are not strings into
-// `missing`, the inverted validity the caller is building
+// Calls append(row, value) for each stored value of a dynamic-string column in the mapping's row range, and sets
+// dest_bitset to the output validity of a sparse column, or to the rows that are not strings (the inverted validity)
+// of a dense one
 template<typename TDT, typename F>
 void append_dynamic_strings(
         const Column& column, const PositionsAfterTruncation& positions, size_t num_rows, util::BitSet& dest_bitset,
-        util::BitSet::bulk_insert_iterator& missing, F append
+        F append
 ) {
     if (column.opt_sparse_map().has_value()) {
         dest_bitset = append_sparse_strings<TDT>(
@@ -149,15 +133,19 @@ void append_dynamic_strings(
         );
         return;
     }
+    util::BitSet missing;
+    util::BitSet::bulk_insert_iterator missing_inserter(missing);
     for_each_enumerated_flattened<TDT>(
             column,
             [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
                 if (!append(en.idx(), en.value()))
-                    missing = en.idx();
+                    missing_inserter = en.idx();
             },
             positions.first_idx_after_truncation,
             positions.end_idx_after_truncation
     );
+    missing_inserter.flush();
+    dest_bitset = std::move(missing);
 }
 } // namespace
 
@@ -200,7 +188,7 @@ void encode_variable_length(
                             return true;
                         };
                         append_dynamic_strings<typename source_type_info::TDT>(
-                                source_column, positions, mapping.num_rows_, dest_bitset, inserter, append
+                                source_column, positions, mapping.num_rows_, dest_bitset, append
                         );
                         return strings;
                     } else { // fixed-width string type
@@ -350,7 +338,7 @@ void encode_dictionary(
                             return true;
                         };
                         append_dynamic_strings<typename source_type_info::TDT>(
-                                source_column, positions, mapping.num_rows_, dest_bitset, inserter, append
+                                source_column, positions, mapping.num_rows_, dest_bitset, append
                         );
                         return unique_offsets_view;
                     } else { // fixed-width string type
