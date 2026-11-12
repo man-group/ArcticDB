@@ -61,9 +61,20 @@ def test_arrow_streaming_reads_with_row_range(in_memory_store_factory):
             assert df_slice.equals(df.slice((idx + 1) * 10, 10))
 
 
-def test_arrow_streaming_reads_with_empty_row_range(in_memory_store_factory):
+def test_arrow_streaming_reads_with_row_range_exact_boundaries(in_memory_store_factory):
     lib = in_memory_store_factory(segment_row_size=10)
-    sym = "test_arrow_streaming_reads_empty_with_row_range"
+    sym = "test_arrow_streaming_reads_with_row_range"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    # Omits the first and last chunk exactly
+    gen = lib.read_streaming(sym, row_range=(10, 90))
+    for idx, df_slice in enumerate(gen):
+        assert df_slice.equals(df.slice((idx + 1) * 10, 10))
+
+
+def test_arrow_streaming_reads_with_open_ended_row_range(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_arrow_streaming_reads_with_open_ended_row_range"
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, df)
     gen = lib.read_streaming(sym, row_range=(None, None))
@@ -83,17 +94,6 @@ def test_arrow_streaming_reads_with_funky_row_ranges(in_memory_store_factory, ro
             assert df_slice.equals(df.slice(0, 10) if row_range[0] is None else df.slice(85, 5))
         else:  # idx == 1
             assert df_slice.equals(df.slice(10, 5) if row_range[0] is None else df.slice(90, 10))
-
-
-def test_arrow_streaming_reads_with_row_range_exact_boundaries(in_memory_store_factory):
-    lib = in_memory_store_factory(segment_row_size=10)
-    sym = "test_arrow_streaming_reads_with_row_range"
-    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
-    lib.write(sym, df)
-    # Omits the first and last chunk exactly
-    gen = lib.read_streaming(sym, row_range=(10, 90))
-    for idx, df_slice in enumerate(gen):
-        assert df_slice.equals(df.slice((idx + 1) * 10, 10))
 
 
 def test_arrow_streaming_reads_with_row_range_and_filter(in_memory_store_factory):
