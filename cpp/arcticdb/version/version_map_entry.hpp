@@ -15,6 +15,9 @@
 #include <atomic>
 
 #include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/stream/index.hpp>
+
+#include <fmt/ranges.h>
 
 #include <deque>
 #include <vector>

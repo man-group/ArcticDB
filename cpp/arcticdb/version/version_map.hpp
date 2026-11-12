@@ -1122,7 +1122,7 @@ class VersionMapImpl {
      * Retries a load that starts by reading the ref key, which someone else (e.g. compaction) may have modified.
      */
     template<typename Load, typename BeforeRetry = void (*)()>
-    static auto retry_ref_key_load(const StreamId& stream_id, Load&& load, BeforeRetry&& before_retry = [] {}) {
+    static auto retry_ref_key_load(const StreamId& stream_id, Load load, BeforeRetry before_retry = [] {}) {
         static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
         auto max_trials = max_trial_config;
         while (true) {
