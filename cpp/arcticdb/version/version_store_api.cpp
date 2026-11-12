@@ -22,7 +22,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
-#include <arcticdb/storage/file/file_store.hpp>
+#include <arcticdb/version/file_store.hpp>
 #include <arcticdb/version/version_functions.hpp>
 
 namespace arcticdb::version_store {
