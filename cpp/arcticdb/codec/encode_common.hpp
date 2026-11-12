@@ -15,6 +15,8 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/util/configs_map.hpp>
 
 #include <cstddef>
 
@@ -191,6 +193,21 @@ void encode_metadata(
     }
 }
 
+/// The string pool is built in small pages, one encoded block each. Readers decode it into one contiguous buffer
+/// whatever the block count, so the writer re-cuts it into blocks of this many bytes (0 keeps the pages).
+inline size_t string_pool_block_bytes() {
+    return static_cast<size_t>(
+            std::max(ConfigsMap::instance()->get_int("Codec.StringPoolBlockBytes", 256 * 1024), int64_t{0})
+    );
+}
+
+inline size_t string_pool_encoded_value_blocks(const ChunkedBuffer& pool) {
+    const auto block_bytes = string_pool_block_bytes();
+    if (block_bytes == 0 || pool.num_blocks() <= 1)
+        return pool.num_blocks();
+    return (pool.bytes() + block_bytes - 1) / block_bytes;
+}
+
 template<typename EncodingPolicyType>
 void encode_string_pool(
         const SegmentInMemory& in_mem_seg, SegmentHeader& segment_header,
@@ -198,9 +215,34 @@ void encode_string_pool(
 ) {
     if (in_mem_seg.has_string_pool()) {
         ARCTICDB_TRACE(log::codec(), "Encoding string pool to position {}", pos);
-        auto col = in_mem_seg.string_pool_data();
-        auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
-        EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
+        const auto& pool = in_mem_seg.const_string_pool().data();
+        const auto num_blocks = string_pool_encoded_value_blocks(pool);
+        if (num_blocks == pool.num_blocks()) {
+            auto col = in_mem_seg.string_pool_data();
+            auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
+            EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
+        } else {
+            const auto total_bytes = pool.bytes();
+            Buffer contiguous(total_bytes);
+            size_t offset = 0;
+            for (const auto* block : pool.blocks()) {
+                memcpy(contiguous.data() + offset, block->data(), block->physical_bytes());
+                offset += block->physical_bytes();
+            }
+            util::check(offset == total_bytes, "String pool pages hold {} bytes, expected {}", offset, total_bytes);
+            const auto block_bytes = string_pool_block_bytes();
+            ChunkedBuffer coalesced;
+            Buffer shapes(num_blocks * sizeof(shape_t));
+            auto* shape = shapes.ptr_cast<shape_t>(0, num_blocks * sizeof(shape_t));
+            for (size_t start = 0; start < total_bytes; start += block_bytes) {
+                const auto size = std::min(block_bytes, total_bytes - start);
+                coalesced.add_external_block(contiguous.data() + start, size);
+                *shape++ = static_cast<shape_t>(size);
+            }
+            ColumnData col{&coalesced, &shapes, string_pool_descriptor().type(), nullptr};
+            auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
+            EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
+        }
         ARCTICDB_TRACE(log::codec(), "Encoded string pool to position {}", pos);
     }
 }

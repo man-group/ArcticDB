@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/codec/segment_header.hpp>
+#include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 
@@ -58,8 +59,9 @@ size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg) {
     }
 
     if (in_mem_seg.has_string_pool()) {
-        const auto string_pool_size = calc_field_bytes(in_mem_seg.const_string_pool().num_blocks() + 1) +
-                                      sizeof(uint64_t); // String pool has a custom shapes buffer
+        const auto string_pool_size =
+                calc_field_bytes(string_pool_encoded_value_blocks(in_mem_seg.const_string_pool().data()) + 1) +
+                sizeof(uint64_t); // String pool has a custom shapes buffer
         required += string_pool_size;
         ARCTICDB_TRACE(log::codec(), "String pool size {}", string_pool_size);
     }

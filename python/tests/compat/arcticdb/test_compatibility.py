@@ -835,3 +835,15 @@ def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic
                 "assert actual_col_names == ['col_one', 'col_two'], f'Actual col names were {actual_col_names}'",
             ]
         )
+
+
+def test_compat_read_string_pool_blocks(old_venv_and_arctic_uri, lib_name):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    rows = 30_000
+    strings = [f"value_{i}_{i * 7919}_{'abcdefgh' * (i % 7)}" for i in range(rows)]
+    strings[rows // 2] = "x" * 20_000  # longer than a pool page
+    df = pd.DataFrame({"s": strings, "flag": np.array(["A", "N", "R"])[np.arange(rows) % 3]})
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        with compat.current_version() as curr:
+            curr.lib.write("sym", df)
+        compat.old_lib.assert_read("sym", df)

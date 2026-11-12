@@ -66,6 +66,19 @@ A segment is the fundamental unit of storage in ArcticDB. It contains:
 
 The `Codec` enum in `cpp/arcticdb/storage/memory_layout.hpp` defines: `UNKNOWN`, `ZSTD`, `PFOR` (integers), `LZ4` (default), and `PASS` (passthrough).
 
+### String Pool Blocks
+
+The string pool is built in 4 KB `ChunkedBuffer` pages (a page is zero-padded before the next starts, so pool offsets
+are positions in the pages' concatenation). `encode_string_pool()` (`encode_common.hpp`) re-cuts that concatenation into
+blocks of `Codec.StringPoolBlockBytes` (default 256 KiB; 0 keeps one block per page, the older layout) and compresses
+each, in V1 and V2. A string can straddle two blocks. `string_pool_encoded_value_blocks()` gives the block count, which
+also sizes the V2 header (`calc_required_header_fields_bytes`). The writer makes one transient copy of the pool.
+
+Readers decode the pool into one contiguous chunk whatever its block count (`decode_ndarray`, `read_frame.cpp`
+`decode_string_pool`), so every client reads either layout. Past LZ4's 64 KiB window a bigger block adds little: on
+TPC-H SF1, 256 KiB blocks keep 3% of the per-page header bytes and the pool is within 0.8% of a single block. Tests:
+`SegmentStringEncodingTest` in `codec/test/test_codec.cpp`, `test_compat_read_string_pool_blocks` (older clients).
+
 ### Compression Interface
 
 Encoding/decoding functions in `cpp/arcticdb/codec/codec.cpp`:

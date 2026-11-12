@@ -12,6 +12,7 @@
 #include <arcticdb/util/test/test_utils.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/random.h>
+#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
@@ -333,6 +334,65 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
     ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
     ASSERT_EQ(copy.string_at(1, 3), res.string_at(1, 3));
     ASSERT_EQ(std::string("baggy"), res.string_at(1, 3));
+}
+
+namespace {
+SegmentInMemory segment_with_large_string_pool(size_t rows) {
+    const auto stream_desc =
+            stream_descriptor(StreamId{"pool"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "s")});
+    SegmentInMemory seg{stream_desc.clone()};
+    for (size_t i = 0; i < rows; ++i) {
+        // One string longer than a pool page, so the pool also holds an irregular page
+        seg.set_string(0, i == rows / 2 ? std::string(10'000, 'x') : fmt::format("value_{}_{}", i, i * 7919));
+        seg.end_row();
+    }
+    return seg;
+}
+} // namespace
+
+TYPED_TEST(SegmentStringEncodingTest, StringPoolPagesAreCoalescedIntoLargerBlocks) {
+    constexpr size_t block_bytes = 10'000; // not a multiple of the page size, so strings straddle blocks
+    ScopedConfig config("Codec.StringPoolBlockBytes", block_bytes);
+    constexpr size_t rows = 5'000;
+    auto in_mem = segment_with_large_string_pool(rows);
+    const auto pool_bytes = in_mem.const_string_pool().data().bytes();
+    ASSERT_GT(in_mem.const_string_pool().num_blocks(), 20u);
+    auto copy = in_mem.clone();
+    Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
+
+    const auto& pool_field = seg.header().string_pool_field();
+    ASSERT_EQ(pool_field.values_size(), (pool_bytes + block_bytes - 1) / block_bytes);
+    size_t in_bytes = 0;
+    for (int i = 0; i < pool_field.values_size(); ++i)
+        in_bytes += pool_field.values(i).in_bytes();
+    ASSERT_EQ(in_bytes, pool_bytes);
+
+    std::vector<uint8_t> vec(seg.calculate_size());
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), vec.size());
+    auto decoded = decode_segment(unserialized);
+    ASSERT_EQ(decoded.row_count(), rows);
+    for (size_t i = 0; i < rows; ++i)
+        ASSERT_EQ(decoded.string_at(i, 0), copy.string_at(i, 0)) << i;
+}
+
+TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesZeroKeepsPages) {
+    ScopedConfig config("Codec.StringPoolBlockBytes", 0);
+    auto in_mem = segment_with_large_string_pool(5'000);
+    const auto pages = in_mem.const_string_pool().num_blocks();
+    Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
+    ASSERT_EQ(static_cast<size_t>(seg.header().string_pool_field().values_size()), pages);
+}
+
+TYPED_TEST(SegmentStringEncodingTest, StringPoolDefaultBlockIs256KiB) {
+    auto in_mem = segment_with_large_string_pool(50'000);
+    const auto pool_bytes = in_mem.const_string_pool().data().bytes();
+    ASSERT_GT(pool_bytes, 512u * 1024);
+    Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
+    const auto& pool_field = seg.header().string_pool_field();
+    ASSERT_EQ(static_cast<size_t>(pool_field.values_size()), (pool_bytes + (256 * 1024) - 1) / (256 * 1024));
+    for (int i = 0; i + 1 < pool_field.values_size(); ++i)
+        ASSERT_EQ(pool_field.values(i).in_bytes(), 256u * 1024);
 }
 
 using namespace arcticdb;
