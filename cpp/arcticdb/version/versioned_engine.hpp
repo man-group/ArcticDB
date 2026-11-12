@@ -20,7 +20,7 @@
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
-#include <arcticdb/version/merge_options.hpp>
+#include <arcticdb/processing/merge_options.hpp>
 
 namespace arcticdb::version_store {
 

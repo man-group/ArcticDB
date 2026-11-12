@@ -13,7 +13,8 @@
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
-#include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/processing/schema_combine.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
 #include <arcticdb/util/collection_utils.hpp>

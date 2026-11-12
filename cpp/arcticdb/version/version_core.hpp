@@ -24,7 +24,7 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-#include <arcticdb/version/merge_options.hpp>
+#include <arcticdb/processing/merge_options.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>

@@ -65,7 +65,6 @@ processing -> pipeline
 processing -> storage
 processing -> stream
 processing -> util
-processing -> version
 python -> arrow
 python -> async
 python -> codec
