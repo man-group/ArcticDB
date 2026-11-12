@@ -59,21 +59,6 @@ void StreamingReadGenerator::fetch_next_slice() {
                          // once when reading ahead
                          auto read_query_copy = std::make_shared<ReadQuery>(read_query_->clone());
                          read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
-                         if (!read_query_copy->clauses_.empty()) {
-                             RowRangeClause row_range_clause{row_range.first, row_range.second};
-                             auto clauses = util::reserve_vector<std::shared_ptr<Clause>>(
-                                     read_query_copy->clauses_.size() + 1
-                             );
-                             clauses.emplace_back(std::make_shared<Clause>(std::move(row_range_clause)));
-                             clauses.insert(
-                                     clauses.end(),
-                                     std::make_move_iterator(read_query_copy->clauses_.begin()),
-                                     std::make_move_iterator(read_query_copy->clauses_.end())
-                             );
-                             read_query_copy->clauses_ = std::move(clauses);
-                             // TODO 13346982120: Augment plan_query to merge adjacent RowRange clauses when possible,
-                             // and then call it again here
-                         }
                          return read_frame_for_version(
                                  engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
                          );

@@ -72,6 +72,25 @@ def test_arrow_streaming_reads_with_row_range_exact_boundaries(in_memory_store_f
         assert df_slice.equals(df.slice((idx + 1) * 10, 10))
 
 
+def test_arrow_streaming_reads_with_row_range_and_filter(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_arrow_streaming_reads_with_row_range_and_filter"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    # row_range the first and last chunk, and truncates the second and penultimate chunks
+    # query then filters down further
+    q = QueryBuilder()
+    q = q[q["col"] < 28]
+    gen = lib.read_streaming(sym, row_range=(15, 85), query_builder=q)
+    for idx, df_slice in enumerate(gen):
+        if idx == 0:
+            assert df_slice.equals(df.slice(15, 5))
+        elif idx == 1:
+            assert df_slice.equals(df.slice(20, 8))
+        else:
+            assert not len(df_slice)
+
+
 def test_arrow_streaming_reads_with_date_range(in_memory_store_factory):
     lib = in_memory_store_factory(segment_row_size=10)
     sym = "test_arrow_streaming_reads_with_date_range"
