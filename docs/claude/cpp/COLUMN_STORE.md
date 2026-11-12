@@ -78,21 +78,23 @@ Column
 ### Sparse Columns and Arrow Output
 
 A sparse column stores only its present values, densely, plus a BitMagic `sparse_map_` of the rows that have one
-(nullable columns written from Arrow are stored this way). Reading one into Arrow never walks the map one bit at a
-time:
+(nullable columns written from Arrow are stored this way). Reading one into Arrow walks the map a BitMagic block at a
+time, not a bit at a time (the one exception is `truncate_sparse_map` for a range that does not start at the
+segment's first row, which still uses `get_next`):
 
 - `bitset_to_packed_bits` (`util/bitset.cpp`) exports the map as an Arrow validity bitmap a BitMagic block (65,536
   bits) at a time: bit blocks are copied (BitMagic's 32-bit words have Arrow's LSB-first layout on little-endian),
-  full blocks are all ones, GAP blocks are converted, empty blocks stay zero.
+  full blocks are all ones, GAP blocks are written run by run, empty blocks stay zero.
 - Numeric columns (`decode_or_expand`, `pipeline/read_frame.cpp`) are scattered from the dense values by
   `util::expand_dense_buffer_and_promote_type` (`util/sparse_utils.hpp`), for Arrow and pandas output alike. It uses
   `iterate_over_set_positions`, a BitMagic visitor that decodes a block at a time (whole runs for full and GAP
   blocks), so its cost follows the number of present values. Pandas output default-initialises the null slots first
   (NaN, NaT, 0); Arrow leaves them unset, as its validity bitmap masks them.
-- Dynamic-string columns (`encode_dictionary` and `encode_variable_length`, `arrow/arrow_handlers.cpp`) visit only
-  the requested row range of the map (`for_each_sparse_value`, over `iterate_over_set_positions`) together with the
-  dense string-pool offsets. The output validity is a copy of the sparse map with the stored values that are not
-  strings (None, NaN) cleared; the usual bitmap truncation clips it to the row range.
+- Dynamic-string columns (`encode_dictionary` and `encode_variable_length`, `arrow/arrow_handlers.cpp`) go through
+  `append_sparse_strings`, which visits only the requested row range of the map (`iterate_over_set_positions`)
+  together with the dense string-pool offsets, calling the encoder's one value callback. The output validity is the
+  map ANDed with a mask of that range (BitSet's range constructor would copy every block after the range too), less
+  the stored values that are not strings (None, NaN), subtracted once at the end.
 
 ## String Pool
 

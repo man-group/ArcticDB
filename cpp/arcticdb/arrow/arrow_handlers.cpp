@@ -108,11 +108,28 @@ void for_each_sparse_value(const Column& column, size_t first_idx, size_t end_id
     });
 }
 
-// The rows of [first_idx, end_idx) set in a sparse map, copying only the BitMagic blocks in that range
-util::BitSet sparse_map_in_range(const util::BitSet& sparse_map, size_t first_idx, size_t end_idx) {
+// Calls append(row, value) for each stored value of a sparse column in [first_idx, end_idx), and returns the output
+// validity: the sparse map's rows in that range, less those for which append returned false (values that are not
+// strings)
+template<typename TDT, typename F>
+util::BitSet append_sparse_strings(const Column& column, size_t first_idx, size_t end_idx, F append) {
+    util::BitSet validity;
     if (first_idx >= end_idx)
-        return util::BitSet();
-    return util::BitSet(sparse_map, util::BitSetSizeType(first_idx), util::BitSetSizeType(end_idx - 1));
+        return validity;
+    util::BitSet range;
+    range.set_range(util::BitSetSizeType(first_idx), util::BitSetSizeType(end_idx - 1));
+    // Unlike BitSet's range constructor, this does not copy the blocks after the range
+    validity.bit_and(column.sparse_map(), range, util::BitSet::opt_none);
+    util::BitSet not_strings;
+    util::BitSet::bulk_insert_iterator not_strings_inserter(not_strings);
+    for_each_sparse_value<TDT>(column, first_idx, end_idx, [&](size_t row, auto value) {
+        if (!append(static_cast<ssize_t>(row), value))
+            not_strings_inserter = util::BitSetSizeType(row);
+    });
+    not_strings_inserter.flush();
+    if (not_strings.any())
+        validity -= not_strings;
+    return validity;
 }
 } // namespace
 
@@ -155,17 +172,11 @@ void encode_variable_length(
                             return true;
                         };
                         if (!populate_inverted_bitset && string_pool) {
-                            const auto first_idx = positions.first_idx_after_truncation.value_or(0);
-                            const auto end_idx = positions.end_idx_after_truncation.value_or(mapping.num_rows_);
-                            dest_bitset = sparse_map_in_range(source_column.sparse_map(), first_idx, end_idx);
-                            for_each_sparse_value<typename source_type_info::TDT>(
+                            dest_bitset = append_sparse_strings<typename source_type_info::TDT>(
                                     source_column,
-                                    first_idx,
-                                    end_idx,
-                                    [&](size_t row, auto offset) {
-                                        if (!append(static_cast<ssize_t>(row), offset))
-                                            dest_bitset.set(util::BitSetSizeType(row), false);
-                                    }
+                                    positions.first_idx_after_truncation.value_or(0),
+                                    positions.end_idx_after_truncation.value_or(mapping.num_rows_),
+                                    append
                             );
                             return strings;
                         }
@@ -326,17 +337,11 @@ void encode_dictionary(
                             return true;
                         };
                         if (!populate_inverted_bitset && string_pool) {
-                            const auto first_idx = positions.first_idx_after_truncation.value_or(0);
-                            const auto end_idx = positions.end_idx_after_truncation.value_or(mapping.num_rows_);
-                            dest_bitset = sparse_map_in_range(source_column.sparse_map(), first_idx, end_idx);
-                            for_each_sparse_value<typename source_type_info::TDT>(
+                            dest_bitset = append_sparse_strings<typename source_type_info::TDT>(
                                     source_column,
-                                    first_idx,
-                                    end_idx,
-                                    [&](size_t row, auto offset) {
-                                        if (!append(static_cast<ssize_t>(row), offset))
-                                            dest_bitset.set(util::BitSetSizeType(row), false);
-                                    }
+                                    positions.first_idx_after_truncation.value_or(0),
+                                    positions.end_idx_after_truncation.value_or(mapping.num_rows_),
+                                    append
                             );
                             return unique_offsets_view;
                         }

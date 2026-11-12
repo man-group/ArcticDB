@@ -14,6 +14,23 @@
 
 namespace arcticdb {
 
+namespace {
+// Sets bits [first, last] of LSB-first packed bits
+void set_packed_bit_range(uint8_t* dest, size_t first, size_t last) {
+    const size_t first_byte = first / 8;
+    const size_t last_byte = last / 8;
+    const auto head = static_cast<uint8_t>(0xFFu << (first % 8));
+    const auto tail = static_cast<uint8_t>(0xFFu >> (7 - last % 8));
+    if (first_byte == last_byte) {
+        dest[first_byte] |= head & tail;
+        return;
+    }
+    dest[first_byte] |= head;
+    std::memset(dest + first_byte + 1, 0xFF, last_byte - first_byte - 1);
+    dest[last_byte] |= tail;
+}
+} // namespace
+
 void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
     const size_t num_bits = bv.size();
     // BitMagic's bit blocks are arrays of 32-bit words with bit k of word w at position 32 * w + k, which on a
@@ -23,7 +40,6 @@ void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
     std::memset(dest_ptr, 0, num_bytes);
     constexpr size_t block_bytes = bm::gap_max_bits / 8;
     const auto& blocks = bv.get_blocks_manager();
-    alignas(32) bm::word_t gap_as_bits[bm::set_block_size];
     for (size_t block = 0; block * block_bytes < num_bytes; ++block) {
         unsigned i, j;
         bm::get_block_coord(bm::bvector<>::block_idx_type(block), i, j);
@@ -31,11 +47,23 @@ void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
         const bm::word_t* bits = blocks.get_block(i, j);
         if (!bits)
             continue;
+        uint8_t* dest = dest_ptr + block * block_bytes;
+        const size_t dest_bits = std::min(block_bytes, num_bytes - block * block_bytes) * 8;
         if (BM_IS_GAP(bits)) {
-            bm::gap_convert_to_bitset(gap_as_bits, BMGAP_PTR(bits));
-            bits = gap_as_bits;
+            // A GAP block is a list of run ends, alternating clear and set from the value of the first run
+            const bm::gap_word_t* gap = BMGAP_PTR(bits);
+            bool set = (gap[0] & 1) != 0;
+            size_t run_start = 0;
+            for (unsigned k = 1; k < bm::gap_length(gap) && run_start < dest_bits; ++k) {
+                const size_t run_end = gap[k];
+                if (set)
+                    set_packed_bit_range(dest, run_start, std::min(run_end, dest_bits - 1));
+                set = !set;
+                run_start = run_end + 1;
+            }
+        } else {
+            std::memcpy(dest, bits, dest_bits / 8);
         }
-        std::memcpy(dest_ptr + block * block_bytes, bits, std::min(block_bytes, num_bytes - block * block_bytes));
     }
     if (num_bits % 8 != 0)
         dest_ptr[num_bytes - 1] &= static_cast<uint8_t>((1u << (num_bits % 8)) - 1);
