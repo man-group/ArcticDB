@@ -91,6 +91,7 @@ TEST(StringPool, CloneKeysDoNotAliasSource) {
 // MallocScribble=1 or the reallocation below makes the lookups miss.
 TEST(StringPool, CloneOutlivesSource) {
     std::vector<std::string> strings;
+    strings.reserve(1000);
     for (size_t i = 0; i < 1000; ++i)
         strings.emplace_back("string-" + std::to_string(i) + "-" + std::string(i % 40, 'x'));
 
