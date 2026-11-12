@@ -61,6 +61,30 @@ def test_arrow_streaming_reads_with_row_range(in_memory_store_factory):
             assert df_slice.equals(df.slice((idx + 1) * 10, 10))
 
 
+def test_arrow_streaming_reads_with_empty_row_range(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_arrow_streaming_reads_empty_with_row_range"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    gen = lib.read_streaming(sym, row_range=(None, None))
+    for idx, df_slice in enumerate(gen):
+        assert df_slice.equals(df.slice(idx * 10, 10))
+
+
+@pytest.mark.parametrize("row_range", [(None, 15), (None, -85), (85, None), (-15, None)])
+def test_arrow_streaming_reads_with_funky_row_ranges(in_memory_store_factory, row_range):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_arrow_streaming_reads_with_funky_row_ranges"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    gen = lib.read_streaming(sym, row_range=row_range)
+    for idx, df_slice in enumerate(gen):
+        if idx == 0:
+            assert df_slice.equals(df.slice(0, 10) if row_range[0] is None else df.slice(85, 5))
+        else:  # idx == 1
+            assert df_slice.equals(df.slice(10, 5) if row_range[0] is None else df.slice(90, 10))
+
+
 def test_arrow_streaming_reads_with_row_range_exact_boundaries(in_memory_store_factory):
     lib = in_memory_store_factory(segment_row_size=10)
     sym = "test_arrow_streaming_reads_with_row_range"
