@@ -286,6 +286,8 @@ class File {
             if (n < 0) {
                 if (errno == EINTR)
                     continue;
+                else if (errno == ESTALE)
+                    throw std::system_error(errno, std::generic_category(), "write failed");
                 raise_io_error(errno, "write failed");
             }
             written += static_cast<size_t>(n);
@@ -306,8 +308,6 @@ class File {
                 read += static_cast<size_t>(n);
             else if (n == 0)
                 throw std::runtime_error(fmt::format("Unexpected EOF after {} of {} bytes", read, buffer_size));
-            // else if (errno == ESTALE)
-            //     throw std::system_error(errno, std::generic_category(), "stale file"); // TODO: retry, not throw
             else if (errno != EINTR)
                 throw std::system_error(errno, std::generic_category(), "read failed");
         }
@@ -424,11 +424,14 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     const std::string tmp_file_name = generate_tmp_file_name();
     const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
     const fs::path tmp_file_path = storage_dir_ / key_name / tmp_file_name;
-    {
+
+    bool retried_stale = false;
+    while (true) {
         Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+        // TODO: What do we do if we fail to mkdir and open? Also seems very unlikely.
+        storage_dir_fd.mkdir(key_name, new_dir_mode_);
+        Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
         try {
-            storage_dir_fd.mkdir(key_name, new_dir_mode_);
-            Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
             File tmp_key_fd(
                     *posix_, key_type_dir_fd, tmp_file_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
             );
@@ -444,11 +447,16 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
             key_type_dir_fd.sync();
             key_type_dir_fd.close();
             storage_dir_fd.close();
+            break;
+        } catch (const std::system_error& e) {
+            key_type_dir_fd.unlinkat_swallow_errors(tmp_file_path);
+            if (e.code().value() == ESTALE && !retried_stale) {
+                retried_stale = true;
+                continue;
+            }
+            throw;
         } catch (...) {
-            // TODO: THIS IS A BUG! The unlinkat should be on the key_type_dir_fd, but since I swallow
-            // errors I don't see it. The tests don't exercise this. Must be because the rename succeeds
-            // and then I misreport it.
-            storage_dir_fd.unlinkat_swallow_errors(tmp_file_path);
+            key_type_dir_fd.unlinkat_swallow_errors(tmp_file_path);
             throw;
         }
     }

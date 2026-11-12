@@ -207,6 +207,10 @@ INSTANTIATE_TEST_SUITE_P(
 using RetryableFault = FaultInjection;
 
 TEST_P(RetryableFault, Succeeds) {
+    // TODO: This test does not fully exercise the code, despite the code currently being correct.
+    // If we get ESTALE, we **must** reopen file descriptors. With this harness, a repeated call to
+    // read() would simply succeed, which could never happen in real life.
+    // Should be using the newer API which sets an fd to stale.
     // TODO: This test implementation is identical to WritesAreVisibleAndReadable. Straighten out?
     Segment segment{storage::get_test_segment()};
     auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
