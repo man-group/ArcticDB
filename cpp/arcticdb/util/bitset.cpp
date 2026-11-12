@@ -29,6 +29,20 @@ void set_packed_bit_range(uint8_t* dest, size_t first, size_t last) {
     std::memset(dest + first_byte + 1, 0xFF, last_byte - first_byte - 1);
     dest[last_byte] |= tail;
 }
+
+// Writes the first dest_bits bits of a GAP block, a list of run ends alternating clear and set from the value of the
+// first run, into zeroed packed bits
+void gap_block_to_packed_bits(const bm::gap_word_t* gap, uint8_t* dest, size_t dest_bits) {
+    bool set = (gap[0] & 1) != 0;
+    size_t run_start = 0;
+    for (unsigned k = 1; k < bm::gap_length(gap) && run_start < dest_bits; ++k) {
+        const size_t run_end = gap[k];
+        if (set)
+            set_packed_bit_range(dest, run_start, std::min(run_end, dest_bits - 1));
+        set = !set;
+        run_start = run_end + 1;
+    }
+}
 } // namespace
 
 void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
@@ -50,17 +64,7 @@ void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
         uint8_t* dest = dest_ptr + block * block_bytes;
         const size_t dest_bits = std::min(block_bytes, num_bytes - block * block_bytes) * 8;
         if (BM_IS_GAP(bits)) {
-            // A GAP block is a list of run ends, alternating clear and set from the value of the first run
-            const bm::gap_word_t* gap = BMGAP_PTR(bits);
-            bool set = (gap[0] & 1) != 0;
-            size_t run_start = 0;
-            for (unsigned k = 1; k < bm::gap_length(gap) && run_start < dest_bits; ++k) {
-                const size_t run_end = gap[k];
-                if (set)
-                    set_packed_bit_range(dest, run_start, std::min(run_end, dest_bits - 1));
-                set = !set;
-                run_start = run_end + 1;
-            }
+            gap_block_to_packed_bits(BMGAP_PTR(bits), dest, dest_bits);
         } else {
             std::memcpy(dest, bits, dest_bits / 8);
         }
