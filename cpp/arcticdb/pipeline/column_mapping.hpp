@@ -91,6 +91,9 @@ void handle_truncation(Column& dest_column, const ColumnMapping& mapping);
 
 void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate);
 
+// mapping.truncate_ is in frame rows; this is the same truncation in rows of the mapping's segment
+ColumnTruncation segment_truncation(const ColumnMapping& mapping);
+
 void create_dense_bitmap(
         size_t offset, const util::BitSet& sparse_map, Column& dest_column, entity::AllocationType allocation_type
 );

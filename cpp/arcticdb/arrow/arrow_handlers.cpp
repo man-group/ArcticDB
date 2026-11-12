@@ -187,7 +187,7 @@ void encode_variable_length(
     }
     dest_bitset.resize(mapping.num_rows_);
 
-    handle_truncation(dest_bitset, mapping.truncate_);
+    handle_truncation(dest_bitset, segment_truncation(mapping));
     handle_truncation(dest_column, mapping.truncate_);
 
     create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
@@ -336,7 +336,7 @@ void encode_dictionary(
     }
     dest_bitset.resize(mapping.num_rows_);
 
-    handle_truncation(dest_bitset, mapping.truncate_);
+    handle_truncation(dest_bitset, segment_truncation(mapping));
     handle_truncation(dest_column, mapping);
 
     create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
@@ -472,7 +472,7 @@ void ArrowBoolHandler::
         const auto& sparse_map = *source_column.opt_sparse_map();
         // Copy the sparse map, because handle_truncation modifies the bitset inplace.
         auto validity_bitset = sparse_map;
-        auto bitmap_truncate = m.truncate_;
+        auto bitmap_truncate = segment_truncation(m);
         if (bitmap_truncate.start_.has_value()) {
             // Round down the bitmap truncation start to the nearest byte boundary so that the BITMAP buffer's
             // bit layout matches the packed data block's non-zero shift after handle_truncation(dest_column).
