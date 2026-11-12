@@ -4,6 +4,8 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 
+#include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 
 namespace arcticdb {
