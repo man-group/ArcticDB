@@ -197,7 +197,7 @@ void encode_metadata(
 /// whatever the block count, so the writer re-cuts it into blocks of this many bytes (0 keeps the pages).
 inline size_t string_pool_block_bytes() {
     return static_cast<size_t>(
-            std::max(ConfigsMap::instance()->get_int("Codec.StringPoolBlockBytes", 256 * 1024), int64_t{0})
+            std::max(ConfigsMap::instance()->get_int("Codec.StringPoolBlockBytes", int64_t{256} * 1024), int64_t{0})
     );
 }
 
