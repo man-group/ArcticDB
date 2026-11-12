@@ -131,6 +131,34 @@ util::BitSet append_sparse_strings(const Column& column, size_t first_idx, size_
         validity -= not_strings;
     return validity;
 }
+
+// Calls append(row, value) for each stored value of a dynamic-string column in the mapping's row range. For a sparse
+// column, sets dest_bitset to the output validity. For a dense one, inserts the rows that are not strings into
+// `missing`, the inverted validity the caller is building
+template<typename TDT, typename F>
+void append_dynamic_strings(
+        const Column& column, const PositionsAfterTruncation& positions, size_t num_rows, util::BitSet& dest_bitset,
+        util::BitSet::bulk_insert_iterator& missing, F append
+) {
+    if (column.opt_sparse_map().has_value()) {
+        dest_bitset = append_sparse_strings<TDT>(
+                column,
+                positions.first_idx_after_truncation.value_or(0),
+                positions.end_idx_after_truncation.value_or(num_rows),
+                append
+        );
+        return;
+    }
+    for_each_enumerated_flattened<TDT>(
+            column,
+            [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+                if (!append(en.idx(), en.value()))
+                    missing = en.idx();
+            },
+            positions.first_idx_after_truncation,
+            positions.end_idx_after_truncation
+    );
+}
 } // namespace
 
 template<typename OffsetType>
@@ -171,23 +199,8 @@ void encode_variable_length(
                             strings.emplace_back(strv);
                             return true;
                         };
-                        if (!populate_inverted_bitset && string_pool) {
-                            dest_bitset = append_sparse_strings<typename source_type_info::TDT>(
-                                    source_column,
-                                    positions.first_idx_after_truncation.value_or(0),
-                                    positions.end_idx_after_truncation.value_or(mapping.num_rows_),
-                                    append
-                            );
-                            return strings;
-                        }
-                        for_each_enumerated_flattened<typename source_type_info::TDT>(
-                                source_column,
-                                [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
-                                    if (append(en.idx(), en.value()) != populate_inverted_bitset)
-                                        inserter = en.idx();
-                                },
-                                positions.first_idx_after_truncation,
-                                positions.end_idx_after_truncation
+                        append_dynamic_strings<typename source_type_info::TDT>(
+                                source_column, positions, mapping.num_rows_, dest_bitset, inserter, append
                         );
                         return strings;
                     } else { // fixed-width string type
@@ -336,23 +349,8 @@ void encode_dictionary(
                             dest_ptr[row] = key_of(offset);
                             return true;
                         };
-                        if (!populate_inverted_bitset && string_pool) {
-                            dest_bitset = append_sparse_strings<typename source_type_info::TDT>(
-                                    source_column,
-                                    positions.first_idx_after_truncation.value_or(0),
-                                    positions.end_idx_after_truncation.value_or(mapping.num_rows_),
-                                    append
-                            );
-                            return unique_offsets_view;
-                        }
-                        for_each_enumerated_flattened<typename source_type_info::TDT>(
-                                source_column,
-                                [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
-                                    if (append(en.idx(), en.value()) != populate_inverted_bitset)
-                                        inserter = en.idx();
-                                },
-                                positions.first_idx_after_truncation,
-                                positions.end_idx_after_truncation
+                        append_dynamic_strings<typename source_type_info::TDT>(
+                                source_column, positions, mapping.num_rows_, dest_bitset, inserter, append
                         );
                         return unique_offsets_view;
                     } else { // fixed-width string type
