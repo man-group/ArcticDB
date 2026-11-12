@@ -568,6 +568,42 @@ TEST(CombineSchema, UnnamedMultiIndexLevel0PlaceholderNamesAgree) {
     }
 }
 
+// An empty name without fake_name on a stored index reads back under the descriptor field name, so it names the index
+// after that field.
+TEST(CombineSchema, EmptyIndexNameWithoutFakeNameTakesDescriptorName) {
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    auto stored = timeseries_df("Date", columns);
+    stored.norm_metadata_.mutable_df()->mutable_common()->mutable_index()->set_name("");
+    const auto incoming = timeseries_df("Date", columns);
+    for (const auto& options : {append_options(false), append_options(true), update_options(false)}) {
+        ASSERT_NO_THROW(combine({stored, incoming}, options)) << "for " << options.name();
+        ASSERT_NO_THROW(combine({incoming, stored}, options)) << "for " << options.name();
+    }
+
+    const auto other_name = timeseries_df("Other", columns);
+    ASSERT_THROW(combine({stored, other_name}, append_options(false)), SchemaException);
+
+    auto unnamed = timeseries_df("index", columns);
+    unnamed.norm_metadata_.mutable_df()->mutable_common()->mutable_index()->set_fake_name(true);
+    auto stored_index_field = timeseries_df("index", columns);
+    stored_index_field.norm_metadata_.mutable_df()->mutable_common()->mutable_index()->set_name("");
+    ASSERT_THROW(combine({stored_index_field, unnamed}, append_options(false)), SchemaException);
+}
+
+TEST(CombineSchema, EmptyMultiIndexLevel0NameWithoutFakeFieldPosTakesDescriptorName) {
+    const std::vector<ColumnSpec> levels{{"Date", DataType::NANOSECONDS_UTC64}, {"lvl", DataType::INT32}};
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    auto stored = multiindex_df(levels, columns);
+    stored.norm_metadata_.mutable_df()->mutable_common()->mutable_multi_index()->set_name("");
+    const auto incoming = multiindex_df(levels, columns);
+    for (const auto& options : {append_options(false), append_options(true), update_options(false)}) {
+        ASSERT_NO_THROW(combine({stored, incoming}, options)) << "for " << options.name();
+    }
+
+    const auto other_name = multiindex_df({{"Other", DataType::NANOSECONDS_UTC64}, levels[1]}, columns);
+    ASSERT_THROW(combine({stored, other_name}, append_options(false)), SchemaException);
+}
+
 // Append used to let the new frame's timezone overwrite the existing one (Monday 12029540807).
 TEST(CombineSchema, MismatchedTimezoneIsClearedUnderDynamicSchemaAndRaisesUnderStatic) {
     auto london = timeseries_df("ts", {{"a", DataType::FLOAT64}}, "Europe/London");

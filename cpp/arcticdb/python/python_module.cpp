@@ -30,8 +30,10 @@
 #include <arcticdb/python/python_handlers_common.hpp>
 #include <arcticdb/python/python_bindings_common.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <arcticdb/util/perfetto_utils.hpp>
 
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 #include <mongocxx/exception/logic_error.hpp>
 
 #include <logger.pb.h>
@@ -275,6 +277,27 @@ void register_instrumentation(py::module&& m) {
 #endif
 }
 
+#ifdef ARCTICDB_PERFORMANCE_SAMPLING
+void register_tracing(py::module&& m) {
+    using namespace arcticdb::tracing;
+    py::class_<TracingSessionConfig>(m, "TracingSessionConfig")
+            .def(py::init<>())
+            .def_readwrite("disabled_categories", &TracingSessionConfig::disabled_categories)
+            .def_readwrite("enabled_categories", &TracingSessionConfig::enabled_categories)
+            .def_readwrite("buffer_size_kb", &TracingSessionConfig::buffer_size_kb);
+
+    py::class_<TracingSession>(m, "TracingSession")
+            .def(py::init<const TracingSessionConfig&>(), py::arg("config") = TracingSessionConfig{})
+            .def("start", &TracingSession::start, py::call_guard<py::gil_scoped_release>())
+            .def("stop", &TracingSession::stop, py::call_guard<py::gil_scoped_release>())
+            .def("flush", &TracingSession::flush, py::arg("file_dest"), py::call_guard<py::gil_scoped_release>())
+            .def("stop_and_flush",
+                 &TracingSession::stop_and_flush,
+                 py::arg("file_dest"),
+                 py::call_guard<py::gil_scoped_release>());
+}
+#endif
+
 PYBIND11_MODULE(arcticdb_ext, m) {
     m.doc() = R"pbdoc(
         ArcticDB Extension plugin
@@ -325,6 +348,10 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_instrumentation(m.def_submodule("instrumentation"));
     register_metrics(m.def_submodule("metrics"), BindingScope::GLOBAL);
     register_type_handlers();
+#ifdef ARCTICDB_PERFORMANCE_SAMPLING
+    tracing::initialize();
+    register_tracing(m.def_submodule("tracing"));
+#endif
 
     register_termination_handler();
     Py_AtExit(shutdown_globals);

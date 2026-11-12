@@ -83,6 +83,12 @@
     "benchmark",
     "arcticdb-sparrow"
   ],
+  "features": {
+    "perfetto": {
+      "description": "Perfetto tracing support",
+      "dependencies": [ "perfetto" ]
+    }
+  },
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
     { "name": "arcticdb-sparrow", "version": "2.4.0" },
@@ -115,6 +121,7 @@
     { "name": "mongo-c-driver", "version": "1.28.0" },
     { "name": "mongo-cxx-driver", "version": "3.10.2#1" },
     { "name": "prometheus-cpp", "version": "1.1.0" },
+    { "name": "perfetto", "version": "53.0" },
     { "name": "protobuf", "version": "3.21.8" },
     { "name": "rapidcheck", "version": "2023-12-14" },
     { "name": "s2n", "version": "1.7.3" },

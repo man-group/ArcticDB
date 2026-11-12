@@ -3,6 +3,7 @@ Checks: >
   -*,
   bugprone-*,
   -bugprone-easily-swappable-parameters,
+  -bugprone-unchecked-optional-access,
   performance-*,
   modernize-use-ranges,
   modernize-use-constraints,

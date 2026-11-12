@@ -385,10 +385,9 @@ TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
     const size_t first_segment_rows = 60'000;
     const size_t num_rows = 10'003;
     const size_t end = first_segment_rows + num_rows - 3;
-    std::mt19937 rng(17);
     auto handler = ArrowStringHandler();
     auto read_options = ReadOptions();
-    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
+    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = GetParam()});
     const auto source_type = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
     auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
     const auto dest_size = data_type_size(dest_type);
@@ -398,17 +397,16 @@ TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
         auto first = Column(source_type, 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
         for (size_t row = 0; row < first_segment_rows; ++row)
             first.set_scalar(static_cast<ssize_t>(row), pool->get(fmt::format("f{}", row % 13)).offset());
-        auto [second, expected] = [&]() -> std::pair<Column, std::vector<std::optional<std::string>>> {
-            if (sparse)
-                return sparse_string_column(num_rows, 0.5, false, *pool, rng);
-            auto column = Column(source_type, 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
-            std::vector<std::optional<std::string>> values(num_rows);
-            for (size_t row = 0; row < num_rows; ++row) {
-                values[row] = fmt::format("s{}", row % 211);
-                column.set_scalar(static_cast<ssize_t>(row), pool->get(values[row].value()).offset());
-            }
-            return {std::move(column), std::move(values)};
-        }();
+        auto second =
+                Column(source_type, 0, AllocationType::DYNAMIC, sparse ? Sparsity::PERMITTED : Sparsity::NOT_PERMITTED);
+        std::vector<std::optional<std::string>> expected(num_rows);
+        for (size_t row = 0; row < num_rows; ++row) {
+            if (sparse && row % 3 == 1)
+                continue;
+            expected[row] = fmt::format("s{}", row % 211);
+            second.set_scalar(static_cast<ssize_t>(row), pool->get(expected[row].value()).offset());
+        }
+        second.set_row_data(static_cast<ssize_t>(num_rows) - 1);
         auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
         allocate_chunked_column(dest, first_segment_rows + num_rows, first_segment_rows);
         auto field_wrapper = FieldWrapper(dest_type, "col");
@@ -454,10 +452,10 @@ TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
         size_t mismatches = 0;
         for (size_t row = 0; row < end - first_segment_rows; ++row) {
             auto value = arrays[1][row];
-            mismatches +=
-                    !(value.has_value() == expected[row].has_value() &&
-                      (!value.has_value() ||
-                       std::get<sparrow::nullable<std::string_view>>(value).get() == expected[row].value()));
+            const bool ok = value.has_value() == expected[row].has_value() &&
+                            (!value.has_value() ||
+                             std::get<sparrow::nullable<std::string_view>>(value).get() == expected[row].value());
+            mismatches += !ok;
         }
         EXPECT_EQ(mismatches, 0u);
     }
