@@ -390,9 +390,10 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolDefaultBlockIs256KiB) {
     ASSERT_GT(pool_bytes, 512u * 1024);
     Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
     const auto& pool_field = seg.header().string_pool_field();
-    ASSERT_EQ(static_cast<size_t>(pool_field.values_size()), (pool_bytes + (256 * 1024) - 1) / (256 * 1024));
+    constexpr size_t block_bytes = size_t{256} * 1024;
+    ASSERT_EQ(static_cast<size_t>(pool_field.values_size()), (pool_bytes + block_bytes - 1) / block_bytes);
     for (int i = 0; i + 1 < pool_field.values_size(); ++i)
-        ASSERT_EQ(pool_field.values(i).in_bytes(), 256u * 1024);
+        ASSERT_EQ(pool_field.values(i).in_bytes(), block_bytes);
 }
 
 using namespace arcticdb;
