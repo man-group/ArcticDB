@@ -495,7 +495,18 @@ ColumnTruncation get_truncate_range(
                 if ((time_filter.first > first_ts && time_filter.first <= last_ts) ||
                     (time_filter.second >= first_ts && time_filter.second < last_ts)) {
                     if (context.fetch_index()) {
-                        truncate_rows = get_truncate_range_from_index(*index_column, adjusted_row_range, time_filter);
+                        // Search only this segment's rows of the frame's index column. Iterators ending at the slice
+                        // load the next segment's block, which that segment's task may be truncating (freeing).
+                        const auto num_rows = adjusted_row_range.diff();
+                        const auto* begin = reinterpret_cast<const timestamp*>(index_column->bytes_at(
+                                adjusted_row_range.first * sizeof(timestamp), num_rows * sizeof(timestamp)
+                        ));
+                        const auto* end = begin + num_rows;
+                        truncate_rows = get_truncate_range_from_rows(
+                                adjusted_row_range,
+                                adjusted_row_range.first + (std::lower_bound(begin, end, time_filter.first) - begin),
+                                adjusted_row_range.first + (std::upper_bound(begin, end, time_filter.second) - begin)
+                        );
                     } else {
                         truncate_rows = get_truncate_range_from_index(
                                 *index_column, {0, index_column->row_count()}, time_filter
