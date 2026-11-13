@@ -87,15 +87,15 @@ int FaultyPosix::close(int fd) {
 }
 
 ssize_t FaultyPosix::write(int fd, const void* buf, size_t count) {
-    // Force buffered I/O by pretending the user supplied a maximum of 1KiB of data.
-    count = std::min(count, size_t{1024});
+    // Force buffered I/O by pretending the user supplied a maximum of 100 bytes of data.
+    count = std::min(count, size_t{100});
     ssize_t res = ::write(fd, buf, count);
     return propagate_fault_if_exists(SyscallId::WRITE, res);
 }
 
 ssize_t FaultyPosix::read(int fd, void* buf, size_t count) {
-    // Force buffered I/O by pretending the user requested a maximum of 1KiB of data.
-    count = std::min(count, size_t{1024});
+    // Force buffered I/O by pretending the user requested a maximum of 100 bytes of data.
+    count = std::min(count, size_t{100});
     ssize_t res = ::read(fd, buf, count);
     return propagate_fault_if_exists(SyscallId::READ, res);
 }

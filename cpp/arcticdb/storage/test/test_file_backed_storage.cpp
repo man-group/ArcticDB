@@ -180,20 +180,6 @@ TEST_F(FileStorageApi, ListSymbols) {
     ASSERT_FALSE(executed_on_missing);
 }
 
-// Exercise buffered I/O. Both read() and write() needn't succeed to consume all input/output in one call.
-// If we use a 1 MB data key, might reveal a problem.
-TEST_F(FileStorageApi, LargeWrites) {
-    // TODO: fully copy pasted from WritesAreVisibleAndReadable
-    Segment segment{storage::get_test_segment(4096)};
-    auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
-    storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
-    ASSERT_TRUE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
-
-    auto result = storage().read(entity::VariantKey{key}, {});
-    ASSERT_EQ(std::get<StringId>(result.atom_key().id()), STREAM_ID);
-    ASSERT_TRUE(segments_are_identical(segment, result.segment()));
-}
-
 using FaultParam = std::tuple<SyscallId, std::optional<PosixError>, std::string_view>;
 
 class FaultInjection : public FileBackedStorageFixture, public ::testing::WithParamInterface<FaultParam> {
