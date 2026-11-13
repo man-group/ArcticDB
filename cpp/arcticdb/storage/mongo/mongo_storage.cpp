@@ -108,8 +108,6 @@ void MongoStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor,
 
 KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(MongoStorageRead, 0)
-    boost::container::small_vector<VariantKey, 1> keys_not_found;
-
     auto collection = collection_name(variant_key_type(variant_key));
     try {
         auto kv = client_->read_segment(db_, collection, variant_key);
@@ -130,7 +128,7 @@ KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts)
                 ex.what()
         );
 
-        throw KeyNotFoundException(keys_not_found);
+        throw KeyNotFoundException(variant_key);
     }
 }
 

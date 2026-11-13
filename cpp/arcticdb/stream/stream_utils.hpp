@@ -224,11 +224,11 @@ inline auto generate_segments_from_keys(
            window(prefetch_window) | move | map([opts](auto&& key_seg) {
                try {
                    return std::make_optional(std::forward<decltype(key_seg)>(key_seg));
-               } catch (storage::KeyNotFoundException& e) {
+               } catch (const storage::KeyNotFoundException&) {
                    if (opts.ignores_missing_key_) {
                        return std::optional<std::pair<entity::VariantKey, SegmentInMemory>>();
                    }
-                   throw storage::KeyNotFoundException(std::move(e.keys()));
+                   throw;
                }
            }) |
            filter() // By default removes falsy
