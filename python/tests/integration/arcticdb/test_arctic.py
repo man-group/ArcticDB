@@ -1700,11 +1700,13 @@ def test_s3_response_checksum_mismatch_is_retried_once_by_default(
 def s3_library_opened_without_checksum_env_vars(s3_storage, lib_name):
     # Stands in for an earlier test in the same worker: with neither variable set, opening an S3 library makes the
     # extension set both to when_required in the process environment, where os.environ cannot see them.
-    assert "AWS_RESPONSE_CHECKSUM_VALIDATION" not in os.environ
-    assert "AWS_REQUEST_CHECKSUM_CALCULATION" not in os.environ
+    for name in ("AWS_RESPONSE_CHECKSUM_VALIDATION", "AWS_REQUEST_CHECKSUM_CALCULATION"):
+        assert name not in os.environ, f"{name} is exported, so this test cannot reproduce the leak"
     create_library(s3_storage.arctic_uri, f"{lib_name}_earlier")
 
 
+# s3_library_opened_without_checksum_env_vars must come before route_env_to_extension: pytest sets up same-scope
+# fixtures in argument order, and the leak has to happen before the fixture resyncs the environment.
 def test_s3_response_checksum_mismatch_not_affected_by_earlier_s3_library(
     s3_library_opened_without_checksum_env_vars, s3_storage, lib_name, monkeypatch, route_env_to_extension
 ):
