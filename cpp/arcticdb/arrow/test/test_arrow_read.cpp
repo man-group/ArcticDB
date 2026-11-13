@@ -332,10 +332,10 @@ std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
             column.set_scalar(static_cast<ssize_t>(row), pool.get(expected[row].value()).offset());
         }
     }
-    // At density 1 without runs every row is stored, so the column has no sparse map and the dense path is tested.
     // A segment with no stored values still decodes with a (empty) sparse map
     if (stored_count == 0)
         column.opt_sparse_map() = util::BitMagic();
+    // At density 1 every row is stored, so the column has no sparse map and the dense path is tested
     if (column.opt_sparse_map().has_value())
         column.sparse_map().optimize();
     column.set_row_data(static_cast<ssize_t>(num_rows) - 1);
@@ -357,11 +357,12 @@ size_t count_mismatches(
     return mismatches;
 }
 
-// Converts a dynamic-string column of num_rows rows, the only segment of its frame, to Arrow
+// Converts a dynamic-string column, the only segment of its frame, to Arrow
 Column convert_to_arrow(
-        const Column& source, size_t num_rows, const std::shared_ptr<StringPool>& pool, ArrowOutputStringFormat format,
+        const Column& source, const std::shared_ptr<StringPool>& pool, ArrowOutputStringFormat format,
         ColumnTruncation truncation = {}
 ) {
+    const auto num_rows = static_cast<size_t>(source.last_row() + 1);
     auto read_options = ReadOptions();
     read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = format});
     auto [dest_type, block_config] =
@@ -396,7 +397,6 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
                 const bool whole_column = start == 0 && end == num_rows;
                 auto dest = convert_to_arrow(
                         source,
-                        num_rows,
                         pool,
                         output_string_format(),
                         whole_column ? ColumnTruncation{} : ColumnTruncation{start, end}
@@ -423,7 +423,7 @@ TEST_P(ArrowStringColumnRead, SparseMapWithMoreBitsThanValues) {
     source.sparse_map().set_range(num_rows / 2, num_rows - 1);
     // Release builds have no iterator bounds check, so the read itself must reject the map
     try {
-        convert_to_arrow(source, num_rows, pool, output_string_format());
+        convert_to_arrow(source, pool, output_string_format());
         FAIL() << "Expected the read to reject the sparse map";
     } catch (const ArcticException& e) {
         EXPECT_NE(std::string(e.what()).find("more set bits"), std::string::npos) << e.what();
