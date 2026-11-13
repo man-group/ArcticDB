@@ -951,8 +951,8 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
 
     def end_headers(self):
         super().end_headers()
-        # HostDispatcherApplication's own responses have a body even for HEAD, which the client would read as the
-        # start of the next response
+        # werkzeug sends whatever body the app returns, even for HEAD (HostDispatcherApplication's own responses have
+        # one), and the client would read it as the start of the next response
         if self._in_wsgi and self.command == "HEAD":
             self.wfile = _DiscardingWriter()
 
@@ -962,6 +962,7 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
             peer.close()
             KeepAliveRequestHandler._eof_socket = eof_socket
         self._request_body = None
+        # end_headers swaps wfile for HEAD responses
         self._connection, self._rfile, self._wfile = self.connection, self.rfile, self.wfile
         self.connection, self.rfile = KeepAliveRequestHandler._eof_socket, BytesIO()
         self._in_wsgi = True
