@@ -403,6 +403,22 @@ TEST(MongoMockStorageTest, TestReadKeyNotFoundException) {
     ASSERT_THROW({ read_in_store(*storage, "sym"); }, arcticdb::storage::KeyNotFoundException);
 }
 
+TEST(MongoMockStorageTest, TestReadNoSuchKeyCarriesKey) {
+    MongoMockStorageFactory factory;
+    auto storage = factory.create();
+
+    std::string failure_symbol =
+            mongo::MockMongoClient::get_failure_trigger("sym", StorageOperation::READ, mongo::MongoError::NoSuchKey);
+
+    try {
+        read_in_store(*storage, failure_symbol);
+        FAIL();
+    } catch (KeyNotFoundException& e) {
+        ASSERT_EQ(e.keys().size(), 1);
+        ASSERT_EQ(variant_key_id(e.keys().at(0)), StreamId{failure_symbol});
+    }
+}
+
 // Check that Permission exception is thrown when Access denied or invalid access key error occurs on various calls
 TEST(MongoMockStorageTest, TestPermissionErrorException) {
     MongoMockStorageFactory factory;

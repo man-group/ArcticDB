@@ -8,12 +8,17 @@
 
 #pragma once
 
+#include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/library_path.hpp>
+#include <arcticdb/util/error_code.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 
 #include <boost/container/small_vector.hpp>
+#include <fmt/ranges.h>
 
 namespace arcticdb::storage {
+
+using namespace entity;
 
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
   public:

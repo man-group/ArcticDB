@@ -228,7 +228,7 @@ inline auto generate_segments_from_keys(
                    if (opts.ignores_missing_key_) {
                        return std::optional<std::pair<entity::VariantKey, SegmentInMemory>>();
                    }
-                   throw storage::KeyNotFoundException(std::move(e.keys()));
+                   throw;
                }
            }) |
            filter() // By default removes falsy
