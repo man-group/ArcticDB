@@ -92,10 +92,10 @@ bool skip_during_listing(std::string_view file_name) noexcept {
     return is_tmp_file_name(file_name) || is_silly_rename(file_name) || is_dot_dir(file_name);
 }
 
-void refresh_directory(const fs::path& dir) {
-    int fd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY);
+void refresh_directory(PosixInterface& posix, const fs::path& dir) {
+    int fd = posix.open(dir.c_str(), O_RDONLY | O_DIRECTORY, 0);
     if (fd >= 0)
-        ::close(fd);
+        (void)posix.close(fd);
 }
 
 /**
@@ -103,7 +103,7 @@ void refresh_directory(const fs::path& dir) {
  * eliminates spurious ENOENT responses for files, which actually exist.
  * Note that we use real syscalls here. Testing should not be happening at this level.
  */
-void refresh_ancestors(const fs::path& dir, const fs::path& subpath) {
+void refresh_ancestors(PosixInterface& posix, const fs::path& dir, const fs::path& subpath) {
     fs::path to_check = subpath;
     assert(to_check.has_parent_path());
     while (to_check != dir) {
@@ -111,17 +111,14 @@ void refresh_ancestors(const fs::path& dir, const fs::path& subpath) {
         //       is because of the possibility that they are **all missing**. If one of them successfully opens,
         //       we can stop.
         to_check = to_check.parent_path();
-        refresh_directory(to_check);
+        refresh_directory(posix, to_check);
     }
 }
 
-bool exists(
-        arcticdb::storage::file_backed::PosixInterface& posix_, const fs::path& dir, const fs::path& subpath,
-        bool allow_refresh = true
-) {
+bool exists(PosixInterface& posix, const fs::path& dir, const fs::path& subpath, bool allow_refresh = true) {
     struct stat key_st;
     fs::path to_check = dir / subpath;
-    if (posix_.stat(to_check.c_str(), &key_st) == 0)
+    if (posix.stat(to_check.c_str(), &key_st) == 0)
         return true;
 
     if (errno != ENOENT)
@@ -130,8 +127,8 @@ bool exists(
         );
 
     if (allow_refresh) {
-        refresh_ancestors(dir, to_check);
-        return exists(posix_, dir, subpath, false);
+        refresh_ancestors(posix, dir, to_check);
+        return exists(posix, dir, subpath, false);
     }
 
     return false;
@@ -146,7 +143,7 @@ class Directory {
         // TODO: Use a retry wrapper
         if (fd_ < 0) {
             if (errno == ENOENT) {
-                refresh_ancestors(storage_dir, pathname);
+                refresh_ancestors(posix, storage_dir, pathname);
                 fd_ = posix.open(pathname.c_str(), flags, mode);
             }
         }
@@ -234,7 +231,7 @@ class File {
         // TODO: Use a retry wrapper
         if (fd_ < 0) {
             if (errno == ENOENT) {
-                refresh_ancestors(storage_dir, pathname);
+                refresh_ancestors(posix, storage_dir, pathname);
                 fd_ = posix.open(pathname.c_str(), flags, mode);
             }
         }
