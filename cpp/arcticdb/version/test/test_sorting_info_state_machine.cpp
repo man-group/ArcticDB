@@ -9,7 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/version/version_utils.hpp>
+#include <arcticdb/processing/schema_combine.hpp>
 
 using namespace arcticdb;
 constexpr auto UNKNOWN = SortedValue::UNKNOWN;

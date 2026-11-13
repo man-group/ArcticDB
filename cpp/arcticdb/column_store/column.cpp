@@ -540,7 +540,7 @@ void Column::append(const Column& other, position_t at_row) {
 
     util::check(last_physical_row_ + 1 == row_count(), "Row count calculation incorrect after dense append");
 
-    if (at_row == initial_row_count && !other.is_sparse() && !is_sparse()) {
+    if (at_row == initial_row_count && !other.is_sparse() && !was_sparse) {
         util::check(
                 last_logical_row_ == last_physical_row_,
                 "Expected logical and physical rows to line up in append of non-sparse columns"
@@ -719,22 +719,27 @@ void Column::set_row_data(size_t row_id) {
     );
 }
 
-size_t Column::get_physical_offset(size_t row) const {
+size_t Column::get_physical_offset(size_t row, const bm::bvector<>::rs_index_type* sparse_map_index) const {
     if (!is_sparse())
         return row;
 
     if (row == 0u)
         return 0u;
 
-    // TODO: cache index
-    auto rs = std::make_unique<bm::bvector<>::rs_index_type>();
-    sparse_map().build_rs_index(rs.get());
-    return sparse_map().count_to(bv_size(row - 1), *rs);
+    if (!sparse_map_index) {
+        // TODO: cache index
+        auto rs = std::make_unique<bm::bvector<>::rs_index_type>();
+        sparse_map().build_rs_index(rs.get());
+        return sparse_map().count_to(bv_size(row - 1), *rs);
+    } else {
+        return sparse_map().count_to(bv_size(row - 1), *sparse_map_index);
+    }
 }
 
 void Column::set_sparse_map(util::BitSet&& bitset) { sparse_map_ = std::move(bitset); }
 
-std::optional<position_t> Column::get_physical_row(position_t row) const {
+std::optional<position_t> Column::get_physical_row(position_t row, const bm::bvector<>::rs_index_type* sparse_map_index)
+        const {
     if (row > last_logical_row_) {
         if (sparse_permitted())
             return std::nullopt;
@@ -746,7 +751,7 @@ std::optional<position_t> Column::get_physical_row(position_t row) const {
     if (is_sparse() && !sparse_map().get_bit(bv_size(row)))
         return std::nullopt;
 
-    return get_physical_offset(row);
+    return get_physical_offset(row, sparse_map_index);
 }
 
 bool Column::has_value_at(position_t row) const { return !is_sparse() || sparse_map().get_bit(bv_size(row)); }

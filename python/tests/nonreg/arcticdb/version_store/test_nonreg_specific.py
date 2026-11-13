@@ -13,7 +13,7 @@ import pytest
 import sys
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException, SchemaException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal, assert_series_equal, config_context
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
@@ -21,7 +21,6 @@ from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 import arcticdb_ext.cpp_async as adb_async
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.exceptions import SchemaException
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.conftest import Marks
 from tests.util.date import DateRange
@@ -471,6 +470,29 @@ def test_prune_previous_append_compact_data(version_store_factory, monkeypatch, 
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if should_be_pruned else 2)
 
 
+@pytest.mark.parametrize("lib_config", (True, False))
+@pytest.mark.parametrize("env_var", (True, False))
+@pytest.mark.parametrize("arg", (True, False, None))
+def test_prune_previous_rename_columns_arrow_compat(version_store_factory, monkeypatch, lib_config, env_var, arg):
+    lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
+    should_be_pruned = lib_config
+    if env_var:
+        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
+        should_be_pruned = True
+    if arg is not None:
+        should_be_pruned = arg
+
+    lt = lib.library_tool()
+    sym = "test_prune_previous_rename_columns_arrow_compat"
+    # Use a dataframe with non-Arrow compatible schema (unnamed index) so that a new version is written
+    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df_0)
+
+    lib.rename_columns_arrow_compat(sym, prune_previous_version=arg)
+
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if should_be_pruned else 2)
+
+
 @pytest.mark.parametrize("index_start", range(9))
 def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, index_start):
     lib = lmdb_version_store_tiny_segment
@@ -676,3 +698,33 @@ def test_write_version_chain_minimal_io(in_memory_store_factory, clear_query_sta
         # again when the version map is being written. Ideally this would only be loaded once and the 4 below would be a
         # 2
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == (13 if dedup else 4)
+
+
+def test_staged_writes_atom_key_end_index(in_memory_library):
+    # Prior to #3378, sort_and_finalize_staged_data used the last index value from a data segment in the end_index
+    # value in the data keys it wrote, rather than 1ns greater as everything else does
+    lib = in_memory_library
+    sym = "test_staged_writes_atom_key_end_index"
+    df = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2026-01-01", periods=2))
+    lib.stage(sym, df)
+    lt = lib._nvs.library_tool()
+    append_data_keys = lt.find_keys(KeyType.APPEND_DATA)
+    assert len(append_data_keys) == 1
+    assert append_data_keys[0].end_index == df.index[-1].value + 1
+    lib.sort_and_finalize_staged_data(sym)
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert len(data_keys) == 1
+    assert data_keys[0].end_index == df.index[-1].value + 1
+
+
+def test_sorted_staged_writes_atom_key_end_index(in_memory_library):
+    # Prior to #3378, stage with sorting used the last index value from a data segment in the end_index value in the
+    # APPEND_DATA keys it wrote, rather than 1ns greater as everything else does
+    lib = in_memory_library
+    sym = "test_sorted_staged_writes_atom_key_end_index"
+    df = pd.DataFrame({"col": [0, 1]}, index=reversed(pd.date_range("2026-01-01", periods=2)))
+    lib.stage(sym, df, sort_on_index=True)
+    lt = lib._nvs.library_tool()
+    append_data_keys = lt.find_keys(KeyType.APPEND_DATA)
+    assert len(append_data_keys) == 1
+    assert append_data_keys[0].end_index == df.index[0].value + 1

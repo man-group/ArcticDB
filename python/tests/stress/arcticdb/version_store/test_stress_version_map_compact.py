@@ -17,7 +17,8 @@ from arcticdb_ext import set_config_int
 from arcticdb import log
 
 from arcticdb.config import set_log_level
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.storage import KeyType
+from arcticdb.exceptions import NoDataFoundException
 
 from tests.util.mark import SLOW_TESTS_MARK
 

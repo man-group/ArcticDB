@@ -86,15 +86,14 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     void append_incomplete(
-            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+            const StreamId& stream_id, const convert::InputItem& item, const py::object& norm,
             const py::object& user_meta, bool validate_index
     ) const;
 
     std::variant<VersionedItem, CompactionError> compact_incomplete(
             const StreamId& stream_id, bool append, bool convert_int_to_float, bool via_iteration = true,
-            bool sparsify = false, const std::optional<py::object>& user_meta = std::nullopt,
-            bool prune_previous_versions = false, bool validate_index = false,
-            bool delete_staged_data_on_failure = false,
+            const std::optional<py::object>& user_meta = std::nullopt, bool prune_previous_versions = false,
+            bool validate_index = false, bool delete_staged_data_on_failure = false,
             const std::optional<std::vector<StageResult>>& stage_results = std::nullopt
     );
 
@@ -129,8 +128,8 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     std::variant<VersionedItem, CompactionError> sort_merge(
-            const StreamId& stream_id, const py::object& user_meta, bool append, bool convert_int_to_float,
-            bool via_iteration, bool sparsify, bool prune_previous_versions, bool delete_staged_data_on_failure,
+            const StreamId& stream_id, const py::object& user_meta, bool append, bool prune_previous_versions,
+            bool delete_staged_data_on_failure,
             const std::optional<std::vector<StageResult>>& stage_results = std::nullopt
     );
 
@@ -290,7 +289,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
     VersionedItem merge(
-            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
+            const StreamId& stream_id, const convert::InputItem& source, const py::object& norm,
             const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
             const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
     );
@@ -304,6 +303,11 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<VersionedItemOrError> batch_compact_data(
             const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment,
             bool prune_previous_versions, bool throw_on_error
+    );
+
+    VersionedItem rename_columns_arrow_compat(
+            const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+            const bool prune_previous_versions
     );
 
   private:

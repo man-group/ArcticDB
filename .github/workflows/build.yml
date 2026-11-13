@@ -388,12 +388,12 @@ jobs:
           - python_deps_ids: [""]
             infer_string_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+          # infer_string is a Python/format-layer flag with no OS-specific behaviour, so the -inferstr variants
+          # run on Linux only (they cost 20 jobs / ~286 job-min across Windows and macOS).
           - python3: 11
             python_deps_ids: [""]
-            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
+            infer_string_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-          - python3: ${{ needs.storage_type.outputs.storage == 'no' && 14 || 11 }}
-            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -412,6 +412,8 @@ jobs:
       pytest_xdist_mode: "-n logical --dist worksteal"
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
+      # The version cache reload interval is OS independent, so the cp311 NoCache variant runs on Linux only
+      version_cache_test: false
       DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}
 
   persistent_storage_verify_linux:
@@ -474,13 +476,12 @@ jobs:
             infer_string_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
             pytest_xdist_mode: "-n logical --dist worksteal"
+          # See the Windows matrix: -inferstr runs on Linux only
           - python3: 11
             python_deps_ids: [""]
-            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
+            infer_string_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
             pytest_xdist_mode: "-n logical --dist worksteal"
-          - python3: ${{ needs.storage_type.outputs.storage == 'no' && 14 || 11 }}
-            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
     name: 3.${{matrix.python3}} macOS
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -497,6 +498,8 @@ jobs:
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args}}
       DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}
+      # The version cache reload interval is OS independent, so the cp311 NoCache variant runs on Linux only
+      version_cache_test: false
 
   persistent_storage_verify_macos:
     needs: [common_config, build-python-wheels-macos, storage_type]
@@ -552,6 +555,22 @@ jobs:
     steps:
       - run: echo Dummy job to simplify PR merge checks configuration
       # FUTURE: add some test stats/reporting
+
+  # Wall time is the longest chain of jobs, not the sum of the work, so this reports which chain it was. It runs
+  # even when the build failed, since a run that fails slowly is worth seeing too.
+  critical_path:
+    needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]
+    if: always() && !cancelled()
+    runs-on: ubuntu-22.04
+    permissions: {actions: read}
+    steps:
+      # checkout v3 has no sparse-checkout inputs, and the repo is small enough that a full checkout is cheap
+      - uses: actions/checkout@v3.3.0
+      - name: Report what set the wall-clock time
+        env:
+          GH_TOKEN: ${{github.token}}
+        run: python3 build_tooling/ci_critical_path.py >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
 
   publish:
     needs: [common_config, can_merge]

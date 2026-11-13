@@ -45,6 +45,10 @@ find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
 find_package(PCRE2 REQUIRED COMPONENTS 8BIT 32BIT)
 
+if(${ARCTICDB_ENABLE_PERFORMANCE_SAMPLING})
+    find_package(unofficial-perfetto CONFIG REQUIRED)
+endif()
+
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -214,6 +218,7 @@ set(arcticdb_srcs
         # header files
         arrow/arrow_handlers.hpp
         arrow/arrow_c_interface.hpp
+        arrow/arrow_schema_utils.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -255,9 +260,11 @@ set(arcticdb_srcs
         entity/index_range.hpp
         entity/key.hpp
         entity/metrics.hpp
+        entity/arrow_pandas_norm.hpp
         entity/data_error.hpp
         entity/descriptors.hpp
         entity/native_tensor.hpp
+        entity/normalization_utils.hpp
         entity/output_format.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
@@ -278,6 +285,7 @@ set(arcticdb_srcs
         entity/field_collection_proto.hpp
         entity/python_bindings_common.hpp
         log/log.hpp
+        log/console_sink.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
         pipeline/column_stats_types.hpp
@@ -304,7 +312,6 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
-        python/normalization_utils.hpp
         python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
@@ -325,6 +332,7 @@ set(arcticdb_srcs
         processing/bucketizer.hpp
         processing/clause.hpp
         processing/clause_utils.hpp
+        processing/schema_combine.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
         processing/query_planner.hpp
@@ -350,6 +358,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_client_interface.hpp
         storage/mock/lmdb_mock_client.hpp
         storage/lmdb/lmdb_client_impl.hpp
+        storage/lmdb/lmdb_error_handling.hpp
         storage/lmdb/lmdb_storage.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
@@ -367,6 +376,7 @@ set(arcticdb_srcs
         storage/s3/s3_client_interface.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_settings.hpp
+        storage/s3/s3_retry_strategy.hpp
         storage/mock/s3_mock_client.hpp
         storage/python_bindings_common.hpp
         storage/storage_factory.hpp
@@ -430,6 +440,7 @@ set(arcticdb_srcs
         util/offset_string.hpp
         util/optional_defaults.hpp
         util/pb_util.hpp
+        util/perfetto_utils.hpp
         util/preconditions.hpp
         util/preprocess.hpp
         util/ranges_from_future.hpp
@@ -441,6 +452,7 @@ set(arcticdb_srcs
         util/storage_lock.hpp
         util/reliable_storage_lock.hpp
         util/reliable_storage_lock-inl.hpp
+        util/string_stat_encoding.hpp
         util/string_utils.hpp
         util/thread_cached_int.hpp
         util/timeouts.hpp
@@ -471,6 +483,7 @@ set(arcticdb_srcs
         # CPP files
         arrow/arrow_handlers.cpp
         arrow/arrow_c_interface.cpp
+        arrow/arrow_schema_utils.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
@@ -501,10 +514,11 @@ set(arcticdb_srcs
         entity/compact_data_info.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
+        entity/arrow_pandas_norm.cpp
         entity/field_collection_proto.cpp
         entity/key.cpp
-        entity/merge_descriptors.cpp
         entity/metrics.cpp
+        entity/normalization_utils.cpp
         entity/performance_tracing.cpp
         entity/protobuf_mappings.cpp
         entity/python_bindings_common.cpp
@@ -522,6 +536,7 @@ set(arcticdb_srcs
         pipeline/index_utils.cpp
         pipeline/input_frame.cpp
         pipeline/pipeline_context.cpp
+        pipeline/pipeline_utils.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
         pipeline/read_pipeline.cpp
@@ -532,7 +547,6 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/python_bindings_common.cpp
-        python/normalization_utils.cpp
         python/python_strings.cpp
         python/python_utils.cpp
         python/numpy_buffer_holder.cpp
@@ -541,8 +555,10 @@ set(arcticdb_srcs
         processing/clause.cpp
         processing/clause_compact_data.cpp
         processing/clause_merge_update.cpp
+        processing/clause_rename_columns.cpp
         processing/clause_resample.cpp
         processing/clause_utils.cpp
+        processing/schema_combine.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
         processing/operation_dispatch.cpp
@@ -572,6 +588,7 @@ set(arcticdb_srcs
         storage/mock/azure_mock_client.cpp
         storage/mock/lmdb_mock_client.cpp
         storage/lmdb/lmdb_client_impl.cpp
+        storage/lmdb/lmdb_error_handling.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
         storage/mongo/mongo_client.cpp
@@ -581,6 +598,7 @@ set(arcticdb_srcs
         storage/s3/nfs_backed_storage.cpp
         storage/s3/ec2_utils.cpp
         storage/s3/s3_api.cpp
+        storage/s3/s3_retry_strategy.cpp
         storage/s3/s3_client_impl.cpp
         storage/mock/s3_mock_client.cpp
         storage/s3/s3_storage.cpp
@@ -609,7 +627,9 @@ set(arcticdb_srcs
         util/memory_mapped_file.hpp
         util/name_validation.cpp
         util/offset_string.cpp
+        util/perfetto_utils.cpp
         util/sparse_utils.cpp
+        util/string_stat_encoding.cpp
         util/string_utils.cpp
         util/trace.cpp
         util/type_handler.cpp
@@ -632,6 +652,9 @@ set(arcticdb_srcs
         version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
 )
+if (WIN32)
+    list(APPEND arcticdb_srcs log/console_sink.cpp)
+endif()
 strip_fd_from_compile_object()
 set_pdb_name_per_translation_unit(${arcticdb_srcs})
 
@@ -801,6 +824,11 @@ set (arcticdb_core_libraries
         PCRE2::32BIT
 )
 
+if(${ARCTICDB_ENABLE_PERFORMANCE_SAMPLING})
+    message(STATUS "ArcticDB performance sampling enabled. Linking against perfetto.")
+    list(APPEND arcticdb_core_libraries unofficial::perfetto::perfetto)
+endif()
+
 if(${ARCTICDB_COUNT_ALLOCATIONS})
     list(APPEND arcticdb_core_libraries
             cpptrace::cpptrace
@@ -892,7 +920,7 @@ target_include_directories(arcticdb_core_object
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../proto/arcticc/pb2/proto/>
         # For IDE resolution
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
         ${arcticdb_core_includes}
         )
 
@@ -1083,6 +1111,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/test_arrow_read.cpp
             arrow/test/test_arrow_write.cpp
+            arrow/test/test_arrow_schema_utils.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
@@ -1116,6 +1145,7 @@ if(${TEST})
             pipeline/test/test_column_stats_dispatch_range_vs_range.cpp
             pipeline/test/test_column_stats_isin.cpp
             pipeline/test/test_column_stats_query_metadata.cpp
+            pipeline/test/test_column_stats_string_columns.cpp
             util/test/test_regex.cpp
             processing/test/ast_test_helpers.hpp
             processing/test/test_arithmetic_type_promotion.cpp
@@ -1124,7 +1154,8 @@ if(${TEST})
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
-            processing/test/test_join_schemas.cpp
+            processing/test/test_schema_combine.cpp
+            processing/test/test_min_max_aggregator_strings.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
             processing/test/test_output_schema_aggregator_types.cpp
@@ -1139,10 +1170,13 @@ if(${TEST})
             processing/test/test_unsorted_aggregation.cpp
             processing/test/test_merge_update.cpp
             storage/test/test_lmdb_cve.cpp
+            storage/test/test_lmdb_flags.cpp
             processing/test/test_structure_by_time_slice.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
+            storage/test/test_s3_api.cpp
+            storage/test/test_s3_retry_strategy.cpp
             storage/test/test_storage_factory.cpp
             storage/test/common.hpp
             storage/test/test_storage_exceptions.cpp
@@ -1178,12 +1212,14 @@ if(${TEST})
             util/test/test_slab_allocator.cpp
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
+            util/test/test_string_stat_encoding.cpp
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
             util/test/gtest_custom_formatters.hpp
             util/test/gtest_utils.hpp
             util/test/input_frame_utils.hpp
             util/test/segment_generation_utils.hpp
+            util/test/string_stat_test_utils.hpp
             util/test/segment_generation_utils.cpp
             version/test/test_admission_handler.cpp
             version/test/test_append.cpp

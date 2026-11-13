@@ -63,6 +63,13 @@ constexpr size_t ASCII_WIDTH = 1;
 static_assert(UNICODE_WIDTH == 4, "Only support python platforms where unicode width is 4");
 #endif
 
+// The character width of a fixed-width UTF string as the string pool holds it. Fixed-width columns
+// are written from numpy `<U` arrays, whose characters are UCS-4 on every platform, and the pool keeps
+// those bytes verbatim. Code reading pool data must use this and not UNICODE_WIDTH, which follows
+// wchar_t and so is only two bytes on Windows.
+constexpr size_t UTF32_WIDTH = sizeof(char32_t);
+static_assert(UTF32_WIDTH == 4, "UCS-4 is four bytes per character on every platform");
+
 // Beware, all the enum values of the field must match exactly the values
 // descriptors.proto::TypeDescriptor::ValueType
 enum class ValueType : uint8_t {

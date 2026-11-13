@@ -75,7 +75,7 @@ class VersionedEngine {
 
     virtual void append_incomplete_segment(const StreamId& stream_id, SegmentInMemory&& seg) = 0;
 
-    virtual void remove_incomplete(const StreamId& stream_id) = 0;
+    virtual void remove_incomplete(const std::variant<StreamId, std::vector<StageResult>>& id_or_stage_results) = 0;
 
     virtual StageResult write_parallel_frame(
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index,
@@ -181,6 +181,11 @@ class VersionedEngine {
     virtual VersionedItem merge_internal(
             const StreamId& stream_id, std::shared_ptr<InputFrame> source, bool prune_previous_versions, bool upsert,
             const MergeStrategy& strategy, std::vector<std::string>&& on
+    ) = 0;
+
+    virtual VersionedItem rename_columns_arrow_compat_internal(
+            const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+            const bool prune_previous_versions
     ) = 0;
 };
 

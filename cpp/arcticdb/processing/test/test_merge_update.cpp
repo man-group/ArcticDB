@@ -7,10 +7,12 @@
  */
 #include <gtest/gtest.h>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/processing/schema_combine.hpp>
 #include <stream/test/stream_test_common.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/segment_generation_utils.hpp>
 #include <arcticdb/util/test/input_frame_utils.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
 
 using namespace arcticdb;
 using namespace std::ranges;
@@ -110,9 +112,16 @@ MergeUpdateClause create_clause(
 ) {
     auto strat = strategy;
     strat.match_na = match_na;
-    MergeUpdateClause clause(
-            std::move(on), strat, std::make_shared<InputFrame>(std::move(input_frame)), rows_per_segment
-    );
+    OutputSchema source_output_schema = schema_from_input_frame(input_frame);
+    auto frame = std::make_shared<InputFrame>(std::move(input_frame));
+    // Same conversion as merge_update_impl. WriteToSegmentTask adds the index column itself.
+    FrameSlice full_slice{
+            std::make_shared<StreamDescriptor>(frame->desc().clone()),
+            ColRange{frame->desc().index().field_count(), frame->desc().field_count()},
+            RowRange{0, frame->num_rows}
+    };
+    MergeUpdateClause clause(std::move(on), strat, std::move(source_output_schema), rows_per_segment);
+    clause.set_source(std::get<1>(WriteToSegmentTask(frame, std::move(full_slice))()), false);
     clause.set_component_manager(std::move(component_manager));
     return clause;
 }
@@ -1110,14 +1119,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, RequireNonEmptyOn) {
             std::array{timestamp{0}}
     );
     MergeUpdateClause clause = create_clause(std::move(input_frame));
-    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys_);
-    const size_t row_slices_to_process = structure_indices.size();
-    ASSERT_EQ(row_slices_to_process, 3);
-    const size_t segments_to_process = row_slices_to_process * column_slices_per_row_slice();
-    ASSERT_EQ(segments_to_process, 6);
-    std::vector<EntityId> entities = push_entities(structure_indices);
-    auto structured = structure_entities(structure_indices, entities);
-    ASSERT_THROW((void)clause.process(std::move(structured[0])), UserInputException);
+    ASSERT_THROW((void)clause.structure_for_processing(ranges_and_keys_), UserInputException);
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, NonExistingOnThrows) {
@@ -1129,16 +1131,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, NonExistingOnThrows) {
             std::array{1000.f, 1001.f},
             std::array<timestamp, 2>{2000, 2001}
     );
-    MergeUpdateClause clause = create_clause(std::move(input_frame), {"nonexisting"});
-    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys_);
-    const size_t row_slices_to_process = structure_indices.size();
-    ASSERT_EQ(row_slices_to_process, 3);
-    const size_t segments_to_process = row_slices_to_process * column_slices_per_row_slice();
-    ASSERT_EQ(segments_to_process, 6);
-    assert_structure_for_processing_result(structure_indices);
-    const std::vector<EntityId> entities = push_entities(structure_indices);
-    std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
-    ASSERT_THROW((void)clause.process(std::move(structured[0])), UserInputException);
+    ASSERT_THROW((void)create_clause(std::move(input_frame), {"nonexisting"}), UserInputException);
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1) {
@@ -3334,4 +3327,58 @@ TEST(MergeUpdateInsertOnlySharedSlice, InsertsIntoChainWithSharedBoundaries) {
                 (*proc.row_ranges_) | std::views::transform([](const auto& rr) { return *rr; }), expected_row_ranges
         ));
     }
+}
+
+namespace {
+/// Runs an update only merge on row range indexed data held in a single segment. Returns the segment emitted by the
+/// clause or std::nullopt if nothing was updated.
+std::optional<SegmentInMemory> merge_update_single_row_range_segment(
+        const StreamDescriptor& desc,
+        std::tuple<std::vector<SegmentInMemory>, std::vector<ColRange>, std::vector<RowRange>>&& target,
+        InputFrame&& source, std::vector<std::string> on
+) {
+    auto [segments, col_ranges, row_ranges] = std::move(target);
+    util::check(segments.size() == 1, "Expected a single target segment, got {}", segments.size());
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
+    auto component_manager = std::make_shared<ComponentManager>();
+    MergeUpdateClause clause = create_clause(update_only_strategy, component_manager, std::move(source), std::move(on));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    const std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            structure_indices,
+            std::move(segments),
+            std::move(col_ranges),
+            std::move(row_ranges),
+            std::move(ranges_and_keys)
+    );
+    std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
+    const std::vector<EntityId> result = clause.process(std::move(structured.at(0)));
+    if (result.empty()) {
+        return std::nullopt;
+    }
+    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>>(*component_manager, result);
+    return std::move(*proc.segments_->at(0));
+}
+} // namespace
+
+TEST(MergeUpdateRowRangeMatching, NegativeZeroMatchesPositiveZero) {
+    constexpr static std::array fields{
+            FieldRef{{DataType::FLOAT64, Dimension::Dim0}, "k"}, FieldRef{{DataType::INT64, Dimension::Dim0}, "v"}
+    };
+    const StreamDescriptor desc = RowCountIndex::default_index().create_stream_descriptor("TestStream", fields);
+    auto [source, source_data] =
+            input_frame_from_tensors<RowCountIndex>(desc, std::array{0.0}, std::array<int64_t, 1>{20});
+    const std::optional<SegmentInMemory> result = merge_update_single_row_range_segment(
+            desc,
+            slice_data_into_segments<RowCountIndex>(
+                    desc, 3, 2, std::array{1.0, -0.0, 3.0}, std::array<int64_t, 3>{1, 2, 3}
+            ),
+            std::move(source),
+            {"k"}
+    );
+    ASSERT_TRUE(result.has_value());
+    auto [expected, _c, _r] = slice_data_into_segments<RowCountIndex>(
+            desc, 3, 2, std::array{1.0, -0.0, 3.0}, std::array<int64_t, 3>{1, 20, 3}
+    );
+    ASSERT_EQ(*result, expected[0]);
 }

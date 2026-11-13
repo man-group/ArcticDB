@@ -7,3 +7,5 @@ msgpack==1.0.5
 prometheus_client==0.21.1
 pyyaml==6.0.1
 packaging==24.2
+# pyarrow 26 requires numpy>=2 at import time (not declared in its metadata)
+pyarrow<26

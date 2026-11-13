@@ -172,8 +172,8 @@ def test_finalize_empty_dataframe(basic_arctic_library, new_version):
     dataframe_dump_to_log("after write + append", lib.read(symbol).data)
     df = small_dataframe("2024-01-01")
     dataframe_dump_to_log("df to be staged", df)
-    lib.write(symbol, data=df, validate_index=True, staged=True)
-    lib.write(symbol, data=empty_df, validate_index=True, staged=True)
+    lib.stage(symbol, data=df, validate_index=True)
+    lib.stage(symbol, data=empty_df, validate_index=True)
     lib.finalize_staged_data(symbol=symbol, mode=StagedDataFinalizeMethod.APPEND)
 
 
@@ -223,9 +223,9 @@ def test_finalize_with_upcast_type(lmdb_library_dynamic_schema):
     arr_all_c = concat_all_arrays(arr_c1, arr_c2, arr_c3, arr_c4)
 
     lib.write(symbol, df)
-    lib.write(symbol, df1, staged=True)
-    lib.write(symbol, df2, staged=True)
-    lib.write(symbol, df3, staged=True)
+    lib.stage(symbol, df1)
+    lib.stage(symbol, df2)
+    lib.stage(symbol, df3)
     lib.finalize_staged_data(symbol=symbol, mode=StagedDataFinalizeMethod.APPEND)
 
     result: pd.DataFrame = lib.read(symbol).data
@@ -269,11 +269,11 @@ def test_finalize_with_unsorted_indexes(lmdb_library_dynamic_schema, mode, valid
 
     if validate_index:
         with pytest.raises(UnsortedDataException):
-            lib.write(symbol=symbol, staged=True, validate_index=True, data=df_unsorted)
+            lib.stage(symbol=symbol, validate_index=True, data=df_unsorted)
         with pytest.raises(UserInputException):
             lib.finalize_staged_data(symbol=symbol, mode=mode, validate_index=False)
     else:
-        lib.write(symbol=symbol, staged=True, validate_index=False, data=df_unsorted)
+        lib.stage(symbol=symbol, validate_index=False, data=df_unsorted)
         with pytest.raises(UnsortedDataException):
             lib.finalize_staged_data(symbol=symbol, mode=mode, validate_index=False)
 
@@ -359,10 +359,10 @@ def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
 
     # We create 3 versions now
     lib.write(symbol, df)
-    lib.write(symbol, df1, staged=True)
+    lib.stage(symbol, df1)
     lib.finalize_staged_data(symbol=symbol, mode=StagedDataFinalizeMethod.APPEND)
-    lib.write(symbol, df2, staged=True)
-    lib.write(symbol, df3, staged=True)
+    lib.stage(symbol, df2)
+    lib.stage(symbol, df3)
     lib.finalize_staged_data(symbol=symbol, mode=StagedDataFinalizeMethod.APPEND)
 
     result: pd.DataFrame = lib.read(symbol).data
@@ -407,8 +407,8 @@ def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
 
     # As final step we once again repeat staging op with same data
     # To arrive at final stage
-    lib.write(symbol, df2, staged=True)
-    lib.write(symbol, df3, staged=True)
+    lib.stage(symbol, df2)
+    lib.stage(symbol, df3)
     lib.finalize_staged_data(symbol=symbol, mode=StagedDataFinalizeMethod.APPEND)
 
     result: pd.DataFrame = lib.read(symbol).data
@@ -452,10 +452,10 @@ def test_finalize_staged_data_long_scenario(basic_arctic_library):
     chunk_list = generate_chunk_sizes(200, 900, 1100)
     for chunk_size in chunk_list:
         df = cachedDF.generate_dataframe_timestamp_indexed(chunk_size, total_number_rows, cachedDF.TIME_UNIT)
-        lib.write(symbol, data=df, validate_index=True, staged=True)
+        lib.stage(symbol, data=df, validate_index=True)
         ## Unfortunately there is a bug with empty dataframe with index
         ## Uncomment when this is solved
-        # lib.write(symbol, data=df.drop(df.index), validate_index=True, staged=True)
+        # lib.stage(symbol, data=df.drop(df.index), validate_index=True)
         total_number_rows = total_number_rows + chunk_size
         cachedParts.cache_samples_from(df)
     lib.finalize_staged_data(symbol=symbol, mode=StagedDataFinalizeMethod.APPEND)
@@ -469,7 +469,7 @@ def test_finalize_staged_data_mode_write(basic_arctic_library, mode):
     df_initial = sample_dataframe("2020-1-1", [1, 2, 3], [4, 5, 6])
     df_staged = sample_dataframe("2020-1-4", [7, 8, 9])
     lib.write(symbol, df_initial)
-    lib.write(symbol, df_staged, staged=True)
+    lib.stage(symbol, df_staged)
     assert_frame_equal(lib.read(symbol).data, df_initial)
 
     lib.finalize_staged_data(symbol="symbol", mode=mode)
@@ -483,7 +483,7 @@ def test_finalize_staged_data_mode_append(basic_arctic_library, mode):
     df_initial = sample_dataframe("2020-1-1", [1, 2, 3], [4, 5, 6])
     df_staged = sample_dataframe("2020-1-4", [7, 8, 9], [10, 11, 12])
     lib.write(symbol, df_initial)
-    lib.write(symbol, df_staged, staged=True)
+    lib.stage(symbol, df_staged)
     assert_frame_equal(lib.read(symbol).data, df_initial)
 
     lib.finalize_staged_data(symbol="symbol", mode=mode)

@@ -1,4 +1,5 @@
 import arcticdb
+import pytest
 from arcticdb.util.test import random_strings_of_length, random_string
 import datetime
 import pandas as pd
@@ -60,6 +61,9 @@ def alloc_nones_and_nans():
     return nones, nans
 
 
+# Peaks at several GB: keep it in the shared stress_heavy xdist_group so that only one such test runs at a
+# time under -n 4 (see PYTEST_XDIST_MODE in .github/workflows/build_steps.yml).
+@pytest.mark.xdist_group(name="stress_heavy")
 class TestConcurrentHandlingOfNoneAndNan:
     """
     Tests the proper handling of the None refcount. None is a global static object that should never go away; however, it

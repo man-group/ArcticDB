@@ -118,26 +118,34 @@ def create_run_from_github_actions():
             f"GITHUB_RUN_ID: {run_id}, GITHUB_REF_NAME: {branch}, GITHUB_SHA: {commit_hash}"
         )
 
+    repo = os.environ.get("GITHUB_REPOSITORY", "man-group/ArcticDB")
     run_dict = {
         "id": run_id,
         "head_branch": branch,
         "run_started_at": start_time,
         "head_commit": {"id": commit_hash},
+        "artifacts_url": f"/repos/{repo}/actions/runs/{run_id}/artifacts",
     }
 
     return Run(run_dict)
 
 
 def get_artifacts_for_run(artifact_download_url):
-    """Get artifacts for a specific workflow run"""
+    """Get every artifact of a workflow run.
+
+    Paginated: a run of the full matrix uploads more than the 100 artifacts one page holds, and the rest were
+    being dropped silently.
+    """
+    separator = "&" if "?" in artifact_download_url else "?"
     cmd = [
         "gh",
         "api",
+        "--paginate",
         "-H",
         "Accept: application/vnd.github+json",
         "-H",
         "X-GitHub-Api-Version: 2022-11-28",
-        f"{artifact_download_url}",
+        f"{artifact_download_url}{separator}per_page=100",
     ]
 
     try:
@@ -145,14 +153,29 @@ def get_artifacts_for_run(artifact_download_url):
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {' '.join(cmd)}")
         print(f"Return code: {e.returncode}")
-        print(f"Error output: {e.stderr.decode('utf-8')}")
+        print(f"Error output: {e.stderr}")
         raise
 
-    data = json.loads(output.stdout)
-    artifacts = data.get("artifacts", [])
+    # --paginate concatenates one JSON object per page
+    decoder, text, artifacts, idx = json.JSONDecoder(), output.stdout.strip(), [], 0
+    while idx < len(text):
+        page, idx = decoder.raw_decode(text, idx)
+        artifacts.extend(page.get("artifacts", []))
+        while idx < len(text) and text[idx] in " \n\r\t":
+            idx += 1
 
-    # print(f"Found {len(artifacts)} artifacts for run {artifact_download_url}")
-    return artifacts
+    # The pages are offset windows over a list that is still growing - this job publishes the run it belongs to, so
+    # jobs are uploading while we walk. Each upload shifts everything down one place, and an artifact on a page
+    # boundary comes back on the next page too. Keep the first sighting: the listing is newest first, and two
+    # downloads of one name would race on the same directory.
+    seen, unique = set(), []
+    for artifact in artifacts:
+        key = artifact["name"]
+        if key not in seen:
+            seen.add(key)
+            unique.append(artifact)
+
+    return unique
 
 
 def download_artifact(run: Run, artifact: dict, download_dir: Path) -> Path:
@@ -456,7 +479,7 @@ def download_pytest_xmls_in_parallel(runs, download_dir, max_workers) -> List[st
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_run = {}
         for run in runs:
-            future = executor.submit(process_workflow_run, run, download_dir)
+            future = executor.submit(process_workflow_run, run, download_dir, 4)
             future_to_run[future] = run
 
         runs_to_remove = []
@@ -472,26 +495,36 @@ def download_pytest_xmls_in_parallel(runs, download_dir, max_workers) -> List[st
         return runs_to_remove
 
 
-def process_workflow_run(run: Run, download_dir: Path) -> Dict[str, Path]:
-    """Process a single workflow run - get artifacts and download them"""
+def process_workflow_run(
+    run: Run, download_dir: Path, artifact_workers: int = 8, check_status: bool = True
+) -> Dict[str, Path]:
+    """Process a single workflow run - get artifacts and download them.
 
-    if run.run_conclusion and run.run_conclusion.lower() == "cancelled":
-        # print(f"Skipping run {run.run_id} - cancelled")
-        return {run.run_id: None}
+    check_status is off when we are publishing the run we are part of: such a run is in progress by definition,
+    since this job is one of its jobs.
+    """
 
-    # Only process completed runs
-    if run.run_status and run.run_status.lower() != "completed":
-        # print(f"Skipping run {run.run_id} - not completed")
-        return {run.run_id: None}
+    if check_status:
+        if run.run_conclusion and run.run_conclusion.lower() == "cancelled":
+            # print(f"Skipping run {run.run_id} - cancelled")
+            return {run.run_id: None}
+
+        # Only process completed runs
+        if run.run_status and run.run_status.lower() != "completed":
+            # print(f"Skipping run {run.run_id} - not completed")
+            return {run.run_id: None}
 
     print(f"Processing run {run.run_id}: ({run.run_status}/{run.run_conclusion}) {run.timestamp}")
 
-    downloaded_zips = []
     artifacts = get_artifacts_for_run(run.artifacts_url)
-    for artifact in artifacts:
-        zip_path = download_artifact(run, artifact, download_dir)
-        if zip_path:
-            downloaded_zips.append(zip_path)
+    # A run has ~100 pytest artifacts of a few tens of KB each, so this is latency bound, not bandwidth bound:
+    # downloading them one at a time takes ~20 minutes against well under one in parallel.
+    with ThreadPoolExecutor(max_workers=artifact_workers) as executor:
+        downloaded_zips = [
+            zip_path
+            for zip_path in executor.map(lambda a: download_artifact(run, a, download_dir), artifacts)
+            if zip_path
+        ]
 
     downloaded_files = []
     for zip_path in downloaded_zips:
@@ -569,7 +602,7 @@ def save_csv_files_to_lib(run_ids, csv_files):
 
 
 @click.command()
-@click.option("--max-workers", type=int, default=5)
+@click.option("--max-workers", type=int, default=16)
 @click.option("--download-dir", type=str, default="gh_artifacts")
 @click.option(
     "--max-pages",
@@ -594,6 +627,15 @@ def main(max_workers, download_dir, max_pages, use_github_actions):
         except Exception as e:
             print(f"Error creating Run object from GitHub Actions environment: {e}")
             raise
+
+        if not any(download_dir.glob("**/*.xml")):
+            # Nothing has been downloaded for us, so fetch this run's artifacts ourselves. actions/download-artifact
+            # walks them one at a time, which costs ~20 minutes for ~100 small artifacts.
+            print(f"Downloading artifacts for run {run_obj.run_id} with {max_workers} workers...")
+            start_time = time.time()
+            download_dir.mkdir(parents=True, exist_ok=True)
+            process_workflow_run(run_obj, download_dir, max_workers, check_status=False)
+            print(f"Time taken: {time.time() - start_time:.2f} seconds")
     else:
         # Get workflow runs
         print("Fetching workflow runs...")

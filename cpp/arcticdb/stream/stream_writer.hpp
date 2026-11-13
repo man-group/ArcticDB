@@ -19,6 +19,7 @@
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/pipeline/slicing.hpp>
 
 #include <folly/futures/Future.h>
 #include <boost/core/noncopyable.hpp>
@@ -135,7 +136,7 @@ class StreamWriter : boost::noncopyable {
   private:
     void on_data_segment(SegmentInMemory&& segment) {
         auto seg_start = segment_start(segment);
-        auto seg_end = segment_end(segment);
+        auto seg_end = pipelines::end_index_generator(segment_end(segment));
 
         written_data_keys_.emplace_back(store_->write(
                 get_key_type_for_data_stream(stream_id()),

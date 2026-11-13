@@ -9,6 +9,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Must precede project(), which is where the vcpkg toolchain reads VCPKG_MANIFEST_FEATURES
+option(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING "Build with Perfetto instrumented tracing" OFF)
+if(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING)
+    list(APPEND VCPKG_MANIFEST_FEATURES perfetto)
+endif()
+
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 project(arcticdb VERSION 0.0.1)
 
@@ -16,6 +22,10 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/compiler_cache.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/pdb_generation.cmake)
 
 enable_testing()
+
+if(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING)
+    add_compile_definitions(ARCTICDB_PERFORMANCE_SAMPLING)
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF CACHE BOOL "")
@@ -147,6 +157,14 @@ if(${ARCTICDB_USING_CONDA})
     # Required to be able to include headers from glog since glog 0.7
     # See: https://github.com/google/glog/pull/1030
     add_compile_definitions(GLOG_USE_GLOG_EXPORT)
+
+    # Keep macOS lookups (e.g. OpenSSL, LZ4) out of Homebrew, or the extension fails to load on machines without
+    # those exact formulae. pkg-config is isolated too, as its HINTS bypass CMAKE_IGNORE_PREFIX_PATH.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND DEFINED ENV{CONDA_PREFIX} AND NOT DEFINED ENV{CONDA_BUILD})
+        list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
+        list(APPEND CMAKE_IGNORE_PREFIX_PATH /opt/homebrew)
+        set(ENV{PKG_CONFIG_LIBDIR} "$ENV{CONDA_PREFIX}/lib/pkgconfig")
+    endif()
 endif()
 
 if(WIN32)

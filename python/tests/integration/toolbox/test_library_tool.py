@@ -6,13 +6,16 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import pandas as pd
 import numpy as np
+import polars as pl
+import pyarrow as pa
 import pytest
 
+from arcticdb.options import OutputFormat
 from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb.version_store._normalization import denormalize_dataframe
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType, IndexKind
-from arcticdb_ext.exceptions import SchemaException, InternalException, StorageException
+from arcticdb.exceptions import SchemaException, InternalException, StorageException
 from arcticdb_ext.version_store import Slicing
 from arcticdb_ext.stream import SegmentInMemory
 from tests.util.mark import MONGO_TESTS_MARK
@@ -306,9 +309,9 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     str_dtype = DataType.UTF_DYNAMIC64 if lib_tool._nvs._resolve_dynamic_strings({}) else DataType.UTF_FIXED64
     assert [read_type(key, "col") for key in append_keys] == [DataType.INT64, str_dtype, DataType.INT64]
     assert [read_type(key, "other") for key in append_keys] == [DataType.INT64, DataType.INT64, DataType.INT64]
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match="no common type for column 'col'"):
         lib.read(sym, incomplete=True, date_range=(pd.Timestamp(0), pd.Timestamp(2030, 1, 1)))
-    with pytest.raises(SchemaException):
+    with pytest.raises(SchemaException, match="no common type for column 'col'"):
         lib.compact_incomplete(sym, append=True, convert_int_to_float=False, via_iteration=False)
 
     # We change the last append data key to string and verify it's now a string
@@ -504,3 +507,22 @@ def test_segment_in_memory_to_read_result(lmdb_version_store_v1, sym):
 
     expected_df = lib_tool.read_to_dataframe(tdata_key)
     assert_frame_equal(expected_df, denormalize_dataframe(read_result))
+
+
+@pytest.mark.parametrize("input_format", ["pyarrow", "polars"])
+def test_append_incomplete_arrow(lmdb_version_store_v1, input_format):
+    lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    table_0 = pa.table({"ts": pd.date_range("2025-01-01", periods=2), "col": [1, 2]})
+    table_1 = pa.table({"ts": pd.date_range("2025-01-03", periods=2), "col": [3, 4]})
+    for table in [table_0, table_1]:
+        data = table if input_format == "pyarrow" else pl.from_arrow(table)
+        lib_tool.append_incomplete(sym, data, validate_index=True, index_column=True)
+
+    expected = pa.table({"ts": pd.date_range("2025-01-01", periods=4), "col": [1, 2, 3, 4]})
+    received = lib.read(sym, incomplete=True, date_range=(None, None), output_format=OutputFormat.PYARROW).data
+    assert expected.equals(received)
+
+    lib.compact_incomplete(sym, append=False, convert_int_to_float=False)
+    assert expected.equals(lib.read(sym, output_format=OutputFormat.PYARROW).data)

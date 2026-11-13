@@ -33,7 +33,7 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp >=1.11.833
   - prometheus-cpp
-  - libprotobuf <7
+  - libprotobuf <8
   - openssl
   # TODO: Understand failures with 8.17
   - libcurl >=8.18
@@ -46,7 +46,8 @@ dependencies:
   - fmt
   - sel(unix): folly==2026.06.08.00
   - sel(win): folly==2025.04.14.00 # Pending Windows build in the more recent folly version
-  - unordered_dense
+  # 5.0 removes detail::wyhash::hash, used in entity/atom_key.hpp
+  - unordered_dense <5
   - entt
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
   # Versions must be kept in sync
@@ -77,7 +78,6 @@ dependencies:
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis <6.73
-  - pytest-sugar
   - pytest-timeout
   - azure-storage-blob
   - azure-identity

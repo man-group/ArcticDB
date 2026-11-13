@@ -26,22 +26,18 @@ jobs:
           # get the current date and time in UTC
           echo "GITHUB_RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
 
-      - name: Gather pytest xmls from run ${{ github.run_id }}
-        id: gather-pytest-xmls
-        uses: actions/download-artifact@v8
-        with:
-            pattern: "*pytest-*"
-            run-id: ${{ github.run_id }}
-            github-token: ${{github.token}}  
-            path: ${{ env.ARTEFACT_PATH }}
-
       - name: Checkout
         uses: actions/checkout@v3.3.0
 
       - name: Install requirements
         run: |
           apt update
-          apt install -y git
+          apt install -y git curl
+          # gh, for the artifact downloads in process_pytest_artifacts.py
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+          apt update
+          apt install -y gh
           python3 -m pip install arcticdb[Testing] click "pandas<3" pytz
 
       - name: Setup softlink for SSL
@@ -58,7 +54,13 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
-      - name: Process pytest xmls
+      - name: Test the artifact processing script
+        run: python3 -m pytest build_tooling/test_process_pytest_artifacts.py
+
+      # The script fetches this run's artifacts itself, several at a time. actions/download-artifact walks them one
+      # at a time, which took ~20 min for the ~100 small artifacts a run produces - longer than the tests themselves.
+      - name: Gather and process pytest xmls from run ${{ github.run_id }}
+        env:
+          GH_TOKEN: ${{github.token}}
         run: |
-          ls -R ${{ env.ARTEFACT_PATH }}
-          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --use-github-actions
+          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --use-github-actions --max-workers 16

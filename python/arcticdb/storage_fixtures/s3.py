@@ -696,6 +696,9 @@ class HostDispatcherApplication(DomainDispatcherApplication):
     # When True, mimic a backend that does not implement response checksums at all, by rejecting any request
     # asking for them. Turn off to let requests through to moto, which does support them.
     _reject_checksum_mode = True
+    # Number of upcoming checksum-validated GET responses whose body is corrupted in transit, keeping its length, so
+    # the SDK sees a response checksum mismatch.
+    _get_responses_to_corrupt = 0
 
     @staticmethod
     def _is_delete_objects(environ):
@@ -726,13 +729,15 @@ class HostDispatcherApplication(DomainDispatcherApplication):
         return match.group(1) if match else None
 
     def get_backend_for_host(self, host):
-        """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
+        """Maps a request's host to the moto app instance that serves it."""
         if host is None:
             return None
-        if "s3" in host or host == "localhost":
+        # Both the S3 and the IAM endpoint map here, so they share one moto app instance and therefore one set of
+        # data: /moto-api/reset is posted to the IAM endpoint and must reset the S3 backend. Fixtures address the
+        # server by IPv4 literal, never by name, because on Windows "localhost" resolves to ::1 first and the
+        # server binds IPv4 only, so every connection wastes ~2s failing over.
+        if "s3" in host or host in ("localhost", "127.0.0.1"):
             return "s3"
-        elif host == "127.0.0.1":
-            return "iam"
         elif host == "moto_api":
             return "moto_api"
         else:
@@ -807,6 +812,14 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"md5 checksum requirement set"]
 
+            # Corrupt the body of the next N checksum-validated GET responses
+            if path_info in ("/corrupt_get_responses", b"/corrupt_get_responses"):
+                length = int(environ["CONTENT_LENGTH"])
+                body = environ["wsgi.input"].read(length).decode("ascii")
+                self._get_responses_to_corrupt = int(body)
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"get response corruption set"]
+
             # Allow toggling the rejection of response checksum requests (body "1" to reject, "0" to allow)
             if path_info in ("/reject_checksum_mode", b"/reject_checksum_mode"):
                 length = int(environ["CONTENT_LENGTH"])
@@ -842,7 +855,27 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                 )
                 return [response_body]
 
-        return super().__call__(environ, start_response)
+            # The C++ SDK names the checksum it sends in the body trailer through x-amz-trailer, while moto only stores
+            # one when the request carries botocore's x-amz-sdk-checksum-algorithm.
+            trailer = environ.get("HTTP_X_AMZ_TRAILER", "")
+            if trailer.startswith("x-amz-checksum-") and "HTTP_X_AMZ_SDK_CHECKSUM_ALGORITHM" not in environ:
+                environ["HTTP_X_AMZ_SDK_CHECKSUM_ALGORITHM"] = trailer[len("x-amz-checksum-") :].upper()
+
+            checksum_mode = environ.get("HTTP_X_AMZ_CHECKSUM_MODE")
+            corrupt = False
+            if checksum_mode is not None:
+                environ["HTTP_X_AMZ_CHECKSUM_MODE"] = checksum_mode.upper()
+                if environ.get("REQUEST_METHOD") == "GET" and self._get_responses_to_corrupt > 0:
+                    self._get_responses_to_corrupt -= 1
+                    corrupt = True
+
+        if not corrupt:
+            return super().__call__(environ, start_response)
+        else:
+            body = bytearray(b"".join(super().__call__(environ, start_response)))
+            if body:
+                body[len(body) // 2] ^= 0xFF
+            return [bytes(body)]
 
 
 class GcpHostDispatcherApplication(HostDispatcherApplication):
@@ -926,7 +959,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
     _RO_POLICY: str
     _RW_POLICY: str
-    host = "localhost"
+    # An IPv4 literal, not "localhost": see get_backend_for_host
+    host = "127.0.0.1"
     region = "us-east-1"
     port: int
     endpoint: str
@@ -985,7 +1019,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
-        self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
+        self._iam_endpoint = f"{self.http_protocol}://{self.host}:{port}"
 
         self.ssl = (
             self.http_protocol == "https"
@@ -1138,7 +1172,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
-        self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
+        self._iam_endpoint = f"{self.http_protocol}://{self.host}:{port}"
 
         self.ssl = (
             self.http_protocol == "https"

@@ -127,7 +127,7 @@ ArcticDB uses a type-based dispatch system. Normalizers inherit from `Normalizer
 
 ### Write Path
 
-Both `pa.Table` and `pl.DataFrame` are handled by `ArrowTableNormalizer`. Polars DataFrames are converted to `pa.Table` via `.to_arrow()` before normalization. The normalizer converts the table into a vector of record batches for the C++ layer. The `index_column` parameter (boolean) tells the normalizer to treat the first column as a sorted timestamp index.
+Both `pa.Table` and `pl.DataFrame` are handled by `ArrowTableNormalizer`. Polars DataFrames are converted to `pa.Table` via `.to_arrow()` before normalization. The normalizer converts the table into a vector of record batches for the C++ layer. The `index_column` parameter (boolean) tells the normalizer to treat the first column as a sorted timestamp index. `write`, `append` and `stage` expose it to users; `update` and `batch_update` always pass `index_column=True`. Arrow input is always accepted, there is no opt-in.
 
 ### Read Path
 
@@ -135,6 +135,12 @@ The `output_format` parameter on read methods controls the return type:
 - `OutputFormat.PANDAS` (default) — returns `pd.DataFrame`
 - `OutputFormat.PYARROW` — returns `pa.Table`
 - `OutputFormat.POLARS` — returns `pl.DataFrame` (converted from `pa.Table` via `pl.from_arrow()`)
+
+Column names for Arrow output are set in C++ by `prepare_for_arrow_output()` (`cpp/arcticdb/arrow/arrow_schema_utils.cpp`), which converts pandas metadata to Arrow metadata and renames the descriptor's fields in place. It shares its naming rules with `rename_columns_arrow_compat`:
+
+- Output names are assigned by field position, since an index level and a column can share an on-disk name.
+- MultiIndex levels lose their `__idx__` prefix; unnamed index levels become `__index__` / `__index_level_i__`; `None`, `""` and integer labels become `"None"`, `"__empty__"` and `str(i)`; clashes are wrapped in underscores.
+- `Arrow.columns` and the embedded pandas `col_names` are rekeyed by output name. `col_names` records each original label, which `ArrowTableNormalizer` reads to build the `pandas` schema metadata used by `pa.Table.to_pandas()`.
 
 ### Date-Range Filtering (`restrict_data_to_date_range_only`)
 

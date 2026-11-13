@@ -12,20 +12,6 @@ For pricing queries please email us at info@arcticdb.io
 
 Getting Started: If you're interested in evaluating ArcticDB for business use, please contact us to discuss carrying out a proof of concept.
 
-## How does our licensing work?
-
-Our licensing structure is designed to scale with your organisation's needs:
-
-Small Team License: For teams of up to 5 users of the API, we offer a small use case license.
-
-Enterprise Licensing: For larger teams and organisations, licensing is customised based on your specific use case and requirements. 
-
-Enterprise agreements may include:
--	SLA guarantees with defined response times
--	Dedicated consultancy services
--	Custom support arrangements
--	Enterprise features 
-
 ## Do we provide free trials? 
 
 Yes, we provide free trials to help you evaluate ArcticDB for your specific needs. Our trial program is designed to support you through a comprehensive proof of concept, ensuring you can fully assess how ArcticDB fits your use case.

@@ -9,18 +9,13 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/python/normalization_checks.hpp>
 
 using ErrorCode = arcticdb::ErrorCode;
 
 TEST(ErrorCode, DoesThrow) {
+    ASSERT_THROW(arcticdb::schema::raise<ErrorCode::E_INCOMPATIBLE_OBJECTS>("msg {}", 1), arcticdb::SchemaException);
     ASSERT_THROW(
-            arcticdb::normalization::raise<ErrorCode::E_INCOMPATIBLE_OBJECTS>("msg {}", 1),
-            arcticdb::NormalizationException
-    );
-    ASSERT_THROW(
-            arcticdb::normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(false, "msg {}", 2),
-            arcticdb::NormalizationException
+            arcticdb::schema::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(false, "msg {}", 2), arcticdb::SchemaException
     );
 }
 

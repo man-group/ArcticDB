@@ -92,6 +92,8 @@ ac = Arctic("s3://localhost:9000:my-bucket?access=minioadmin&secret=minioadmin")
 - **Multipart uploads**: Large segments are uploaded in parts
 - **Batch operations**: Multiple keys read/written in parallel
 - **Retry logic**: Automatic retry on transient failures
+- **Response checksum mismatch retry**: When the SDK validates a response checksum (`x-amz-checksum-*` header) against the body and they differ, its `ChecksumInterceptor` returns a `VALIDATION` error marked not retryable, so no built-in SDK strategy retries it. `s3_retry_strategy.hpp:ChecksumMismatchRetryStrategy` wraps the strategy the SDK is configured with, which it gets from `configFactories.retryStrategyCreateFn()`, so `AWS_RETRY_MODE` (default/standard/adaptive) and `AWS_MAX_ATTEMPTS`, or the equivalent AWS profile settings, still govern every other error. A request is retried after a mismatch while `attempted_retries < S3Storage.ChecksumMismatchMaxRetries` (default 1; read when the client is built) and the wrapped strategy, asked with the error marked retryable, also agrees. **Limitation:** `attempted_retries` is the SDK's single per-request counter (the `retries` loop variable in `AWSClient::AttemptExhaustively`), incremented on every failed attempt whatever the error, and the SDK passes the strategy nothing that identifies the request. One strategy object is shared by every request on a client, so a per-request mismatch count cannot be kept on it. So `ChecksumMismatchMaxRetries` counts every retry of the request, not only mismatches: retries for other errors use it up, and mismatch retries count towards `AWS_MAX_ATTEMPTS`. A request that only hits mismatches gets `min(ChecksumMismatchMaxRetries, AWS max attempts - 1)` retries. The wrapped strategy's backoff (`CalculateDelayBeforeNextRetry`), retry quota and adaptive rate limiting (`HasSendToken`/`RequestBookkeeping`) still apply. It logs a warning with the server IP and attempt number on each mismatch. It is installed in `s3_storage.hpp:get_s3_config_and_set_env_var`. The error is identified by its message (`Response checksums mismatch`), since the SDK gives it no exception name. Once retries are exhausted, `detail-inl.hpp:raise_s3_exception` raises `E_S3_RETRYABLE`. `retry-strategy-interface-guard.patch` in the aws-sdk-cpp vcpkg overlay is a no-op patch whose context is the whole `RetryStrategy` class, so a vcpkg build fails when an SDK upgrade changes that interface, as a reminder to update the forwarding. Conda builds use an unpatched SDK and get no such check.
+- **Batch delete retry**: `DeleteObjects` can succeed overall but reject individual objects. `detail-inl.hpp:delete_objects_with_retry` (used by both S3 and NFS-backed storage) retries objects rejected with `InternalError`, `SlowDown`, `ServiceUnavailable` or `RequestTimeout`. It makes at most `DELETE_OBJECTS_MAX_ATTEMPTS` (5) `DeleteObjects` calls per batch, with jittered exponential backoff (100ms base, 2s cap) between them. If any per-object failure is not retryable, it raises straight away without retrying. The backoff sleeps on the calling IO thread.
 - **Path prefix**: Organize data under a prefix within the bucket
 - **AWS SDK logging**: AWS SDK logs are routed into the `s3` spdlog stream via `s3_api.cpp:SpdlogLogSystem` (per-message severity mapped to spdlog levels, AWS tag preserved as a `[tag]` prefix), so they interleave with ArcticDB's own logs. The effective level is reconciled in Python (`tools.py:_reconcile_aws_log_level`): the more verbose of `ARCTICDB_s3_loglevel` and the deprecated `ARCTICDB_AWS_LogLevel_int` drives both the AWS SDK emission (`AWS.LogLevel` config, read in `S3ApiInstance::init`) and the `s3` stream level. The `s3` stream is opt-in: defaults to `CRITICAL`, ignores `ARCTICDB_all_loglevel`. Set `AWS.LogToFile` to write to a file in the cwd via `DefaultLogSystem` instead.
 - **Connection-lifetime jitter**: To stop a long-lived client's curl connection pool from locking onto a skewed subset of backend IPs behind a single DNS name (seen against multi-node S3-compatible clusters), `s3_api.cpp:ArcticCurlHttpClient` overrides `CURLOPT_MAXLIFETIME_CONN` with a freshly randomized threshold on every request (base `S3Storage.ConnectionMaxLifetimeSeconds`, default 60s, `<=0` disables it; jittered by `S3Storage.ConnectionMaxLifetimeJitterFraction`, default 0.5). Registered via `Aws::Http::SetHttpClientFactory` before `Aws::InitAPI`; not available on Windows.
@@ -160,6 +162,30 @@ lib = ac.create_library("mylib", library_options=LibraryOptions(
 |------|---------|
 | `cpp/arcticdb/storage/lmdb/lmdb_storage.cpp` | LMDB storage implementation |
 | `cpp/third_party/lmdbxx/` | LMDB C++ wrapper |
+
+### Runtime configuration
+
+- `LMDBStorage.ExtraFlags` (env `ARCTICDB_LMDBStorage_ExtraFlags_int`): extra `MDB_*` flags passed to `mdb_env_open`
+  for every LMDB env opened by the process (`lmdb_extra_env_flags()` in `lmdb_storage.cpp`). Opt-in, default 0.
+  CI sets `MDB_NOSYNC | MDB_NOMETASYNC` on Windows test jobs (~3x faster unit jobs). `MDB_WRITEMAP` makes Windows allocate the
+  full `map_size` per library on disk, so it is not usable on the CI runners. The `MDB_MAP_RESIZED`/`MDB_BAD_TXN`
+  flakes seen with `MDB_NOSYNC` (and rarely on master) were log lines being written into `data.mdb` on Windows
+  (static CRT fd table vs pytest's `dup2` through Python's CRT); see
+  `cpp/arcticdb/log/console_sink.hpp`.
+- `LMDBStorage.Diagnostics` (env `ARCTICDB_LMDBStorage_Diagnostics_int`, default 0): attach `LmdbEnvDiagnostics`
+  (`lmdb_error_handling.cpp`) to corruption-type errors. Off by default because it decodes `MDB_meta` at fixed byte
+  offsets; CI sets it to 1.
+- `LMDBStorage.WarnIfOpened`: see `warn_if_lmdb_already_open()`.
+
+### Azure runtime configuration
+
+- `AzureStorage.HttpKeepAlive` (env `ARCTICDB_AzureStorage_HttpKeepAlive_int`, default 1): passed to
+  `CurlTransportOptions::HttpKeepAlive` on Linux/macOS. The Azure C++ SDK (azure-core-cpp 1.12.0) pools connections
+  and reusing one the server has already closed blocks the request for seconds before it is retried — ~2 minutes when
+  several batch deletes are in flight. Azurite closes idle connections after 5s, so AzuriteStorageFixtureFactory sets this to 0 for as long as
+  an azurite is up (`python/arcticdb/storage_fixtures/azure.py`), in CI and locally alike. Real
+  Azure keeps connections alive much longer, so the default is unchanged. Regression test:
+  `test_keep_alive_disabled_avoids_stale_connection_stall`.
 
 ### Limitations
 

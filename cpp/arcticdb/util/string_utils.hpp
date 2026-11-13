@@ -80,10 +80,13 @@ std::string safe_decode(const std::string& value);
 
 // We store fixed-width (i.e. UTF-32 strings) in the string pool alongside UTF-8 strings, and the string pool does not
 // know which strings are which. Therefore methods like get_const_view return a std::string_view regardless. If the
-// string is UTF-32, this converts that view into a UTF-8 string
+// string is UTF-32, this converts that view into a UTF-8 string. Trailing nulls are stripped.
 std::string utf32_to_u8(std::string_view strv);
 
 std::u32string utf8_to_u32(std::string_view strv);
+
+// Drops the trailing null bytes ASCII_FIXED64 columns pad with
+std::string_view strip_ascii_padding(std::string_view raw_ascii_string);
 
 struct TransparentStringHash {
     using is_transparent = void; // enable heterogeneous overloads

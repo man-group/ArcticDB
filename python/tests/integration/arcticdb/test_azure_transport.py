@@ -6,6 +6,7 @@
 
 import os
 import platform
+import time
 import pytest
 import ssl
 import uuid
@@ -14,7 +15,7 @@ import pandas as pd
 from arcticdb.storage_fixtures.azure import AzureContainer
 from arcticdb.arctic import Arctic
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, config_context
 from arcticdb.scripts.update_storage import run
 from tests.util.mark import AZURE_TESTS_MARK, SSL_TESTS_MARK, SSL_TEST_SUPPORTED
 from tests.scripts.test_update_storage import create_library_config
@@ -181,3 +182,25 @@ def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_
         lib.write("sym", pd.DataFrame())
     finally:
         ac.delete_library(lib_name)
+
+
+@AZURE_TESTS_MARK
+@pytest.mark.skipif(platform.system() == "Windows", reason="WinHTTP transport, no curl connection pool")
+def test_keep_alive_disabled_avoids_stale_connection_stall(azurite_storage: AzureContainer):
+    """AzureStorage.HttpKeepAlive=0 must reach the curl transport.
+
+    The Azure C++ SDK pools connections; reusing one the server has already closed makes the next request block for
+    seconds (minutes when several are in flight) before it is retried. Azurite closes idle connections after 5s, so
+    going idle and then writing reproduces it. With keep-alive off there is no pooled connection to go stale.
+    """
+    with config_context("AzureStorage.HttpKeepAlive", 0):
+        lib = Arctic(azurite_storage.arctic_uri).create_library("test_keep_alive")
+        df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range("1/1/2018", periods=4))
+        lib.write("symbol", df)
+        time.sleep(6)  # longer than azurite's 5s keepAliveTimeout
+
+        start = time.time()
+        lib.write("symbol", df, prune_previous_versions=True)
+        elapsed = time.time() - start
+
+    assert elapsed < 2, f"write after an idle period took {elapsed:.1f}s, stale pooled connection was reused"

@@ -22,7 +22,9 @@
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/util/string_utils.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
+#include <optional>
 #include <vector>
 #include <string>
 #include <variant>
@@ -103,11 +105,6 @@ template<typename ClauseType>
 bool is(const std::shared_ptr<Clause>& clause) {
     return folly::poly_type(*clause) == typeid(ClauseType);
 }
-
-void check_column_presence(
-        OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
-        std::string_view clause_name
-);
 
 OutputSchema modify_schema(OutputSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses);
 
@@ -814,10 +811,11 @@ struct WriteClause {
     IndexPartialKey index_partial_key_;
     std::shared_ptr<DeDupMap> dedup_map_;
     std::shared_ptr<Store> store_;
+    bool encode_;
 
     WriteClause(
             const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store,
-            ProcessingStructure input_processing_structure
+            ProcessingStructure input_processing_structure, const bool encode
     );
     ARCTICDB_MOVE_COPY_DEFAULT(WriteClause)
 
@@ -843,12 +841,34 @@ struct WriteClause {
 
   private:
     stream::PartialKey create_partial_key(const SegmentInMemory& segment, const RowRange& row_range) const;
+    void process_uncompressed(const std::vector<EntityId>& entity_ids) const;
+    void process_compressed(const std::vector<EntityId>& entity_ids) const;
 };
 
-/// This clause will perform update values or insert values based on strategy_ in a segment. The source of new values is
-/// the source_ member. Source and target must have the same index type. There are two actions
+/// Whether value, one of the representations merge-update uses for a column of type TDT, denotes a missing entry.
+/// TDT is always the type of the column itself. value can be the raw type stored in the column or the MatchKeyType
+/// match key.
+template<util::scalar_type_descriptor_tag TDT>
+constexpr bool is_na(const typename TDT::RawType value) {
+    if constexpr (is_floating_point_type(TDT::data_type())) {
+        return std::isnan(value);
+    } else if constexpr (is_time_type(TDT::data_type())) {
+        return value == NaT;
+    } else if constexpr (is_sequence_type(TDT::data_type())) {
+        return !is_a_string(value);
+    } else {
+        return false;
+    }
+}
+
+struct HashedSource;
+
+/// This clause will perform update values or insert values based on strategy_ in a segment. The source of new
+/// values is the source_ member. Source and target must have the same index type. There are two actions:
+///
 /// UPDATE: For a particular row in the segment if there's a row in source_ for which all values in the columns listed
 /// in on and the index (only in case if timeseries) match update will be performed.
+///
 /// INSERT: Each row in source_ not matched by the target will be inserted
 struct MergeUpdateClause {
     ClauseInfo clause_info_;
@@ -859,13 +879,17 @@ struct MergeUpdateClause {
     /// Used to check if a column is in on_ without performing a linear search.
     ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>> on_set_;
     MergeStrategy strategy_;
-    std::shared_ptr<InputFrame> source_;
+
+    /// The source converted to a segment by WriteToSegmentTask
+    SegmentInMemory source_;
     bool fake_index_name_ = false;
     MergeUpdateClause(
-            std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
+            std::vector<std::string>&& on, MergeStrategy strategy, OutputSchema source_output_schema,
             size_t rows_per_segment
     );
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
+
+    void set_source(SegmentInMemory source, bool fake_index_name);
 
     /// Row range indexes require full table scan
     /// In case of timestamp index this will filter out only the ranges and keys whose index span contains at least one
@@ -892,29 +916,29 @@ struct MergeUpdateClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
+
     class MatchRecord {
       public:
-        MatchRecord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
-        void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
-        void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
-        void filter_matching_rows(
-                std::string_view column_name, DataType source_type, DataType target_type, size_t source_offset,
-                std::span<const std::byte> source_data_bytes, bool match_na
+        MatchRecord(
+                std::span<ProcessingUnit> row_slices, const HashedSource& hashed_source,
+                std::span<const size_t> on_field_indices, const MergeStrategy& strategy,
+                std::optional<std::span<const timestamp>> source_index
         );
-        void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
-        void validate_rows_to_update(const MergeStrategy& strategy) const;
         [[nodiscard]] size_t total_unmatched_source_rows() const;
-        [[nodiscard]] const std::vector<std::vector<size_t>>& matched_rows(size_t target_row_slice) const;
-        [[nodiscard]] bool is_source_row_matched(size_t source_row) const;
+        [[nodiscard]] const ankerl::unordered_dense::map<size_t, size_t>& matched_rows(size_t target_row_slice) const;
         [[nodiscard]] bool has_matched_target_rows() const;
-        [[nodiscard]] util::BitSet unmatched_source_rows() const;
+        [[nodiscard]] std::optional<size_t> source_row_to_update_target(size_t row_slice, size_t target_row) const;
+        [[nodiscard]] const util::BitSet& unmatched_source_rows() const;
+        [[nodiscard]] const util::BitSet& matched_source_rows() const;
 
       private:
-        /// For each row slice, for each source row, store all target rows that match it
-        std::vector<std::vector<std::vector<size_t>>> matched_target_rows_;
-        std::span<ProcessingUnit> row_slices_;
-        std::vector<size_t> source_row_matched_count_;
-        size_t total_matched_target_rows_count_ = 0;
+        /// For each row slice, for each target row, keep the source row to update this row. Source rows are relative
+        /// to the first source row of the processing unit.
+        std::vector<ankerl::unordered_dense::map<size_t, size_t>> source_row_to_update_target_;
+        /// Used to mark which source rows of the processing unit are matched. If the i-th source row is not matched
+        /// the bitmap value will be 0. And that row must be inserted (in case the strategy requires insert)
+        util::BitSet matched_source_rows_;
+        util::BitSet unmatched_source_rows_;
     };
 
   private:
@@ -932,21 +956,6 @@ struct MergeUpdateClause {
     /// of rows in the source data and m is the number of row slices in the library
     std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
 
-    MatchRecord match(std::span<ProcessingUnit> row_slices, std::pair<size_t, size_t> source_start_end) const;
-
-    MatchRecord filter_on_additional_columns_match(
-            const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-            std::span<ProcessingUnit> proc, std::optional<MatchRecord>&& match_record,
-            std::pair<size_t, size_t> source_start_end
-    ) const;
-
-    MatchRecord initialize_rows_to_update_for_row_range_indexed_data(
-            std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor,
-            std::pair<size_t, size_t> source_start_end
-    ) const;
-
-    size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
-
     /// For each processing group, identified by its row range, stores the first and last row in the source that
     /// overlaps with it. The interval is closed in the start and open in the end: [start, end). The key is the row
     /// range rather than the timestamp range because overlapping-window groups can share a timestamp range when
@@ -956,11 +965,26 @@ struct MergeUpdateClause {
 
     [[nodiscard]] bool must_structure_by_time_slice() const;
 
-    std::span<const timestamp> get_source_index(std::pair<size_t, size_t> source_start_end) const;
+    /// The whole source column at field_index. Rows are absolute positions in the source.
+    [[nodiscard]] ColumnWithStrings get_source_column(size_t field_index) const;
+    /// The source index, which is always dense. If range is given, only the rows in [range.first, range.second).
+    [[nodiscard]] std::span<const timestamp> get_source_index(
+            std::optional<std::pair<size_t, size_t>> range = std::nullopt
+    ) const;
+    [[nodiscard]] bool is_source_datetime() const;
+    [[nodiscard]] size_t source_row_count() const;
+    [[nodiscard]] const StreamDescriptor* get_source_descriptor() const;
 
-    std::span<const std::byte> get_source_data_bytes(size_t field_index, std::pair<size_t, size_t> range) const;
+    OutputSchema source_output_schema_;
 
     size_t rows_per_segment_;
+
+    /// Field index in the source of each column to match: the timestamp index, if any, followed by the columns in on_.
+    /// Set by set_source.
+    std::vector<size_t> on_field_indices_;
+    /// The whole source hashed on the columns to match, shared by all processing units. Only for row range indexed
+    /// data, set by structure_for_processing.
+    std::shared_ptr<const HashedSource> row_range_hashed_source_;
 };
 
 struct CompactDataClause {
@@ -1013,5 +1037,38 @@ struct CompactDataClause {
     void add_segment_from_frame(
             const ProcessingUnit& proc, size_t col_range_start, std::vector<SegmentInMemory>& segments
     ) const;
+};
+
+struct RenameColumnsClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    ankerl::unordered_dense::map<std::string, std::string, util::TransparentStringHash, std::equal_to<>>
+            column_renames_;
+
+    RenameColumnsClause(const ankerl::unordered_dense::map<
+                        std::string, std::string, util::TransparentStringHash, std::equal_to<>>& column_renames);
+    ARCTICDB_MOVE_COPY_DEFAULT(RenameColumnsClause)
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+            std::vector<std::vector<EntityId>>&& entity_ids_vec
+    );
+
+    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
+
+    [[nodiscard]] const ClauseInfo& clause_info() const;
+
+    void set_processing_config(const ProcessingConfig& processing_config);
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+
+    [[nodiscard]] std::string to_string() const;
+
+  private:
 };
 } // namespace arcticdb

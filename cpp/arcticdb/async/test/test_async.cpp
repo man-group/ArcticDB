@@ -733,6 +733,10 @@ class RecordingStorage final : public as::Storage {
         iter_keys_ = std::move(keys);
     }
 
+    void set_on_batch_remove(std::function<void(std::span<entity::VariantKey>)> on_batch_remove) {
+        on_batch_remove_ = std::move(on_batch_remove);
+    }
+
   private:
     void do_write(as::KeySegmentPair&) final { util::raise_rte("unused"); }
     void do_write_if_none(as::KeySegmentPair&) final { util::raise_rte("unused"); }
@@ -746,6 +750,9 @@ class RecordingStorage final : public as::Storage {
     }
 
     void do_remove(std::span<entity::VariantKey> keys, as::RemoveOpts) final {
+        if (on_batch_remove_) {
+            on_batch_remove_(keys);
+        }
         std::lock_guard guard(mutex_);
         recorded_.push_back(keys.size());
     }
@@ -774,6 +781,7 @@ class RecordingStorage final : public as::Storage {
     std::mutex mutex_;
     std::vector<size_t> recorded_;
     std::vector<entity::VariantKey> iter_keys_;
+    std::function<void(std::span<entity::VariantKey>)> on_batch_remove_;
 };
 
 inline std::shared_ptr<aa::AsyncStore<>> build_async_store(std::shared_ptr<RecordingStorage> storage) {
@@ -825,6 +833,39 @@ TEST(AsyncStoreRemoveKeys, NulloptBatchSizeSendsSingleCall) {
 
     auto sizes = storage->recorded_call_sizes();
     ASSERT_EQ(sizes, std::vector<size_t>({100}));
+}
+
+// Guards against remove_keys completing on the first failed chunk while later chunks are still being
+// submitted through the store. Callers drop the store once the future fails, so those chunks used a freed
+// AsyncStore and segfaulted.
+TEST(AsyncStoreRemoveKeys, FailedChunkWaitsForAllChunksBeforeCompleting) {
+    using namespace remove_batch_test;
+    // Batch size 1 gives one chunk per key
+    auto storage = std::make_shared<RecordingStorage>(as::LibraryPath{"a", "b"}, as::OpenMode::DELETE, 1);
+    const StreamId failing_id{"k_0"};
+    // The first chunk fails straight away; the rest are slow, so most are still queued when it does
+    storage->set_on_batch_remove([&failing_id](std::span<entity::VariantKey> keys) {
+        if (variant_key_id(keys[0]) == failing_id) {
+            util::raise_rte("Simulated S3 InternalError");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    });
+    auto store = build_async_store(storage);
+
+    // Several times the window size, so chunks remain to be submitted after the failure
+    const size_t num_keys = 4 * async::TaskScheduler::instance()->io_thread_count() + 1;
+    ASSERT_THROW(store->remove_keys(make_keys(num_keys), as::RemoveOpts{}).get(), std::runtime_error);
+    // Every other chunk must have run before the error is surfaced
+    EXPECT_EQ(storage->recorded_call_sizes().size(), num_keys - 1);
+
+    // Drop the store as callers do on error. Any chunk still being submitted would now touch freed memory
+    // (reported by ASan), so wait for stragglers and check that none were lost.
+    store.reset();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (storage->recorded_call_sizes().size() < num_keys - 1 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_EQ(storage->recorded_call_sizes().size(), num_keys - 1);
 }
 
 TEST(AsyncStoreRemoveKeys, EmptyKeysIsNoOp) {

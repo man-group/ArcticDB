@@ -12,6 +12,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/s3/s3_retry_strategy.hpp>
 #include <arcticdb/storage/s3/s3_settings.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -311,6 +312,12 @@ auto get_s3_config_and_set_env_var(const ConfigType& conf) {
     if (use_win_inet) {
         client_configuration.httpLibOverride = Aws::Http::TransferLibType::WIN_INET_CLIENT;
     }
+
+    // retryStrategy is unset, so the client would build it with this factory
+    client_configuration.retryStrategy = std::make_shared<ChecksumMismatchRetryStrategy>(
+            client_configuration.configFactories.retryStrategyCreateFn(),
+            ConfigsMap::instance()->get_int("S3Storage.ChecksumMismatchMaxRetries", 1)
+    );
 
     return client_configuration;
 }

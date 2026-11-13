@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include "codec/segment.hpp"
 #include "column_store/memory_segment.hpp"
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
@@ -502,14 +501,14 @@ folly::Future<entity::AtomKey> write_frame(
 
 folly::Future<AtomKey> append_frame(
         IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
-        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema
+        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store,
+        TimeseriesDescriptor&& merged_tsd
 ) {
     ARCTICDB_SAMPLE_DEFAULT(AppendFrame)
     auto existing_slices = unfiltered_index(index_segment_reader);
-    const auto tsd =
-            index::get_merged_tsd(frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame);
+
     auto keys_fut = slice_and_write(frame, slicing, IndexPartialKey{key}, store);
-    return std::move(keys_fut).thenValue([tsd = std::move(tsd),
+    return std::move(keys_fut).thenValue([tsd = std::move(merged_tsd),
                                           slices_to_write = std::move(existing_slices),
                                           frame = frame,
                                           index_segment_reader = std::move(index_segment_reader),
@@ -571,7 +570,7 @@ folly::Future<SliceAndKey> async_rewrite_partial_segment(
                         const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
                         // +1 as in the key we store one nanosecond greater than the last index value in the segment
                         const IndexValue end_ts =
-                                std::get<NumericIndex>(TimeseriesIndex::end_value_for_segment(output)) + 1;
+                                pipelines::end_index_generator(TimeseriesIndex::end_value_for_segment(output));
                         FrameSlice new_slice{
                                 std::make_shared<StreamDescriptor>(output.descriptor()),
                                 existing.slice_.col_range,

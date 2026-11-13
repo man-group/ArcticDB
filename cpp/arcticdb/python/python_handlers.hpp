@@ -36,11 +36,13 @@ struct PythonEmptyHandler {
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
-            std::any& handler_data
+            std::any& handler_data, const ReadOptions& read_options
     ) const;
 };
 
 struct PythonStringHandler {
+    explicit PythonStringHandler(entity::DataType string_type) : string_type_(string_type) {}
+
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
             const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
@@ -61,8 +63,11 @@ struct PythonStringHandler {
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
-            std::any& handler_data
+            std::any& handler_data, const ReadOptions& read_options
     ) const;
+
+  private:
+    entity::DataType string_type_;
 };
 
 struct PythonBoolHandler {
@@ -86,7 +91,7 @@ struct PythonBoolHandler {
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
-            std::any& handler_data
+            std::any& handler_data, const ReadOptions& read_options
     ) const;
 };
 
@@ -105,7 +110,7 @@ struct PythonArrayHandler {
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
-            std::any& handler_data
+            std::any& handler_data, const ReadOptions& read_options
     ) const;
 
     void convert_type(
@@ -140,7 +145,7 @@ inline void register_python_string_types() {
 
     for (auto data_type : string_data_types) {
         TypeHandlerRegistry::instance()->register_handler(
-                OutputFormat::PANDAS, make_scalar_type(data_type), arcticdb::PythonStringHandler()
+                OutputFormat::PANDAS, make_scalar_type(data_type), arcticdb::PythonStringHandler(data_type)
         );
     }
 }

@@ -166,6 +166,8 @@ class LibraryOptions:
         self.prune_previous_versions = prune_previous_versions
 
     def __eq__(self, right):
+        if not isinstance(right, LibraryOptions):
+            return NotImplemented
         return (
             self.dynamic_schema == right.dynamic_schema
             and self.dedup == right.dedup
@@ -379,6 +381,8 @@ class EnterpriseLibraryOptions:
         self.background_deletion = background_deletion
 
     def __eq__(self, right):
+        if not isinstance(right, EnterpriseLibraryOptions):
+            return NotImplemented
         return self.replication == right.replication and self.background_deletion == right.background_deletion
 
     def __repr__(self):

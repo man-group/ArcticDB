@@ -61,11 +61,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(1004, E_STORED_CONFIG_ERROR)                                                                            \
     ERROR_CODE(1005, E_NOT_SUPPORTED)                                                                                  \
     ERROR_CODE(1006, E_NOT_IMPLEMENTED)                                                                                \
-    ERROR_CODE(2000, E_INCOMPATIBLE_OBJECTS)                                                                           \
     ERROR_CODE(2001, E_UNIMPLEMENTED_INPUT_TYPE)                                                                       \
-    ERROR_CODE(2002, E_UPDATE_NOT_SUPPORTED)                                                                           \
-    ERROR_CODE(2003, E_INCOMPATIBLE_INDEX)                                                                             \
-    ERROR_CODE(2004, E_WRONG_SHAPE)                                                                                    \
     ERROR_CODE(2005, E_COLUMN_SECONDARY_TYPE_MISMATCH)                                                                 \
     ERROR_CODE(2006, E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE)                                                            \
     ERROR_CODE(3000, E_NO_SUCH_VERSION)                                                                                \
@@ -78,6 +74,10 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(4004, E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA)                                                      \
     ERROR_CODE(4005, E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA)                                         \
     ERROR_CODE(4006, E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY)                                                       \
+    ERROR_CODE(4007, E_INCOMPATIBLE_OBJECTS)                                                                           \
+    ERROR_CODE(4008, E_UPDATE_NOT_SUPPORTED)                                                                           \
+    ERROR_CODE(4009, E_INCOMPATIBLE_INDEX)                                                                             \
+    ERROR_CODE(4010, E_WRONG_SHAPE)                                                                                    \
     ERROR_CODE(5000, E_KEY_NOT_FOUND)                                                                                  \
     ERROR_CODE(5001, E_DUPLICATE_KEY)                                                                                  \
     ERROR_CODE(5002, E_SYMBOL_NOT_FOUND)                                                                               \
@@ -200,6 +200,7 @@ using MongoRetryableException = ArcticSpecificException<ErrorCode::E_MONGO_RETRY
 using NonIncreasingIndexVersionException = ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
+using StreamDescriptorMismatch = ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>;
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
 using CompatibilityException = ArcticCategorizedException<ErrorCategory::COMPATIBILITY>;
 using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
@@ -210,6 +211,8 @@ using QuotaExceededException = ArcticSpecificException<ErrorCode::E_QUOTA_EXCEED
 using SymbolNotFoundException = ArcticSpecificException<ErrorCode::E_SYMBOL_NOT_FOUND>;
 using RecursivelyNormalizedDataException =
         ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>;
+using PickledDataException = ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>;
+using NumpyArrayDataException = ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -277,6 +280,11 @@ template<>
 }
 
 template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>(msg);
+}
+
+template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_ATOMIC_OPERATION_FAILED>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_ATOMIC_OPERATION_FAILED>(msg);
 }
@@ -306,6 +314,16 @@ template<>
         const std::string& msg
 ) {
     throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(msg);
 }
 
 } // namespace arcticdb

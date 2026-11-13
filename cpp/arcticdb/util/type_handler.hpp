@@ -77,9 +77,9 @@ struct ITypeHandler {
 
         void default_initialize(
                 ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
-                std::any& handler_data
+                std::any& handler_data, const ReadOptions& read_options
         ) const {
-            folly::poly_call<3>(*this, buffer, offset, byte_size, shared_data, handler_data);
+            folly::poly_call<3>(*this, buffer, offset, byte_size, shared_data, handler_data, read_options);
         }
     };
 

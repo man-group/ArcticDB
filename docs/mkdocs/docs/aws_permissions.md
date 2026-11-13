@@ -2,7 +2,7 @@
 
 ## Goal
 
-One of the advantages of ArcticDB is how easy it is to setup and use as a personal database.  But how can we extend this pattern to an organisation?  How can we keep it trivial to use as an individual, but allow for secure sharing of data with team-mates and groups across your organisation?  We also want this to be easy to maintain, a key challange for permissions generally.
+One of the advantages of ArcticDB is how easy it is to setup and use as a personal database.  But how can we extend this pattern to an organisation?  How can we keep it trivial to use as an individual, but allow for secure sharing of data with team-mates and groups across your organisation?  We also want this to be easy to maintain, a key challenge for permissions generally.
 
 Here we model a small two team organisation, 'Acme', in AWS and create some flexible permissions that allow users and teams to create
 and use private and shared data without any per-library setup.
@@ -102,7 +102,7 @@ If you intend to adapt that example policy to your own situation then please not
 
 - `acme-arcticdb` is the name of the bucket and will need to be replaced everywhere
 - `s3:ListBucket` is used to permission `ListObjectsV2` and needs its own section, as it applies to the bucket as a whole.  We control access to paths by checking the `s3:prefix` argument that's part of the `ListObjectsV2` request.
-- `Put`, `Get` and `Delete` can be specifed for object paths in the second section.
+- `Put`, `Get` and `Delete` can be specified for object paths in the second section.
 - `_arctic_cfg/cref/*` is where the ArcticDB library configuration is stored and the data for each library is stored in the root of the bucket with a path that starts with the library name.
 - By using `${aws:username}` and `${aws:PrincipalTag/team}` we've restricted library access to those with a matching AWS IAM username or a matched user 'team' tag.
 
@@ -144,7 +144,7 @@ arctic.list_libraries()
 # Can't use or delete Alan or Quant team data
 arctic.get_library('alan@acme/bonds')
 arctic.get_library('quant/stocks')
-arctic.delete_libraru('alan@acme/bonds')
+arctic.delete_library('alan@acme/bonds')
 # All raise:
 # PermissionException: E_PERMISSION Permission error: S3Error#15 : No response body.
 ```

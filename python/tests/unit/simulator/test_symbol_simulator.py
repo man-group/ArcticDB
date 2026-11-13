@@ -15,7 +15,7 @@ from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.test_utils import verify_dynamically_added_columns
 from arcticdb.version_store.library import Library
-from arcticdb_ext.exceptions import SchemaException, NormalizationException
+from arcticdb.exceptions import SchemaException, NormalizationException
 
 
 def append_and_compare(asim: ArcticSymbolSimulator, df: pd.DataFrame, sym_name: str, lib: Library):
@@ -183,7 +183,7 @@ def test_simulator_append_series_and_dataframe(lmdb_library_dynamic_schema):
     # A scenario where we append DataFrame to symbol containing Series
     write_and_compare(asim, s1, "s_err", lib)
     asim.append(df1)
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.append("s_err", df1)
 
     # A scenario where we append DataFrame to symbol containing Series first converted to dataframe
