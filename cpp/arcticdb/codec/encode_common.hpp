@@ -18,8 +18,11 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
+#include <folly/ScopeGuard.h>
+
 #include <algorithm>
 #include <cstddef>
+#include <vector>
 
 namespace arcticdb {
 
@@ -233,7 +236,9 @@ inline size_t string_pool_block_count(const ChunkedBuffer& pool, size_t block_by
 }
 
 /// The pool's bytes [offset, offset + size): read in place when they lie inside one page, else gathered into scratch
-inline const uint8_t* string_pool_bytes_at(const ChunkedBuffer& pool, size_t offset, size_t size, Buffer& scratch) {
+inline const uint8_t* string_pool_bytes_at(
+        const ChunkedBuffer& pool, size_t offset, size_t size, std::vector<uint8_t>& scratch
+) {
     util::check(
             offset + size <= pool.bytes(),
             "String pool block [{}, {}) is past the pool's {} bytes",
@@ -275,7 +280,15 @@ void encode_string_pool_blocks(
         ShapesEncoder::encode_shapes(codec::default_shapes_codec(), shapes_block, encoded_field, out_buffer, pos);
     }
 
-    Buffer scratch(std::min(block_bytes, total_bytes));
+    // Reused across encodes on this thread: allocating and freeing a block-sized buffer per segment changes glibc's
+    // mmap and trim thresholds, so the next segment's string pool pages are faulted in afresh
+    thread_local std::vector<uint8_t> scratch;
+    constexpr size_t max_retained_scratch_bytes = size_t{1} << 20;
+    scratch.resize(std::max(scratch.size(), std::min(block_bytes, total_bytes)));
+    const auto release_large_scratch = folly::makeGuard([] {
+        if (scratch.size() > max_retained_scratch_bytes)
+            std::vector<uint8_t>().swap(scratch);
+    });
     for (size_t i = 0; i < num_blocks; ++i) {
         const auto size = static_cast<size_t>(shapes[i]);
         const auto* data = string_pool_bytes_at(pool, i * block_bytes, size, scratch);

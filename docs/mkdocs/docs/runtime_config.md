@@ -329,7 +329,8 @@ The default is 10.
 ### Codec.StringPoolBlockBytes
 
 The size, in bytes, of the blocks a segment's string pool is compressed in when it is written. Larger blocks compress
-better and make the segment header smaller. Each write also holds one block-sized buffer per segment being encoded.
+better and make the segment header smaller. Each thread that writes uses one buffer of this size, and keeps it
+between writes when it is 1 MiB or less.
 
 * A positive integer: the block size. Values below 65536 (64 KiB) are treated as 65536 and values above 67108864
   (64 MiB) as 67108864. A pool whose pages average 32 KiB or more, which happens when most of its bytes are in long
