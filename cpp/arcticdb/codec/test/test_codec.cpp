@@ -349,6 +349,16 @@ SegmentInMemory segment_with_large_string_pool(size_t rows) {
     }
     return seg;
 }
+
+void check_strings_round_trip(Segment& seg, const SegmentInMemory& expected, size_t rows) {
+    std::vector<uint8_t> vec(seg.calculate_size());
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), vec.size());
+    auto decoded = decode_segment(unserialized);
+    ASSERT_EQ(decoded.row_count(), rows);
+    for (size_t i = 0; i < rows; ++i)
+        ASSERT_EQ(decoded.string_at(i, 0), expected.string_at(i, 0)) << i;
+}
 } // namespace
 
 TYPED_TEST(SegmentStringEncodingTest, StringPoolPagesAreCoalescedIntoLargerBlocks) {
@@ -368,13 +378,7 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolPagesAreCoalescedIntoLargerBlock
         in_bytes += pool_field.values(i).in_bytes();
     ASSERT_EQ(in_bytes, pool_bytes);
 
-    std::vector<uint8_t> vec(seg.calculate_size());
-    seg.write_to(vec.data());
-    auto unserialized = Segment::from_bytes(vec.data(), vec.size());
-    auto decoded = decode_segment(unserialized);
-    ASSERT_EQ(decoded.row_count(), rows);
-    for (size_t i = 0; i < rows; ++i)
-        ASSERT_EQ(decoded.string_at(i, 0), copy.string_at(i, 0)) << i;
+    check_strings_round_trip(seg, copy, rows);
 }
 
 TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesZeroKeepsPages) {
@@ -416,13 +420,7 @@ void check_block_bytes_changed_mid_encode(EncodingVersion version, int64_t initi
     const auto& pool_field = seg.header().string_pool_field();
     const auto block_bytes = static_cast<size_t>(initial);
     ASSERT_EQ(static_cast<size_t>(pool_field.values_size()), (pool_bytes + block_bytes - 1) / block_bytes);
-    std::vector<uint8_t> vec(seg.calculate_size());
-    seg.write_to(vec.data());
-    auto unserialized = Segment::from_bytes(vec.data(), vec.size());
-    auto decoded = decode_segment(unserialized);
-    ASSERT_EQ(decoded.row_count(), rows);
-    for (size_t i = 0; i < rows; ++i)
-        ASSERT_EQ(decoded.string_at(i, 0), copy.string_at(i, 0)) << i;
+    check_strings_round_trip(seg, copy, rows);
 }
 } // namespace
 
@@ -432,6 +430,22 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesRaisedMidEncodeUsesOne
 
 TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesLoweredMidEncodeUsesOneSnapshot) {
     check_block_bytes_changed_mid_encode(TypeParam::value, 40'000, 10'000);
+}
+
+TYPED_TEST(SegmentStringEncodingTest, StringPoolWithPagesLargerThanABlockKeepsPagesUnderPassthrough) {
+    const auto stream_desc =
+            stream_descriptor(StreamId{"pool"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "s")});
+    SegmentInMemory in_mem{stream_desc.clone()};
+    constexpr size_t rows = 4;
+    for (size_t i = 0; i < rows; ++i) {
+        in_mem.set_string(0, i == 1 ? std::string(size_t{1} << 20, 'x') : fmt::format("value_{}", i));
+        in_mem.end_row();
+    }
+    const auto pages = in_mem.const_string_pool().num_blocks();
+    auto copy = in_mem.clone();
+    Segment seg = encode_dispatch(std::move(in_mem), codec::default_passthrough_codec(), TypeParam::value);
+    ASSERT_EQ(static_cast<size_t>(seg.header().string_pool_field().values_size()), pages);
+    check_strings_round_trip(seg, copy, rows);
 }
 
 TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesBelowMinimumIsRaised) {

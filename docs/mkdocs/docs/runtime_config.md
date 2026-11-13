@@ -326,6 +326,17 @@ Setting to `0` disables progress logging entirely.
 
 The default is 10.
 
+### Codec.StringPoolBlockBytes
+
+The size, in bytes, of the blocks a segment's string pool is compressed in when it is written. Larger blocks compress
+better and make the segment header smaller.
+
+* A positive integer: the block size. Values below 4096 are treated as 4096. A pool whose strings are mostly longer than
+  a block keeps one block per page.
+* `0`: one block per 4 KB page of the pool, the layout written by older versions.
+
+The default is 262144 (256 KiB). Data written with any value is readable by all ArcticDB versions.
+
 ## Logging configuration
 
 ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 

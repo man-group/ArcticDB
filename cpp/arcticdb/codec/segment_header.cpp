@@ -49,6 +49,7 @@ size_t SegmentHeader::serialize_to_bytes(uint8_t* dst, std::optional<size_t> exp
     return bytes_written;
 }
 
+namespace {
 size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg, size_t block_bytes) {
     size_t required = 0UL;
     if (in_mem_seg.has_index_descriptor()) {
@@ -91,6 +92,7 @@ size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg, size
     ARCTICDB_TRACE(log::codec(), "Required header bytes: {}", required);
     return required;
 }
+} // namespace
 
 void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) {
     memcpy(&data_, data, sizeof(HeaderData));
@@ -115,9 +117,7 @@ void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) 
         offset_[i] = *offsets++;
 }
 
-size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg) {
-    return required_bytes(in_mem_seg, string_pool_block_bytes());
-}
+size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg) { return required_bytes(in_mem_seg, 0); }
 
 size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg, size_t block_bytes) {
     size_t required = 0UL;

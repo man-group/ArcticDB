@@ -207,7 +207,8 @@ inline size_t string_pool_block_bytes() {
 inline size_t string_pool_encoded_value_blocks(const ChunkedBuffer& pool, size_t block_bytes) {
     if (block_bytes == 0 || pool.num_blocks() <= 1)
         return pool.num_blocks();
-    return (pool.bytes() + block_bytes - 1) / block_bytes;
+    // More blocks than pages would outgrow the output buffer, which is sized from the pages
+    return std::min(pool.num_blocks(), (pool.bytes() + block_bytes - 1) / block_bytes);
 }
 
 /// Test-only: called at the start of the string pool encode.

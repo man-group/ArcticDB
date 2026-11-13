@@ -180,6 +180,7 @@ class SegmentHeader {
         return get_mutable_field<FieldOffset::COLUMN>(num_blocks);
     }
 
+    /// Upper bound over any string pool block size, for sizing storage before the encode.
     static size_t required_bytes(const SegmentInMemory& in_mem_seg);
 
     static size_t required_bytes(const SegmentInMemory& in_mem_seg, size_t string_pool_block_bytes);

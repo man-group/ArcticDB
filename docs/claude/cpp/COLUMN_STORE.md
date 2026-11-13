@@ -103,9 +103,9 @@ Example:
   String 2: "foo"   (offset 10, length 3)
 ```
 
-Strings are written into 4 KB pages; a string that does not fit pads the rest of the page with zeros and starts a
-new one (a string over 4 KB gets an irregular page of its own). The encoder writes the pool in 256 KiB blocks, not one
-per page (CODEC.md, "String Pool Blocks"), and a decoded pool is one contiguous chunk.
+Strings are written into 4 KB pages, and a string over 4 KB gets an irregular page of its own; offsets are positions in
+the pages' concatenation. The encoder writes the pool in 256 KiB blocks, not one per page (CODEC.md, "String Pool
+Blocks"), and a decoded pool is one contiguous chunk.
 
 ### Key Methods
 
