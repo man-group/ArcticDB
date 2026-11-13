@@ -370,14 +370,16 @@ void decode_string_pool(
         timer.start();
         util::check(data != end, "Reached end of input block with string pool fields to decode");
         std::optional<util::BitMagic> bv;
-        data += decode_ndarray(
-                string_pool_descriptor().type(),
-                hdr.string_pool_field(),
-                data,
-                res.string_pool(),
-                bv,
-                hdr.encoding_version()
-        );
+        data += with_string_pool_decode_context([&] {
+            return decode_ndarray(
+                    string_pool_descriptor().type(),
+                    hdr.string_pool_field(),
+                    data,
+                    res.string_pool(),
+                    bv,
+                    hdr.encoding_version()
+            );
+        });
         timer.end();
         log::codec().debug("Decoded string pool to position {} in {}s", data - begin, timer.get_results_total());
     }
@@ -452,14 +454,16 @@ void decode_v2(const Segment& segment, const SegmentHeader& hdr, SegmentInMemory
             if (auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
 
-                data += decode_field(
-                        res.field(*col_index).type(),
-                        *encoded_field,
-                        data,
-                        col,
-                        col.opt_sparse_map(),
-                        hdr.encoding_version()
-                );
+                data += with_column_decode_context(field_name, i, [&] {
+                    return decode_field(
+                            res.field(*col_index).type(),
+                            *encoded_field,
+                            data,
+                            col,
+                            col.opt_sparse_map(),
+                            hdr.encoding_version()
+                    );
+                });
                 col.set_statistics(encoded_field->get_statistics());
 
                 seg_row_count = std::max(seg_row_count, calculate_last_row(col));
@@ -524,9 +528,11 @@ void decode_v1(
             );
             if (auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
-                data += decode_field(
-                        res.field(*col_index).type(), field, data, col, col.opt_sparse_map(), hdr.encoding_version()
-                );
+                data += with_column_decode_context(field_name, i, [&] {
+                    return decode_field(
+                            res.field(*col_index).type(), field, data, col, col.opt_sparse_map(), hdr.encoding_version()
+                    );
+                });
                 seg_row_count = std::max(seg_row_count, calculate_last_row(col));
                 col.set_statistics(field.get_statistics());
                 ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data - begin);

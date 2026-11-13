@@ -225,7 +225,9 @@ set(arcticdb_srcs
         async/bit_rate_stats.hpp
         async/task_scheduler.hpp
         async/tasks.hpp
+        codec/block_hash_check.hpp
         codec/codec.hpp
+        codec/decode_error_context.hpp
         codec/encode_common.hpp
         codec/codec-inl.hpp
         codec/core.hpp
@@ -489,7 +491,9 @@ set(arcticdb_srcs
         async/bit_rate_stats.cpp
         async/task_scheduler.cpp
         async/tasks.cpp
+        codec/block_hash_check.cpp
         codec/codec.cpp
+        codec/decode_error_context.cpp
         codec/encode_v1.cpp
         codec/encode_v2.cpp
         codec/encoded_field.cpp
@@ -1113,6 +1117,7 @@ if(${TEST})
             arrow/test/test_arrow_write.cpp
             arrow/test/test_arrow_schema_utils.cpp
             async/test/test_async.cpp
+            codec/test/test_block_hash_check.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
             codec/test/test_segment_header.cpp

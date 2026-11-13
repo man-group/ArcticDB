@@ -10,6 +10,7 @@
 
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/codec/decode_error_context.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
@@ -207,14 +208,16 @@ void decode_string_pool(
             util::check_magic<StringPoolMagic>(data);
 
         util::check(hdr.string_pool_field().has_ndarray(), "Expected string pool field to be ndarray");
-        data += decode_ndarray(
-                string_pool_descriptor().type(),
-                hdr.string_pool_field().ndarray(),
-                data,
-                context.string_pool(),
-                bv,
-                hdr.encoding_version()
-        );
+        data += with_string_pool_decode_context([&] {
+            return decode_ndarray(
+                    string_pool_descriptor().type(),
+                    hdr.string_pool_field().ndarray(),
+                    data,
+                    context.string_pool(),
+                    bv,
+                    hdr.encoding_version()
+            );
+        });
 
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data - begin);
     }
@@ -259,7 +262,9 @@ void decode_index_field(
             );
 
             std::optional<util::BitMagic> bv;
-            data += decode_field(frame_field_descriptor.type(), field, data, sink, bv, encoding_version);
+            data += with_column_decode_context(frame_field_descriptor.name(), 0, [&] {
+                return decode_field(frame_field_descriptor.type(), field, data, sink, bv, encoding_version);
+            });
             util::check(!bv, "Unexpected sparse vector in index field");
             ARCTICDB_DEBUG(log::codec(), "Decoded index column {} to position {}", 0, data - begin);
         }
@@ -696,17 +701,19 @@ void decode_into_frame_static( // with or without filters, row range or date ran
             check_type_compatibility(mapping, field_name, it.source_col(), it.dest_col());
             check_data_left_for_subsequent_fields(data, end, it, context);
 
-            decode_or_expand(
-                    data,
-                    column,
-                    encoded_field,
-                    shared_data,
-                    handler_data,
-                    encoding_version,
-                    mapping,
-                    context.string_pool_ptr(),
-                    read_options
-            );
+            with_column_decode_context(field_name, it.source_field_pos(), [&] {
+                decode_or_expand(
+                        data,
+                        column,
+                        encoded_field,
+                        shared_data,
+                        handler_data,
+                        encoding_version,
+                        mapping,
+                        context.string_pool_ptr(),
+                        read_options
+                );
+            });
 
             ARCTICDB_TRACE(
                     log::codec(), "Decoded or expanded static column {} to position {}", field_name, data - begin
@@ -809,17 +816,19 @@ void decode_into_frame_dynamic(
                     field_count - field_col
             );
 
-            decode_or_expand(
-                    data,
-                    column,
-                    encoded_field,
-                    shared_data,
-                    handler_data,
-                    encoding_version,
-                    mapping,
-                    context.string_pool_ptr(),
-                    read_options
-            );
+            with_column_decode_context(field_name, field_col, [&] {
+                decode_or_expand(
+                        data,
+                        column,
+                        encoded_field,
+                        shared_data,
+                        handler_data,
+                        encoding_version,
+                        mapping,
+                        context.string_pool_ptr(),
+                        read_options
+                );
+            });
             ARCTICDB_TRACE(
                     log::codec(),
                     "Decoded or expanded dynamic column {} to position {}",
@@ -1156,15 +1165,17 @@ folly::Future<SegmentInMemory> fetch_data(
                      read_query,
                      read_options](auto&& ks) mutable {
                         auto key_seg = std::forward<storage::KeySegmentPair>(ks);
-                        if (dynamic_schema) {
-                            decode_into_frame_dynamic(
-                                    frame, row, key_seg, shared_data, *handler_data, read_query, read_options
-                            );
-                        } else {
-                            decode_into_frame_static(
-                                    frame, row, key_seg, shared_data, *handler_data, read_query, read_options
-                            );
-                        }
+                        with_key_decode_context(key_seg.variant_key(), [&] {
+                            if (dynamic_schema) {
+                                decode_into_frame_dynamic(
+                                        frame, row, key_seg, shared_data, *handler_data, read_query, read_options
+                                );
+                            } else {
+                                decode_into_frame_static(
+                                        frame, row, key_seg, shared_data, *handler_data, read_query, read_options
+                                );
+                            }
+                        });
 
                         return key_seg.variant_key();
                     }

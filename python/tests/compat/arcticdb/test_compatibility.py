@@ -67,6 +67,31 @@ def test_compat_write_read(old_venv_and_arctic_uri, lib_name, any_output_format)
             assert_frame_equal_with_arrow(read_df, df_2)
 
 
+def test_compat_old_data_passes_block_hash_verification(old_venv_and_arctic_uri, lib_name):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    index = pd.date_range("2025-01-01", periods=6, freq="D")
+    df = pd.DataFrame(
+        {
+            "ints": np.arange(6, dtype=np.int64),
+            "floats": [0.5, np.nan, 2.5, 3.5, np.nan, 5.5],
+            "strings": ["a", None, "ccc", "a", "dd", None],
+            "bools": [True, False, True, True, False, False],
+        },
+        index=index,
+    )
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        compat.old_lib.write("sym", df.iloc[:3])
+        compat.old_lib.execute(["lib.append('sym', df)"], {"df": df.iloc[3:]})
+        compat.old_lib.write("series", df["floats"])
+
+        with compat.current_version() as curr, config_context("Codec.VerifyBlockHash", 1):
+            assert_frame_equal(curr.lib.read("sym").data, df)
+            assert_frame_equal(
+                curr.lib.read("sym", columns=["strings"], date_range=(index[1], index[4])).data, df[["strings"]][1:5]
+            )
+            pd.testing.assert_series_equal(curr.lib.read("series").data, df["floats"])
+
+
 def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:

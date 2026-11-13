@@ -14,6 +14,8 @@
 #include <arcticdb/codec/passthrough.hpp>
 #include <arcticdb/codec/zstd.hpp>
 #include <arcticdb/codec/lz4.hpp>
+#include <arcticdb/codec/block_hash_check.hpp>
+#include <arcticdb/codec/decode_error_context.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/magic_words.hpp>
 #include <arcticdb/util/bitset.hpp>
@@ -45,6 +47,16 @@ void decode_block(const BlockType& block, const std::uint8_t* input, T* output) 
             util::raise_rte("Unsupported block codec {}", codec_type_to_string(block.codec().codec_type()));
         }
     }
+    // An empty block may have no output buffer, and has nothing to verify
+    if (decoded_size > 0 && codec::block_hash_verification_enabled()) [[unlikely]] {
+        codec::check_block_hash(
+                block.hash(),
+                output,
+                decoded_size,
+                size_to_decode,
+                block.has_codec() ? codec_type_to_string(block.codec().codec_type()) : "passthrough"
+        );
+    }
 }
 
 template<typename FieldType, class DataSink>
@@ -52,7 +64,10 @@ inline void read_shapes(
         FieldType& encoded_field, DataSink& data_sink, uint8_t const*& data_in, int shapes_block, shape_t*& shapes_out
 ) {
     const auto& shape = encoded_field.shapes(shapes_block);
-    decode_block<shape_t>(shape, data_in, shapes_out);
+    with_decode_context(
+            [&] { decode_block<shape_t>(shape, data_in, shapes_out); },
+            [shapes_block] { return fmt::format("shapes block {}", shapes_block); }
+    );
     data_in += shape.out_bytes();
     shapes_out += shape.in_bytes() / sizeof(shape_t);
     data_sink.advance_shapes(shape.in_bytes());
@@ -128,7 +143,10 @@ std::size_t decode_ndarray(
             const auto& block_info = field.values(block_num);
             ARCTICDB_TRACE(log::codec(), "Decoding block {} at pos {}", block_num, data_in - input);
             size_t block_inflated_size;
-            decode_block<T>(block_info, data_in, reinterpret_cast<T*>(data_out));
+            with_decode_context(
+                    [&] { decode_block<T>(block_info, data_in, reinterpret_cast<T*>(data_out)); },
+                    [block_num, num_blocks] { return fmt::format("block {} of {}", block_num, num_blocks); }
+            );
             block_inflated_size = block_info.in_bytes();
             data_out += block_inflated_size;
             data_sink.advance_data(block_inflated_size);

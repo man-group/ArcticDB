@@ -172,6 +172,37 @@ than to any API it promises to keep, so it is off unless you ask for it. ArcticD
 
 Default: 0 (off).
 
+### Codec.VerifyBlockHash
+
+When set to `1`, every block of data read is checked against the hash its writer stored with it, which detects
+corrupted or altered blocks on read. A mismatch raises `arcticdb.exceptions.DataIntegrityException` (error code
+5006, a subclass of `StorageException`). Its message names the block, the column (or the string pool), and, for
+reads of symbol data, the key, symbol and version of the object being read.
+
+Without it, a damaged block is only detected when it also breaks decompression (a `CodecException` such as
+`Error while decoding with lz4`). Damage that leaves the compressed stream valid, for example a changed byte inside
+uncompressed literals, returns wrong values with no error.
+
+Every block written by every ArcticDB version stores this hash, so the check works on existing data.
+
+It is recommended for remote storage (S3, Azure, GCS, MongoDB), where the hashing time is small next to the time
+spent fetching the data. On local storage the cost is noticeable, because reads are otherwise close to memory speed.
+Measured on warm LMDB reads (Linux, release build):
+
+| Read | Extra time with verification on |
+|---|---|
+| Full read of large numeric data (float64, int64) | +20% to +40% (the higher end for segments built from many small appends) |
+| A few columns of a wide numeric symbol | about +20% |
+| A narrow row range (around 1,000 rows) of large segments | about +40%, because whole blocks are decoded and hashed |
+| Strings, small symbols, `read_batch` of many small symbols | under 5% |
+
+The cost is about one extra pass over the decoded bytes, so it grows with the size of the blocks decoded, not with
+the number of rows returned.
+
+Unlike most options it takes effect immediately, including for `Library` instances that already exist.
+
+Default: 0 (off).
+
 ### AzureStorage.HttpKeepAlive
 
 Whether the Azure client reuses pooled HTTP connections (`1`, the default) or opens a new connection per request

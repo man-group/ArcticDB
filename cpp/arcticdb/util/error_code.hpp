@@ -84,6 +84,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5003, E_PERMISSION)                                                                                     \
     ERROR_CODE(5004, E_RESOURCE_NOT_FOUND)                                                                             \
     ERROR_CODE(5005, E_UNSUPPORTED_ATOMIC_OPERATION)                                                                   \
+    ERROR_CODE(5006, E_DATA_INTEGRITY)                                                                                 \
     ERROR_CODE(5010, E_LMDB_MAP_FULL)                                                                                  \
     ERROR_CODE(5011, E_UNEXPECTED_LMDB_ERROR)                                                                          \
     ERROR_CODE(5020, E_UNEXPECTED_S3_ERROR)                                                                            \
@@ -189,6 +190,8 @@ using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERS
 using StorageException = ArcticCategorizedException<ErrorCategory::STORAGE>;
 using MissingDataException = ArcticCategorizedException<ErrorCategory::MISSING_DATA>;
 using PermissionException = ArcticSpecificException<ErrorCode::E_PERMISSION>;
+/// The bytes read for an object don't match what was written, e.g. a block's stored hash doesn't match its contents
+using DataIntegrityException = ArcticSpecificException<ErrorCode::E_DATA_INTEGRITY>;
 using LMDBMapFullException = ArcticSpecificException<ErrorCode::E_LMDB_MAP_FULL>;
 using UnexpectedLMDBErrorException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_LMDB_ERROR>;
 using UnexpectedS3ErrorException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_S3_ERROR>;
@@ -222,6 +225,11 @@ template<ErrorCode error_code>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_PERMISSION>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_PERMISSION>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_DATA_INTEGRITY>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_DATA_INTEGRITY>(msg);
 }
 
 template<>

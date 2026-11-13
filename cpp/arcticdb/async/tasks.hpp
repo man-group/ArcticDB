@@ -24,6 +24,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/codec/decode_error_context.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 
 namespace arcticdb::async {
@@ -446,9 +447,12 @@ struct DecodeSegmentTask : BaseTask {
         );
 
         try {
-            auto decoded_segment = decode_segment(*key_segment.segment_ptr());
+            auto decoded_segment = with_key_decode_context(key_segment.variant_key(), [&] {
+                return decode_segment(*key_segment.segment_ptr());
+            });
             return {std::move(key_segment).variant_key(), std::move(decoded_segment)};
         } catch (const std::exception& e) {
+            rethrow_if_decode_error(folly::exception_wrapper{std::current_exception()});
             codec::raise<ErrorCode::E_DECODE_ERROR>(
                     "DecodeSegmentTask failed for key {}: {}", variant_key_view(key_segment.variant_key()), e.what()
             );
@@ -539,7 +543,10 @@ struct DecodeMetadataTask : BaseTask {
                 "ReadAndDecodeMetadataTask decoding segment with key {}",
                 variant_key_view(key_seg.variant_key())
         );
-        return std::make_pair<>(key_seg.variant_key(), decode_metadata_from_segment(key_seg.segment()));
+        auto metadata = with_key_decode_context(key_seg.variant_key(), [&] {
+            return decode_metadata_from_segment(key_seg.segment());
+        });
+        return std::make_pair<>(key_seg.variant_key(), std::move(metadata));
     }
 };
 
@@ -556,7 +563,9 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
                 variant_key_view(key_seg.variant_key())
         );
 
-        auto maybe_desc = decode_timeseries_descriptor(*key_seg.segment_ptr());
+        auto maybe_desc = with_key_decode_context(key_seg.variant_key(), [&] {
+            return decode_timeseries_descriptor(*key_seg.segment_ptr());
+        });
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(key_seg.variant_key(), std::move(*maybe_desc));
@@ -579,7 +588,9 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
                 variant_key_view(key_seg.variant_key())
         );
 
-        auto [any, descriptor] = decode_metadata_and_descriptor_fields(*key_seg.segment_ptr());
+        auto [any, descriptor] = with_key_decode_context(key_seg.variant_key(), [&] {
+            return decode_metadata_and_descriptor_fields(*key_seg.segment_ptr());
+        });
         return std::make_tuple(key_seg.variant_key(), std::move(any), std::move(descriptor));
     }
 };
