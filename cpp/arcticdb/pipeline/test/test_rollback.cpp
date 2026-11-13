@@ -163,7 +163,7 @@ class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
                     {{"VersionStore.NumCPUThreads", 1}, {"VersionStore.NumIOThreads", 1}}
             };
             scoped_config_ = std::make_unique<ScopedConfig>(std::move(configs));
-            async::TaskScheduler::instance()->reattach_instance();
+            async::TaskScheduler::replace_instance_for_testing();
         }
         proto::storage::VersionStoreConfig version_store_cfg;
         version_store_cfg.mutable_write_options()->set_column_group_size(100);
@@ -176,7 +176,7 @@ class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
     void TearDown() override {
         StorageFailureSimulator::instance()->reset();
         scoped_config_.reset();
-        async::TaskScheduler::instance()->reattach_instance();
+        async::TaskScheduler::replace_instance_for_testing();
     }
 
     std::unique_ptr<version_store::PythonVersionStore> version_store_;
@@ -197,7 +197,7 @@ class RollbackOnQuotaExceededUpdateOrAppend : public RollbackOnQuotaExceeded {
                     {{"VersionStore.NumCPUThreads", 1}, {"VersionStore.NumIOThreads", 1}}
             };
             scoped_config_ = std::make_unique<ScopedConfig>(std::move(configs));
-            async::TaskScheduler::instance()->reattach_instance();
+            async::TaskScheduler::replace_instance_for_testing();
         }
         auto [version_store, _] = python_version_store_in_memory(version_store_cfg);
         version_store_ = std::make_unique<version_store::PythonVersionStore>(std::move(version_store));

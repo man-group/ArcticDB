@@ -303,7 +303,7 @@ TEST(ProcessingUnitAdmissionHandlerTest, ReadWindowLimitsInFlightReads) {
 
 namespace {
 struct ReattachTaskSchedulerOnScopeExit {
-    ~ReattachTaskSchedulerOnScopeExit() { async::TaskScheduler::reattach_instance(); }
+    ~ReattachTaskSchedulerOnScopeExit() { async::TaskScheduler::replace_instance_for_testing(); }
 };
 
 struct ScopedThreadCounts {
@@ -312,7 +312,7 @@ struct ScopedThreadCounts {
 
     explicit ScopedThreadCounts(int64_t cpu = 1, int64_t io = 1) :
         config({{"VersionStore.NumCPUThreads", cpu}, {"VersionStore.NumIOThreads", io}}) {
-        async::TaskScheduler::reattach_instance();
+        async::TaskScheduler::replace_instance_for_testing();
     }
 };
 } // namespace
