@@ -17,9 +17,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-// TODO: This file is better placed in storage/test. It only needs to be built for tests.
-//       Keeping it here for now for quicker iteration.
-
 namespace arcticdb::storage::file_backed {
 
 enum class SyscallId : std::uint8_t { OPEN, CLOSE, WRITE, READ, SYNC, RENAME, LINK, MKDIR, STAT, UNLINK };
@@ -50,6 +47,10 @@ class FaultyPosix : public PosixInterface {
     int closedir(DIR* dirp) override;
     int unlink(const char* pathname) override;
 
+  private:
+    template<typename ResultType>
+    ResultType propagate_fault_if_exists(SyscallId syscall_id, ResultType true_syscall_result);
+
     // Fault injection API
   public:
     void inject_fault(SyscallId, std::optional<PosixError>);
@@ -60,10 +61,7 @@ class FaultyPosix : public PosixInterface {
   private:
     // Need to protect class members since APIs will potentially be called from folly futures.
     std::mutex data_mutex_;
-    // TODO: Hmm, how will I tell we opened a temporary file? Need awareness of ".tmp" prefix.
-    std::unordered_set<std::filesystem::path> temporary_files_;
     std::unordered_map<SyscallId, std::queue<std::optional<PosixError>>> faults_;
-    // size_t num_open_file_descriptors_ = 0;
     std::unordered_set<int> open_file_descriptors_;
     std::unordered_set<int> stale_file_descriptors_;
 };

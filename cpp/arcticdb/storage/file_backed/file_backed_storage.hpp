@@ -21,17 +21,6 @@ class FileBackedStorage final : public Storage {
   public:
     using Config = arcticdb::proto::file_storage::Config;
 
-    /**
-     *
-     *
-     * @param library_path Where
-     * @param mode Control access rights.
-     * @param conf Custom configuration specific to FileBackedStorage.
-     * @param posix_interface An optional interface. If given, ownership will be transferred. Otherwise,
-     *        a new one will be created internally.
-     *
-     * @return
-     */
     FileBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf);
     FileBackedStorage(
             const LibraryPath& library_path, OpenMode mode, const Config& conf,
@@ -53,10 +42,8 @@ class FileBackedStorage final : public Storage {
     bool do_key_exists(const VariantKey& key) override;
     bool do_supports_prefix_matching() const override { return false; };
     SupportsAtomicWrites do_supports_atomic_writes() const override {
-        // TODO: I don't fully understand what this is for. It almost seems like dead code.
-        // Nothing in the arcticdb core uses the ReliableStorageLock, but perhaps it could?
-        // We should be able to ensure atomic writes on NFS.
-        return SupportsAtomicWrites::YES;
+        // It should be possible to implement this on NFS.
+        return SupportsAtomicWrites::NO;
     };
     bool do_fast_delete() override;
 
