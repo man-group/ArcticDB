@@ -678,6 +678,19 @@ def route_env_to_extension(monkeypatch):
                 putenv_s(name, os.environ.get(name, ""))
 
         monkeypatch.undo = undo_and_resync
+    else:
+
+        def putenv_s(name, value):
+            if value:
+                os.putenv(name, value)
+            else:
+                os.unsetenv(name)
+
+    # configure_s3_checksum_validation sets these to when_required in the extension's environment whenever neither is
+    # when_supported, without os.environ knowing. An earlier test would then leave the one this test doesn't set
+    # behind, so resync both to what os.environ says.
+    for name in ("AWS_RESPONSE_CHECKSUM_VALIDATION", "AWS_REQUEST_CHECKSUM_CALCULATION"):
+        putenv_s(name, os.environ.get(name, ""))
     yield
 
 

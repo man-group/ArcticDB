@@ -13,6 +13,7 @@ import time
 import psutil
 import pytz
 import math
+import os
 import pytest
 import requests
 import pandas as pd
@@ -1679,16 +1680,38 @@ def _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries):
             lib.read("sym")
 
 
-def test_s3_response_checksum_mismatch_is_retried_once_by_default(
-    s3_storage, lib_name, monkeypatch, route_env_to_extension
-):
-    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+def _write_then_assert_checksum_mismatch_retried(s3_storage, lib_name, max_retries):
     with _corrupting_get_responses(s3_storage) as corrupt:
         create_library(s3_storage.arctic_uri, lib_name)
         lib = Arctic(s3_storage.arctic_uri)[lib_name]
         df = pd.DataFrame({"col": np.arange(1000)})
         lib.write("sym", df)
-        _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries=1)
+        _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries)
+
+
+def test_s3_response_checksum_mismatch_is_retried_once_by_default(
+    s3_storage, lib_name, monkeypatch, route_env_to_extension
+):
+    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+    _write_then_assert_checksum_mismatch_retried(s3_storage, lib_name, max_retries=1)
+
+
+@pytest.fixture
+def s3_library_opened_without_checksum_env_vars(s3_storage, lib_name):
+    # Stands in for an earlier test in the same worker: with neither variable set, opening an S3 library makes the
+    # extension set both to when_required in the process environment, where os.environ cannot see them.
+    assert "AWS_RESPONSE_CHECKSUM_VALIDATION" not in os.environ
+    assert "AWS_REQUEST_CHECKSUM_CALCULATION" not in os.environ
+    create_library(s3_storage.arctic_uri, f"{lib_name}_earlier")
+
+
+def test_s3_response_checksum_mismatch_not_affected_by_earlier_s3_library(
+    s3_library_opened_without_checksum_env_vars, s3_storage, lib_name, monkeypatch, route_env_to_extension
+):
+    # A leftover AWS_REQUEST_CHECKSUM_CALCULATION=when_required stops the write storing checksums, so the corrupted
+    # read would decode garbage instead of raising a checksum mismatch.
+    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+    _write_then_assert_checksum_mismatch_retried(s3_storage, lib_name, max_retries=1)
 
 
 @pytest.mark.parametrize(
@@ -1712,15 +1735,8 @@ def test_s3_response_checksum_mismatch_max_retries(
     monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
     monkeypatch.setenv("AWS_RETRY_MODE", retry_mode)
     monkeypatch.setenv("AWS_MAX_ATTEMPTS", aws_max_attempts)
-    with (
-        config_context("S3Storage.ChecksumMismatchMaxRetries", max_retries),
-        _corrupting_get_responses(s3_storage) as corrupt,
-    ):
-        create_library(s3_storage.arctic_uri, lib_name)
-        lib = Arctic(s3_storage.arctic_uri)[lib_name]
-        df = pd.DataFrame({"col": np.arange(1000)})
-        lib.write("sym", df)
-        _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries=expected_retries)
+    with config_context("S3Storage.ChecksumMismatchMaxRetries", max_retries):
+        _write_then_assert_checksum_mismatch_retried(s3_storage, lib_name, max_retries=expected_retries)
 
 
 @pytest.mark.parametrize("checksum", ["MD5", "CRC64NVME", "crc32", "sha256"])
