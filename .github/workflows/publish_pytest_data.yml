@@ -9,6 +9,7 @@ permissions:
   contents: read
 jobs:
   sync_pytest_xmls:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04 # Native runner doesn't allow setting up the ca softlinks required below
