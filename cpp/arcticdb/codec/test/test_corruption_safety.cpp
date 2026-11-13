@@ -750,4 +750,11 @@ TEST(CorruptionSafety, FixedWidthStringWithoutPoolRejected) {
     expect_corrupt([&] { (void)get_string_from_buffer(1, offsets, nullptr); });
 }
 
+// A corrupt descriptor can store a value type with no size bits, which every type-size computation would mishandle.
+TEST(CorruptionSafety, FieldTypeWithoutSizeBitsRejected) {
+    const auto uint_without_size = combine_data_type(ValueType::UINT, SizeBits::UNKNOWN_SIZE_BITS);
+    const auto desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(uint_without_size, "vals")});
+    EXPECT_THROW(SegmentInMemory{desc.clone()}, ArcticException);
+}
+
 } // namespace arcticdb
