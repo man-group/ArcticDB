@@ -66,7 +66,8 @@ void convert_string_segment(
         const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options, ColumnTruncation truncate = {}
 ) {
     const auto dest_size = data_type_size(dest.type());
-    const auto num_rows = source.row_count();
+    // Rows, not row_count(), which for a sparse column counts only the stored values
+    const auto num_rows = static_cast<size_t>(source.last_row() + 1);
     auto field_wrapper = FieldWrapper(dest.type(), col_name);
     auto mapping = ColumnMapping(
             source.type(),
@@ -275,26 +276,22 @@ TEST_P(ArrowStringColumnRead, Basic) {
 }
 
 namespace {
-constexpr size_t bitmagic_block_bits = bm::gap_max_bits;
+constexpr size_t kBitMagicBlockBits = bm::gap_max_bits;
 // Every this-many-th stored value is None rather than a string
-constexpr size_t none_every = 37;
-// Rows read back as "s<row % distinct_strings>", so the dictionary has repeats
-constexpr size_t distinct_strings = 211;
-constexpr size_t max_run_length = 5'000;
+constexpr size_t kNoneEvery = 37;
+// Rows read back as "s<row % kDistinctStrings>", so the dictionary has repeats
+constexpr size_t kDistinctStrings = 211;
+constexpr size_t kMaxRunLength = 5'000;
 
 // Decides row by row whether each row is stored, with probability `density`: independently (mostly BitMagic bit blocks
-// at mid densities), or in runs of up to max_run_length rows (GAP and full blocks)
+// at mid densities), or in runs of up to kMaxRunLength rows (GAP and full blocks)
 class StoredRowPattern {
   public:
-    // Draws the first run even when !runs, as the original generator did, so the same seed gives the same columns.
-    // The draws in the initialiser list rely on stored_ and run_length_ being declared first
     StoredRowPattern(double density, bool runs, std::mt19937& rng) :
         stored_(density),
-        run_length_(1, max_run_length),
+        run_length_(1, kMaxRunLength),
         runs_(runs),
-        rng_(rng),
-        in_stored_run_(stored_(rng)),
-        run_left_(run_length_(rng)) {}
+        rng_(rng) {}
 
     bool next_row_is_stored() {
         if (!runs_)
@@ -311,11 +308,12 @@ class StoredRowPattern {
     std::uniform_int_distribution<size_t> run_length_;
     bool runs_;
     std::mt19937& rng_;
-    bool in_stored_run_;
-    size_t run_left_;
+    bool in_stored_run_ = false;
+    // Rows left in the current run; the first row starts a new one
+    size_t run_left_ = 0;
 };
 
-// A sparse dynamic-string column of num_rows rows, stored as StoredRowPattern decides, with every none_every-th stored
+// A sparse dynamic-string column of num_rows rows, stored as StoredRowPattern decides, with every kNoneEvery-th stored
 // value None. Returns the column and the value each row should read back as
 std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
         size_t num_rows, double density, bool runs, StringPool& pool, std::mt19937& rng
@@ -327,13 +325,14 @@ std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
     for (size_t row = 0; row < num_rows; ++row) {
         if (!pattern.next_row_is_stored())
             continue;
-        if (stored_count++ % none_every == none_every - 1) {
+        if (stored_count++ % kNoneEvery == kNoneEvery - 1) {
             column.set_scalar(static_cast<ssize_t>(row), not_a_string());
         } else {
-            expected[row] = fmt::format("s{}", row % distinct_strings);
+            expected[row] = fmt::format("s{}", row % kDistinctStrings);
             column.set_scalar(static_cast<ssize_t>(row), pool.get(expected[row].value()).offset());
         }
     }
+    // At density 1 without runs every row is stored, so the column has no sparse map and the dense path is tested.
     // A segment with no stored values still decodes with a (empty) sparse map
     if (stored_count == 0)
         column.opt_sparse_map() = util::BitMagic();
@@ -361,24 +360,15 @@ size_t count_mismatches(
 // Converts a dynamic-string column of num_rows rows, the only segment of its frame, to Arrow
 Column convert_to_arrow(
         const Column& source, size_t num_rows, const std::shared_ptr<StringPool>& pool, ArrowOutputStringFormat format,
-        std::optional<ColumnTruncation> truncation = std::nullopt
+        ColumnTruncation truncation = {}
 ) {
-    auto handler = ArrowStringHandler();
     auto read_options = ReadOptions();
     read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = format});
-    const auto source_type = kDynamicStringType;
-    auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
-    const auto dest_size = data_type_size(dest_type);
+    auto [dest_type, block_config] =
+            ArrowStringHandler().output_type_and_block_config(kDynamicStringType, "col", read_options);
     auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
     allocate_chunked_column(dest, num_rows, num_rows);
-    auto field_wrapper = FieldWrapper(dest_type, "col");
-    auto mapping = ColumnMapping(
-            source_type, dest_type, field_wrapper.field(), dest_size, num_rows, 0, 0, dest_size * num_rows, 0
-    );
-    if (truncation)
-        mapping.set_truncate(*truncation);
-    auto handler_data = std::any{};
-    handler.convert_type(source, dest, mapping, DecodePathData{}, handler_data, pool, read_options);
+    convert_string_segment(source, dest, "col", 0, pool, read_options, truncation);
     return dest;
 }
 } // namespace
@@ -389,13 +379,13 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
     const size_t num_rows = 150'000; // Three BitMagic blocks, the last one partial
     std::mt19937 rng(17);
     const std::vector<std::pair<size_t, size_t>> row_ranges{
-            {0, num_rows},                       // whole column, no truncation
-            {1, num_rows},                       // starts just after the first row
-            {63, bitmagic_block_bits + 65},      // spans a block boundary, unaligned to words
-            {64, 128},                           // one 64-bit word
-            {70'000, 70'001},                    // one row
-            {bitmagic_block_bits, num_rows - 3}, // starts on a block boundary
-            {num_rows - 1'000, num_rows}         // the tail of the partial last block
+            {0, num_rows},                      // whole column, no truncation
+            {1, num_rows},                      // starts just after the first row
+            {63, kBitMagicBlockBits + 65},      // spans a block boundary, unaligned to words
+            {64, 128},                          // one 64-bit word
+            {70'000, 70'001},                   // one row
+            {kBitMagicBlockBits, num_rows - 3}, // starts on a block boundary
+            {num_rows - 1'000, num_rows}        // the tail of the partial last block
     };
     for (double density : {0.0, 0.001, 0.01, 0.05, 0.5, 0.95, 1.0}) {
         for (bool runs : {false, true}) {
@@ -409,7 +399,7 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
                         num_rows,
                         pool,
                         output_string_format(),
-                        whole_column ? std::nullopt : std::optional(ColumnTruncation{start, end})
+                        whole_column ? ColumnTruncation{} : ColumnTruncation{start, end}
                 );
                 auto arrays = arrow_arrays_from_column(dest, "col");
                 ASSERT_EQ(arrays.size(), 1);
@@ -445,7 +435,7 @@ namespace {
 std::optional<std::string> test_string(size_t row, bool sparse) {
     if (sparse && row % 3 == 1)
         return std::nullopt;
-    return fmt::format("s{}", row % 211);
+    return fmt::format("s{}", row % kDistinctStrings);
 }
 
 Column test_string_source_column(StringPool& pool, size_t num_rows, bool sparse) {

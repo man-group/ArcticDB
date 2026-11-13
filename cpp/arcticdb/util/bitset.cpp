@@ -42,7 +42,7 @@ void gap_block_to_packed_bits(const bm::gap_word_t* gap_block, uint8_t* dest, si
     bool run_is_set = (gap_block[0] & 1) != 0;
     size_t run_first = 0;
     const unsigned gap_length = bm::gap_length(gap_block);
-    // The last run always ends at the block's last bit, gap_max_bits - 1
+    // The last run always ends at gap_max_bits - 1, so the runs cover the whole block and no tail is left over
     for (unsigned run_end_index = 1; run_end_index < gap_length && run_first < dest_bits; ++run_end_index) {
         const size_t run_last = gap_block[run_end_index];
         if (run_is_set)

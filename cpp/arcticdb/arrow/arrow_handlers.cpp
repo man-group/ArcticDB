@@ -143,7 +143,7 @@ util::BitSet append_sparse_strings(const Column& column, size_t first_row, size_
     util::BitSet validity = stored_rows_in_range(sparse_map, first_row, end_row);
     const size_t first_value_index = count_stored_rows_before(sparse_map, first_row);
     // Release builds do not bounds-check the value iterator, so a corrupt map must be rejected before the walk. Only
-    // the range is counted, as those are the values the walk reads, and a whole-map popcount costs ~2 us per read
+    // the range is counted, as those are the values the walk reads; counting the whole map would add a full pass
     const size_t stored_in_range = sparse_map.count_range(first_bit, last_bit);
     const auto value_count = static_cast<size_t>(column.row_count());
     util::check(
@@ -232,8 +232,8 @@ void encode_variable_length(
                             strings.emplace_back(strv);
                             return true;
                         };
-                        // A sparse column gets its validity, a dense one the rows that are not strings, which the
-                        // populate_inverted_bitset step below inverts (`inserter` is only used by fixed-width strings)
+                        // dest_bitset is the validity for a sparse column, or the rows that are not strings for a
+                        // dense one, which populate_inverted_bitset inverts below (`inserter` is only for fixed-width)
                         dest_bitset = append_dynamic_strings<typename source_type_info::TDT>(
                                 source_column, positions, mapping.num_rows_, append_string
                         );
@@ -385,8 +385,8 @@ void encode_dictionary(
                             dest_ptr[row] = dictionary_key_of(offset);
                             return true;
                         };
-                        // A sparse column gets its validity, a dense one the rows that are not strings, which the
-                        // populate_inverted_bitset step below inverts (`inserter` is only used by fixed-width strings)
+                        // dest_bitset is the validity for a sparse column, or the rows that are not strings for a
+                        // dense one, which populate_inverted_bitset inverts below (`inserter` is only for fixed-width)
                         dest_bitset = append_dynamic_strings<typename source_type_info::TDT>(
                                 source_column, positions, mapping.num_rows_, append_key
                         );

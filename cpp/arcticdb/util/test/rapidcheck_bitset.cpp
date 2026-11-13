@@ -43,7 +43,7 @@ RC_GTEST_PROP(BitSet, PackedBitsToBuffer, (const std::vector<bool>& input)) {
 }
 
 namespace {
-constexpr size_t bitmagic_block_bits = bm::gap_max_bits;
+constexpr size_t kBitMagicBlockBits = bm::gap_max_bits;
 
 // A bitset of num_bits bits built from runs of set and clear bits, of random density and run length, so that
 // optimize() leaves a mix of bit, GAP, full and empty BitMagic blocks
@@ -82,10 +82,10 @@ RC_GTEST_PROP(BitSet, PackedBitsMatchBitByBit, ()) {
             size_t(0),
             size_t(1),
             size_t(63),
-            bitmagic_block_bits - 1,
-            bitmagic_block_bits,
-            bitmagic_block_bits + 1,
-            3 * bitmagic_block_bits + 3'395
+            kBitMagicBlockBits - 1,
+            kBitMagicBlockBits,
+            kBitMagicBlockBits + 1,
+            3 * kBitMagicBlockBits + 3'395
     );
     const auto bitset = random_run_bitset(num_bits, *rc::gen::arbitrary<bool>());
     // Start from garbage, as bitset_to_packed_bits must zero the destination itself
@@ -96,7 +96,7 @@ RC_GTEST_PROP(BitSet, PackedBitsMatchBitByBit, ()) {
 
 RC_GTEST_PROP(BitSet, ExpansionMatchesBitByBit, ()) {
     using namespace arcticdb;
-    const auto num_rows = *rc::gen::element(size_t(1), size_t(63), size_t(64), size_t(1000), bitmagic_block_bits + 1);
+    const auto num_rows = *rc::gen::element(size_t(1), size_t(63), size_t(64), size_t(1000), kBitMagicBlockBits + 1);
     const auto bitset = random_run_bitset(num_rows, *rc::gen::arbitrary<bool>());
     // Distinct dense values, promoted from int32 to double, with -1 marking rows the expansion must not write
     std::vector<int32_t> dense(bitset.count());
