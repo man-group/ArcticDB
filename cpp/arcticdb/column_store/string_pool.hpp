@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
@@ -127,6 +128,13 @@ class StringBlock {
 };
 
 class OffsetString;
+
+// A segment with no string pool is valid only if none of its string columns references a pooled string.
+inline void check_string_pool_present(bool has_string_pool) {
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            has_string_pool, "Corrupt segment: string column references a missing string pool"
+    );
+}
 
 /*****************
  *  StringPool  *

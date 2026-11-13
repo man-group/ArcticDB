@@ -180,6 +180,15 @@ std::size_t decode_ndarray(
     return read_bytes;
 }
 
+// An ndarray field's stored compressed size must fit in the remaining input before it is decoded.
+template<typename NDArrayEncodedFieldType>
+void check_ndarray_input_available(
+        const NDArrayEncodedFieldType& ndarray, const std::uint8_t* input, const std::uint8_t* end,
+        std::string_view what
+) {
+    check_input_available(input, end, encoding_sizes::ndarray_field_compressed_size(ndarray), what);
+}
+
 // The bytes decode_field will consume for this field (V2 column magic plus shapes, values and sparse map, all sizes
 // read from the stored encoded field) must fit in the remaining input.
 inline void check_encoded_field_input_available(

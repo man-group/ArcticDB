@@ -84,9 +84,7 @@ std::optional<google::protobuf::Any> decode_metadata(
 ) {
     if (hdr.has_metadata_field()) {
         hdr.metadata_field().validate();
-        check_input_available(
-                data, end, encoding_sizes::ndarray_field_compressed_size(hdr.metadata_field().ndarray()), "metadata"
-        );
+        check_ndarray_input_available(hdr.metadata_field().ndarray(), data, end, "metadata");
         auto meta_type_desc = metadata_type_desc();
         MetaBuffer meta_buf;
         std::optional<util::BitMagic> bv;
@@ -183,12 +181,7 @@ std::shared_ptr<FieldCollection> decode_index_fields(
     if (hdr.has_index_descriptor_field() && hdr.index_descriptor_field().has_ndarray()) {
         ARCTICDB_TRACE(log::codec(), "Decoding index fields");
         util::check(data != end, "Reached end of input block with index descriptor fields to decode");
-        check_input_available(
-                data,
-                end,
-                encoding_sizes::ndarray_field_compressed_size(hdr.index_descriptor_field().ndarray()),
-                "index descriptor fields"
-        );
+        check_ndarray_input_available(hdr.index_descriptor_field().ndarray(), data, end, "index descriptor fields");
         std::optional<util::BitMagic> bv;
 
         data += decode_ndarray(
@@ -280,15 +273,11 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v1(
 
 void skip_descriptor(const uint8_t*& data, const SegmentHeader& hdr, const uint8_t* end) {
     check_magic_bounded<SegmentDescriptorMagic>(data, end);
-    check_input_available(data, end, sizeof(SegmentDescriptor), "segment descriptor");
-    data += sizeof(SegmentDescriptor);
+    skip_input(data, end, sizeof(SegmentDescriptor), "segment descriptor");
     skip_identifier(data, end);
     check_magic_bounded<DescriptorFieldsMagic>(data, end);
-    if (hdr.has_descriptor_field() && hdr.descriptor_field().has_ndarray()) {
-        const auto descriptor_size = encoding_sizes::field_compressed_size(hdr.descriptor_field());
-        check_input_available(data, end, descriptor_size, "descriptor fields");
-        data += descriptor_size;
-    }
+    if (hdr.has_descriptor_field() && hdr.descriptor_field().has_ndarray())
+        skip_input(data, end, encoding_sizes::field_compressed_size(hdr.descriptor_field()), "descriptor fields");
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v2(
@@ -393,12 +382,7 @@ void decode_string_pool(
         interval timer;
         timer.start();
         util::check(data != end, "Reached end of input block with string pool fields to decode");
-        check_input_available(
-                data,
-                end,
-                encoding_sizes::ndarray_field_compressed_size(hdr.string_pool_field().ndarray()),
-                "string pool"
-        );
+        check_ndarray_input_available(hdr.string_pool_field().ndarray(), data, end, "string pool");
         std::optional<util::BitMagic> bv;
         data += decode_ndarray(
                 string_pool_descriptor().type(),

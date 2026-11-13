@@ -30,6 +30,12 @@ inline void check_input_available(const uint8_t* data, const uint8_t* end, size_
     );
 }
 
+// Checks that `bytes` lie within [data, end), then advances data past them.
+inline void skip_input(const uint8_t*& data, const uint8_t* end, size_t bytes, std::string_view what) {
+    check_input_available(data, end, bytes, what);
+    data += bytes;
+}
+
 template<typename MagicType>
 void check_magic_bounded(const uint8_t*& data, const uint8_t* end) {
     check_input_available(data, end, sizeof(MagicType), "magic number");

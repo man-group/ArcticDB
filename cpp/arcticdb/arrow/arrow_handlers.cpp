@@ -379,13 +379,8 @@ void ArrowStringHandler::convert_type(
         const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData&,
         std::any&, const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) const {
-    // An all-None/NaN string column legitimately has no string pool; a missing pool is only
-    // corruption when the column references a real string. Guard before the encoders dereference
-    // the pool, so the decode raises instead of crashing.
-    codec::check<ErrorCode::E_DECODE_ERROR>(
-            static_cast<bool>(string_pool) || !column_references_pooled_string(source_column),
-            "Corrupt segment: string column references a missing string pool"
-    );
+    // Guard before the encoders dereference the pool, so a corrupt segment raises instead of crashing.
+    check_string_pool_for_column(string_pool.get(), source_column);
     auto string_format = read_options.arrow_string_format_for_column(mapping.frame_field_descriptor_.name());
     switch (string_format) {
     case ArrowOutputStringFormat::CATEGORICAL:

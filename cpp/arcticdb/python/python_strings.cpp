@@ -107,6 +107,18 @@ static void write_strings_to_destination(
     handler_data.increment_missing_refcount(PandasMissingValue::NaN, nan_placeholder_count);
 }
 
+// A corrupt string pool can hold bytes that are invalid for the column's string type (e.g. invalid UTF-8); the
+// constructor then returns null with a Python error set. Raise a decode error instead of using null.
+template<typename StringCreator>
+static PyObject* create_string_or_raise(std::string_view sv, bool has_type_conversion) {
+    auto obj = StringCreator::create(sv, has_type_conversion);
+    if (ARCTICDB_UNLIKELY(obj == nullptr)) {
+        PyErr_Clear();
+        codec::raise<ErrorCode::E_DECODE_ERROR>("Corrupt segment: invalid string in string pool failed to decode");
+    }
+    return obj;
+}
+
 template<typename StringCreator>
 static auto assign_python_strings(
         const ankerl::unordered_dense::map<entity::position_t, size_t>& unique_counts, bool has_type_conversion,
@@ -127,15 +139,7 @@ static auto assign_python_strings(
         };
         for (const auto& [offset, count] : unique_counts) {
             const auto sv = get_string_from_pool(offset, string_pool);
-            auto obj = StringCreator::create(sv, has_type_conversion);
-            // A corrupt string pool can hold bytes that are invalid for the column's string type
-            // (e.g. invalid UTF-8); the constructor then returns null with a Python error set.
-            if (ARCTICDB_UNLIKELY(obj == nullptr)) {
-                PyErr_Clear();
-                codec::raise<ErrorCode::E_DECODE_ERROR>(
-                        "Corrupt segment: invalid string in string pool failed to decode"
-                );
-            }
+            auto obj = create_string_or_raise<StringCreator>(sv, has_type_conversion);
             for (auto c = 1U; c < count; ++c)
                 inc_ref(obj);
 
@@ -193,16 +197,9 @@ static void assign_strings_shared(
                     shared != shared_map.end()) {
                     obj = shared->second;
                 } else {
-                    obj = StringCreator::create(sv, has_type_conversion);
-                    // Invalid bytes in a corrupt pool make the constructor return null; raise
-                    // instead of caching/inc_ref-ing null. References already taken for earlier
-                    // offsets in this call leak on this (corrupt-input-only) path.
-                    if (ARCTICDB_UNLIKELY(obj == nullptr)) {
-                        PyErr_Clear();
-                        codec::raise<ErrorCode::E_DECODE_ERROR>(
-                                "Corrupt segment: invalid string in string pool failed to decode"
-                        );
-                    }
+                    // References already taken for earlier offsets in this call leak if this raises, which only
+                    // happens on corrupt input.
+                    obj = create_string_or_raise<StringCreator>(sv, has_type_conversion);
                     shared_map.try_emplace(sv, obj);
                 }
 
@@ -317,13 +314,8 @@ void write_python_dynamic_strings_to_dest(
             target_type
     );
 
-    // An all-None/NaN string column legitimately has no string pool (the encoder omits an empty
-    // pool field). A missing pool is only corruption when the column references a real string.
-    // Guard here so the decode raises instead of dereferencing a null pool and crashing.
-    codec::check<ErrorCode::E_DECODE_ERROR>(
-            static_cast<bool>(string_pool) || !column_references_pooled_string(source_column),
-            "Corrupt segment: string column references a missing string pool"
-    );
+    // Guard here so a corrupt segment raises instead of dereferencing a null pool and crashing.
+    check_string_pool_for_column(string_pool.get(), source_column);
     std::optional<StringPool> empty_pool;
     const StringPool& pool = string_pool ? *string_pool : empty_pool.emplace();
 

@@ -60,7 +60,7 @@ std::vector<uint8_t> serialize_segment(Segment&& seg) {
     return vec;
 }
 
-Segment make_numeric_segment_v2() {
+Segment make_numeric_segment(EncodingVersion version) {
     const auto stream_desc =
             stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT64, "vals")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
@@ -68,38 +68,24 @@ Segment make_numeric_segment_v2() {
         in_mem_seg.set_scalar<uint64_t>(0, i);
         in_mem_seg.end_row();
     }
-    return encode_v2(std::move(in_mem_seg), codec::default_lz4_codec());
+    return version == EncodingVersion::V1 ? encode_v1(std::move(in_mem_seg), codec::default_lz4_codec())
+                                          : encode_v2(std::move(in_mem_seg), codec::default_lz4_codec());
 }
 
-Segment make_numeric_segment_v1() {
-    const auto stream_desc =
-            stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT64, "vals")});
-    SegmentInMemory in_mem_seg{stream_desc.clone()};
-    for (uint64_t i = 0; i < 100; ++i) {
-        in_mem_seg.set_scalar<uint64_t>(0, i);
-        in_mem_seg.end_row();
-    }
-    return encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
-}
+Segment make_numeric_segment_v2() { return make_numeric_segment(EncodingVersion::V2); }
 } // namespace
 
 // C1: garbage in FixedHeader.header_bytes (offset 4, uint32). The header is parsed using this
 // length before check_size validates it, reading far past the buffer -> SIGBUS.
-TEST(CorruptionSafety, C1_FixedHeaderHeaderBytesGarbageV2) {
-    auto vec = serialize_segment(make_numeric_segment_v2());
-    ASSERT_GT(vec.size(), 8u);
-    // Overwrite the uint32 header_bytes field at offset 4 with a huge value.
-    uint32_t garbage = 0xdeadbeef;
-    std::memcpy(vec.data() + 4, &garbage, sizeof(garbage));
-    expect_corrupt([&] { (void)Segment::from_bytes(vec.data(), vec.size()); });
-}
-
-TEST(CorruptionSafety, C1_FixedHeaderHeaderBytesGarbageV1) {
-    auto vec = serialize_segment(make_numeric_segment_v1());
-    ASSERT_GT(vec.size(), 8u);
-    uint32_t garbage = 0xdeadbeef;
-    std::memcpy(vec.data() + 4, &garbage, sizeof(garbage));
-    expect_corrupt([&] { (void)Segment::from_bytes(vec.data(), vec.size()); });
+TEST(CorruptionSafety, C1_FixedHeaderHeaderBytesGarbage) {
+    for (auto version : {EncodingVersion::V1, EncodingVersion::V2}) {
+        auto vec = serialize_segment(make_numeric_segment(version));
+        ASSERT_GT(vec.size(), 8u);
+        // Overwrite the uint32 header_bytes field at offset 4 with a huge value.
+        uint32_t garbage = 0xdeadbeef;
+        std::memcpy(vec.data() + 4, &garbage, sizeof(garbage));
+        expect_corrupt([&] { (void)Segment::from_bytes(vec.data(), vec.size()); });
+    }
 }
 
 // A header_bytes value that makes FIXED_HEADER_SIZE + header_bytes exactly one past the readable
@@ -347,20 +333,24 @@ TEST(CorruptionSafety, S4_SparseMapWithMoreBitsThanValuesRejected) {
     });
 }
 
+namespace {
+void expand(const util::BitMagic& bitmap, const std::vector<uint64_t>& dense, std::vector<uint64_t>& expanded) {
+    util::expand_dense_buffer_and_promote_type<uint64_t>(
+            bitmap,
+            reinterpret_cast<const uint8_t*>(dense.data()),
+            dense.size(),
+            reinterpret_cast<uint8_t*>(expanded.data()),
+            expanded.size()
+    );
+}
+} // namespace
+
 TEST(CorruptionSafety, S4_ExpandRejectsBitBeyondDestinationRows) {
     util::BitMagic bitmap;
     bitmap.set(1000); // destination only has 10 rows
     std::vector<uint64_t> dense{7};
     std::vector<uint64_t> expanded(10, 0);
-    expect_corrupt([&] {
-        (util::expand_dense_buffer_and_promote_type<uint64_t>(
-                bitmap,
-                reinterpret_cast<const uint8_t*>(dense.data()),
-                dense.size(),
-                reinterpret_cast<uint8_t*>(expanded.data()),
-                expanded.size()
-        ));
-    });
+    expect_corrupt([&] { expand(bitmap, dense, expanded); });
 }
 
 TEST(CorruptionSafety, S4_ExpandRejectsMoreBitsThanDenseValues) {
@@ -369,15 +359,7 @@ TEST(CorruptionSafety, S4_ExpandRejectsMoreBitsThanDenseValues) {
     bitmap.set(1);
     std::vector<uint64_t> dense{7};
     std::vector<uint64_t> expanded(10, 0);
-    expect_corrupt([&] {
-        (util::expand_dense_buffer_and_promote_type<uint64_t>(
-                bitmap,
-                reinterpret_cast<const uint8_t*>(dense.data()),
-                dense.size(),
-                reinterpret_cast<uint8_t*>(expanded.data()),
-                expanded.size()
-        ));
-    });
+    expect_corrupt([&] { expand(bitmap, dense, expanded); });
 }
 
 TEST(CorruptionSafety, S4_ExpandValidSparseMapStillWorks) {
@@ -386,13 +368,7 @@ TEST(CorruptionSafety, S4_ExpandValidSparseMapStillWorks) {
     bitmap.set(5);
     std::vector<uint64_t> dense{7, 9};
     std::vector<uint64_t> expanded(6, 0);
-    util::expand_dense_buffer_and_promote_type<uint64_t>(
-            bitmap,
-            reinterpret_cast<const uint8_t*>(dense.data()),
-            dense.size(),
-            reinterpret_cast<uint8_t*>(expanded.data()),
-            expanded.size()
-    );
+    expand(bitmap, dense, expanded);
     EXPECT_EQ(expanded, (std::vector<uint64_t>{0, 0, 7, 0, 0, 9}));
 }
 

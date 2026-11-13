@@ -155,8 +155,7 @@ const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& dat
     if (hdr.has_metadata_field()) {
         auto metadata_size = encoding_sizes::ndarray_field_compressed_size(hdr.metadata_field().ndarray());
         ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of metadata", metadata_size);
-        check_input_available(data, end, metadata_size, "metadata");
-        data += metadata_size;
+        skip_input(data, end, metadata_size, "metadata");
     }
 
     if (has_magic_numbers) {
@@ -164,8 +163,7 @@ const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& dat
     } else if (hdr.has_descriptor_field()) {
         auto descriptor_field_size = encoding_sizes::ndarray_field_compressed_size(hdr.descriptor_field().ndarray());
         ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of descriptor", descriptor_field_size);
-        check_input_available(data, end, descriptor_field_size, "descriptor fields");
-        data += descriptor_field_size;
+        skip_input(data, end, descriptor_field_size, "descriptor fields");
     }
 
     if (has_magic_numbers)
@@ -174,8 +172,7 @@ const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& dat
     if (hdr.has_index_descriptor_field()) {
         auto index_fields_size = encoding_sizes::ndarray_field_compressed_size(hdr.index_descriptor_field().ndarray());
         ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of index descriptor", index_fields_size);
-        check_input_available(data, end, index_fields_size, "index descriptor fields");
-        data += index_fields_size;
+        skip_input(data, end, index_fields_size, "index descriptor fields");
     }
     ARCTICDB_DEBUG(log::version(), "Skip header fields skipped {} bytes", data - start);
     return data;
@@ -188,9 +185,7 @@ const uint8_t* skip_to_string_pool(const SegmentHeader& hdr, const uint8_t* data
     const auto& body_fields = hdr.body_fields();
     const auto magic_number_size = hdr.encoding_version() == EncodingVersion::V2 ? sizeof(ColumnMagic) : 0;
     for (auto i = 0U; i < body_fields.size(); ++i) {
-        const auto field_size = encoding_sizes::field_compressed_size(body_fields.at(i)) + magic_number_size;
-        check_input_available(output, end, field_size, "column");
-        output += field_size;
+        skip_input(output, end, encoding_sizes::field_compressed_size(body_fields.at(i)) + magic_number_size, "column");
     }
 
     return output;
@@ -212,12 +207,7 @@ void decode_string_pool(
             check_magic_bounded<StringPoolMagic>(data, end);
 
         util::check(hdr.string_pool_field().has_ndarray(), "Expected string pool field to be ndarray");
-        check_input_available(
-                data,
-                end,
-                encoding_sizes::ndarray_field_compressed_size(hdr.string_pool_field().ndarray()),
-                "string pool"
-        );
+        check_ndarray_input_available(hdr.string_pool_field().ndarray(), data, end, "string pool");
         data += decode_ndarray(
                 string_pool_descriptor().type(),
                 hdr.string_pool_field().ndarray(),

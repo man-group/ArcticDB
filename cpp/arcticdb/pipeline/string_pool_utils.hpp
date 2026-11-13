@@ -39,12 +39,6 @@ inline auto get_string_from_pool(entity::position_t offset_val, const StringPool
     return string_pool.get_const_view(offset_val);
 }
 
-inline void check_string_pool_present(bool has_string_pool) {
-    codec::check<ErrorCode::E_DECODE_ERROR>(
-            has_string_pool, "Corrupt segment: string column references a missing string pool"
-    );
-}
-
 /// @brief Get the i-th string from a buffer
 /// @param string_pos The index of the string to be returned
 /// @return If the string at @p string_pos is actual string inside @p string_pool return a

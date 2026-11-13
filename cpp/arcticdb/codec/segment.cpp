@@ -103,12 +103,7 @@ FieldCollection decode_descriptor_fields(
     if (hdr.has_descriptor_field()) {
         std::optional<util::BitMagic> bv;
         util::check(hdr.descriptor_field().has_ndarray(), "Expected descriptor field to be ndarray");
-        check_input_available(
-                data,
-                end,
-                encoding_sizes::ndarray_field_compressed_size(hdr.descriptor_field().ndarray()),
-                "descriptor fields"
-        );
+        check_ndarray_input_available(hdr.descriptor_field().ndarray(), data, end, "descriptor fields");
         (void)decode_ndarray(FieldCollection::type(), hdr.descriptor_field(), data, fields, bv, hdr.encoding_version());
 
         ARCTICDB_TRACE(log::codec(), "Decoded descriptor to position {}", data - begin);
@@ -133,8 +128,7 @@ void skip_metadata_field(const uint8_t*& src, const SegmentHeader& seg_hdr, cons
     if (seg_hdr.has_metadata_field()) {
         const auto metadata_size = encoding_sizes::field_compressed_size(seg_hdr.metadata_field());
         ARCTICDB_TRACE(log::codec(), "Skipping {} bytes of metadata", metadata_size);
-        check_input_available(src, end, metadata_size, "metadata");
-        src += metadata_size;
+        skip_input(src, end, metadata_size, "metadata");
     }
 }
 
