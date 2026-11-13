@@ -13,6 +13,7 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/random.h>
 #include <arcticdb/util/configs_map.hpp>
+#include <folly/ScopeGuard.h>
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
@@ -394,6 +395,55 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolDefaultBlockIs256KiB) {
     ASSERT_EQ(static_cast<size_t>(pool_field.values_size()), (pool_bytes + block_bytes - 1) / block_bytes);
     for (int i = 0; i + 1 < pool_field.values_size(); ++i)
         ASSERT_EQ(pool_field.values(i).in_bytes(), block_bytes);
+}
+
+namespace {
+int64_t block_bytes_after_sizing = 0;
+
+void check_block_bytes_changed_mid_encode(EncodingVersion version, int64_t initial, int64_t changed) {
+    ScopedConfig config("Codec.StringPoolBlockBytes", initial);
+    block_bytes_after_sizing = changed;
+    string_pool_encode_hook = [] {
+        ConfigsMap::instance()->set_int("Codec.StringPoolBlockBytes", block_bytes_after_sizing);
+    };
+    const auto reset_hook = folly::makeGuard([] { string_pool_encode_hook = nullptr; });
+    constexpr size_t rows = 5'000;
+    auto in_mem = segment_with_large_string_pool(rows);
+    const auto pool_bytes = in_mem.const_string_pool().data().bytes();
+    auto copy = in_mem.clone();
+    Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), version);
+
+    const auto& pool_field = seg.header().string_pool_field();
+    const auto block_bytes = static_cast<size_t>(initial);
+    ASSERT_EQ(static_cast<size_t>(pool_field.values_size()), (pool_bytes + block_bytes - 1) / block_bytes);
+    std::vector<uint8_t> vec(seg.calculate_size());
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), vec.size());
+    auto decoded = decode_segment(unserialized);
+    ASSERT_EQ(decoded.row_count(), rows);
+    for (size_t i = 0; i < rows; ++i)
+        ASSERT_EQ(decoded.string_at(i, 0), copy.string_at(i, 0)) << i;
+}
+} // namespace
+
+TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesRaisedMidEncodeUsesOneSnapshot) {
+    check_block_bytes_changed_mid_encode(TypeParam::value, 10'000, 40'000);
+}
+
+TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesLoweredMidEncodeUsesOneSnapshot) {
+    check_block_bytes_changed_mid_encode(TypeParam::value, 40'000, 10'000);
+}
+
+TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesBelowMinimumIsRaised) {
+    ScopedConfig config("Codec.StringPoolBlockBytes", 1);
+    auto in_mem = segment_with_large_string_pool(5'000);
+    const auto pool_bytes = in_mem.const_string_pool().data().bytes();
+    Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
+    constexpr size_t block_bytes = 4096; // the minimum
+    ASSERT_EQ(
+            static_cast<size_t>(seg.header().string_pool_field().values_size()),
+            (pool_bytes + block_bytes - 1) / block_bytes
+    );
 }
 
 using namespace arcticdb;

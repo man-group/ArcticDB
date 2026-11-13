@@ -309,7 +309,8 @@ static void encode_encoded_fields(
     std::ptrdiff_t pos = 0;
     auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(in_mem_seg, codec_opts);
     ARCTICDB_TRACE(log::codec(), "Estimated max buffer requirement: {}", max_compressed_size);
-    const auto preamble = SegmentHeader::required_bytes(in_mem_seg);
+    const auto block_bytes = string_pool_block_bytes();
+    const auto preamble = SegmentHeader::required_bytes(in_mem_seg, block_bytes);
     auto out_buffer = std::make_shared<Buffer>(max_compressed_size + encoded_buffer_size, preamble);
     ARCTICDB_TRACE(log::codec(), "Encoding descriptor: {}", in_mem_seg.descriptor());
 
@@ -380,7 +381,7 @@ static void encode_encoded_fields(
             }
         }
         write_magic<StringPoolMagic>(*out_buffer, pos);
-        encode_string_pool<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+        encode_string_pool<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos, block_bytes);
         encode_encoded_fields(segment_header, codec_opts, *out_buffer, pos, std::move(encoded_fields));
     } else {
         segment_header.set_footer_offset(pos);

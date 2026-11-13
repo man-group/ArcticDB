@@ -195,28 +195,36 @@ void encode_metadata(
 
 /// The string pool is built in small pages, one encoded block each. Readers decode it into one contiguous buffer
 /// whatever the block count, so the writer re-cuts it into blocks of this many bytes (0 keeps the pages).
+/// Read once per encode and passed down, since the config can change while an encode runs.
 inline size_t string_pool_block_bytes() {
-    return static_cast<size_t>(
-            std::max(ConfigsMap::instance()->get_int("Codec.StringPoolBlockBytes", int64_t{256} * 1024), int64_t{0})
-    );
+    constexpr int64_t min_block_bytes = 4096;
+    const auto configured = ConfigsMap::instance()->get_int("Codec.StringPoolBlockBytes", int64_t{256} * 1024);
+    if (configured <= 0)
+        return 0;
+    return static_cast<size_t>(std::max(configured, min_block_bytes));
 }
 
-inline size_t string_pool_encoded_value_blocks(const ChunkedBuffer& pool) {
-    const auto block_bytes = string_pool_block_bytes();
+inline size_t string_pool_encoded_value_blocks(const ChunkedBuffer& pool, size_t block_bytes) {
     if (block_bytes == 0 || pool.num_blocks() <= 1)
         return pool.num_blocks();
     return (pool.bytes() + block_bytes - 1) / block_bytes;
 }
 
+/// Test-only: called at the start of the string pool encode.
+inline void (*string_pool_encode_hook)() = nullptr;
+
 template<typename EncodingPolicyType>
 void encode_string_pool(
         const SegmentInMemory& in_mem_seg, SegmentHeader& segment_header,
-        const arcticdb::proto::encoding::VariantCodec& codec_opts, Buffer& out_buffer, std::ptrdiff_t& pos
+        const arcticdb::proto::encoding::VariantCodec& codec_opts, Buffer& out_buffer, std::ptrdiff_t& pos,
+        size_t block_bytes
 ) {
     if (in_mem_seg.has_string_pool()) {
+        if (string_pool_encode_hook)
+            string_pool_encode_hook();
         ARCTICDB_TRACE(log::codec(), "Encoding string pool to position {}", pos);
         const auto& pool = in_mem_seg.const_string_pool().data();
-        const auto num_blocks = string_pool_encoded_value_blocks(pool);
+        const auto num_blocks = string_pool_encoded_value_blocks(pool, block_bytes);
         if (num_blocks == pool.num_blocks()) {
             auto col = in_mem_seg.string_pool_data();
             auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
@@ -230,7 +238,6 @@ void encode_string_pool(
                 offset += block->physical_bytes();
             }
             util::check(offset == total_bytes, "String pool pages hold {} bytes, expected {}", offset, total_bytes);
-            const auto block_bytes = string_pool_block_bytes();
             ChunkedBuffer coalesced;
             Buffer shapes(num_blocks * sizeof(shape_t));
             auto* shape = shapes.ptr_cast<shape_t>(0, num_blocks * sizeof(shape_t));

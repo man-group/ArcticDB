@@ -109,6 +109,7 @@ using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1
     }
 
     std::ptrdiff_t pos = 0;
+    const auto block_bytes = string_pool_block_bytes();
     static auto block_to_header_ratio = ConfigsMap::instance()->get_int("Codec.EstimatedHeaderRatio", 75);
     const auto preamble = in_mem_seg.num_blocks() * block_to_header_ratio;
     auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v1(in_mem_seg, codec_opts);
@@ -161,7 +162,7 @@ using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1
             }
             column_field->set_statistics(column.get_statistics());
         }
-        encode_string_pool<EncodingPolicyV1>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+        encode_string_pool<EncodingPolicyV1>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos, block_bytes);
     }
     segment_header.set_body_fields(EncodedFieldCollection(std::move(encoded_fields)));
     ARCTICDB_TRACE(log::codec(), "Encode setting buffer bytes to {}", pos);

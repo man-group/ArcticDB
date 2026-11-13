@@ -182,6 +182,8 @@ class SegmentHeader {
 
     static size_t required_bytes(const SegmentInMemory& in_mem_seg);
 
+    static size_t required_bytes(const SegmentInMemory& in_mem_seg, size_t string_pool_block_bytes);
+
     [[nodiscard]] EncodingVersion encoding_version() const { return data_.encoding_version_; }
 
     void set_encoding_version(EncodingVersion encoding_version) { data_.encoding_version_ = encoding_version; }

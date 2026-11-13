@@ -49,7 +49,7 @@ size_t SegmentHeader::serialize_to_bytes(uint8_t* dst, std::optional<size_t> exp
     return bytes_written;
 }
 
-size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg) {
+size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg, size_t block_bytes) {
     size_t required = 0UL;
     if (in_mem_seg.has_index_descriptor()) {
         const auto index_descriptor_size =
@@ -60,7 +60,9 @@ size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg) {
 
     if (in_mem_seg.has_string_pool()) {
         const auto string_pool_size =
-                calc_field_bytes(string_pool_encoded_value_blocks(in_mem_seg.const_string_pool().data()) + 1) +
+                calc_field_bytes(
+                        string_pool_encoded_value_blocks(in_mem_seg.const_string_pool().data(), block_bytes) + 1
+                ) +
                 sizeof(uint64_t); // String pool has a custom shapes buffer
         required += string_pool_size;
         ARCTICDB_TRACE(log::codec(), "String pool size {}", string_pool_size);
@@ -114,6 +116,10 @@ void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) 
 }
 
 size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg) {
+    return required_bytes(in_mem_seg, string_pool_block_bytes());
+}
+
+size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg, size_t block_bytes) {
     size_t required = 0UL;
     required += FIXED_HEADER_SIZE;
     required += sizeof(HeaderData);
@@ -127,7 +133,7 @@ size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg) {
             required
     );
 
-    required += calc_required_header_fields_bytes(in_mem_seg);
+    required += calc_required_header_fields_bytes(in_mem_seg, block_bytes);
     ARCTICDB_TRACE(log::codec(), "Total calculated header size: {}", required);
     return required;
 }
