@@ -450,6 +450,25 @@ def test_sparse_append_all_nulls(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("str_data", [[None, None], [None, None, "a", None], ["a", None, None, None]])
+def test_sparse_string_segment_without_values_read_as_pandas(in_memory_store_factory, dynamic_schema, str_data):
+    # A segment whose string values are all null is written without a string pool
+    lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True)
+    lib.set_output_format("pyarrow")
+    sym = "test_sparse_string_segment_without_values_read_as_pandas"
+    table = pa.table(
+        {
+            "str_col": pa.array(str_data, pa.string()),
+            "large_str_col": pa.array(str_data, pa.large_string()),
+        }
+    )
+    lib.write(sym, table)
+    assert table.equals(undictionarify_table(lib.read(sym).data))
+    received_pandas = lib.read(sym, output_format="PANDAS").data
+    assert_frame_equal_with_arrow_for_sparse(table, received_pandas)
+
+
 @pytest.mark.parametrize("write_sparse", [True, False])
 @pytest.mark.parametrize("update_sparse", [True, False])
 @pytest.mark.parametrize(
