@@ -1069,28 +1069,44 @@ def test_sparse_arrow_sort_and_finalize_staged_data(arrow_library, values, mask)
         assert_frame_equal(received, expected)
 
 
+# Longer than two BitMagic blocks (65,536 rows each)
+MANY_ROWS = 150_003
+# Shorter than MANY_ROWS, so the read spans two segments
+MANY_ROWS_SEGMENT_SIZE = 140_000
+# A long run of nulls, giving GAP blocks
+NULL_RUN = slice(80_000, 100_000)
+
+
 @pytest.mark.parametrize("null_fraction", [0.0, 0.05, 0.5, 0.95, 0.999, 1.0])
-@pytest.mark.parametrize("row_range", [None, (1, 150_000), (63, 65_601), (70_000, 70_001), (149_003, 150_003)])
+@pytest.mark.parametrize(
+    "row_range",
+    [
+        None,
+        (1, 150_000),  # Starts after the first row, ends before the last, spans both segments
+        (63, 65_601),  # Spans the first block boundary, unaligned to words
+        (70_000, 70_001),  # One row
+        (149_003, 150_003),  # The tail, in the second segment
+    ],
+)
 def test_sparse_arrow_many_rows(
     in_memory_store_factory, any_arrow_string_format, arrow_output_format, null_fraction, row_range
 ):
-    # Segments longer than a BitMagic block (65,536 rows), so the sparse maps have several blocks of every kind:
-    # independent nulls give bit blocks, the null run in the middle GAP blocks
+    # Sparse columns of several types, each several BitMagic blocks long, read back whole or in part
     if any_arrow_string_format == ArrowOutputStringFormat.SMALL_STRING and arrow_output_format == OutputFormat.POLARS:
         pytest.skip("Polars output does not support SMALL_STRING")
-    num_rows = 150_003
-    lib = in_memory_store_factory(segment_row_size=140_000)
+    lib = in_memory_store_factory(segment_row_size=MANY_ROWS_SEGMENT_SIZE)
     lib.set_arrow_string_format_default(any_arrow_string_format)
     rng = np.random.default_rng(42)
-    mask = rng.random(num_rows) < null_fraction
-    mask[80_000:100_000] = null_fraction > 0
+    mask = rng.random(MANY_ROWS) < null_fraction
+    mask[NULL_RUN] = null_fraction > 0
+    # Each column's nulls are shifted by a different amount, so their blocks start at different offsets
     table = pa.table(
         {
-            "int_col": pa.array(rng.integers(-1000, 1000, num_rows), pa.int64(), mask=mask),
-            "uint8_col": pa.array(rng.integers(0, 200, num_rows), pa.uint8(), mask=np.roll(mask, 1)),
-            "float_col": pa.array(rng.random(num_rows), pa.float32(), mask=np.roll(mask, 7)),
+            "int_col": pa.array(rng.integers(-1000, 1000, MANY_ROWS), pa.int64(), mask=mask),
+            "uint8_col": pa.array(rng.integers(0, 200, MANY_ROWS), pa.uint8(), mask=np.roll(mask, 1)),
+            "float_col": pa.array(rng.random(MANY_ROWS), pa.float32(), mask=np.roll(mask, 7)),
             "str_col": pa.array(
-                [f"id{v:03}" for v in rng.integers(0, 100, num_rows)], pa.large_string(), mask=np.roll(mask, 64)
+                [f"id{v:03}" for v in rng.integers(0, 100, MANY_ROWS)], pa.large_string(), mask=np.roll(mask, 64)
             ),
         }
     )

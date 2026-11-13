@@ -15,60 +15,76 @@
 namespace arcticdb {
 
 namespace {
-// Sets bits [first, last] of LSB-first packed bits
-void set_packed_bit_range(uint8_t* dest, size_t first, size_t last) {
+// BitMagic splits a bitset into blocks of bm::gap_max_bits (65,536) bits
+constexpr size_t bytes_per_block = bm::gap_max_bits / 8;
+
+// Sets bits [first, last] of LSB-first packed bits: partial bytes at either end are OR-ed with a mask, whole bytes
+// in between are filled
+inline void set_packed_bit_range(uint8_t* dest, size_t first, size_t last) {
     const size_t first_byte = first / 8;
     const size_t last_byte = last / 8;
-    const auto head = static_cast<uint8_t>(0xFFu << (first % 8));
-    const auto tail = static_cast<uint8_t>(0xFFu >> (7 - last % 8));
+    // Bits first % 8 and above of the first byte, bits last % 8 and below of the last byte
+    const auto first_byte_mask = static_cast<uint8_t>(0xFFu << (first % 8));
+    const auto last_byte_mask = static_cast<uint8_t>(0xFFu >> (7 - last % 8));
     if (first_byte == last_byte) {
-        dest[first_byte] |= head & tail;
+        dest[first_byte] |= first_byte_mask & last_byte_mask;
         return;
     }
-    dest[first_byte] |= head;
+    dest[first_byte] |= first_byte_mask;
     std::memset(dest + first_byte + 1, 0xFF, last_byte - first_byte - 1);
-    dest[last_byte] |= tail;
+    dest[last_byte] |= last_byte_mask;
 }
 
-// Writes the first dest_bits bits of a GAP block, a list of run ends alternating clear and set from the value of the
-// first run, into zeroed packed bits
-void gap_block_to_packed_bits(const bm::gap_word_t* gap, uint8_t* dest, size_t dest_bits) {
-    bool set = (gap[0] & 1) != 0;
-    size_t run_start = 0;
-    for (unsigned k = 1; k < bm::gap_length(gap) && run_start < dest_bits; ++k) {
-        const size_t run_end = gap[k];
-        if (set)
-            set_packed_bit_range(dest, run_start, std::min(run_end, dest_bits - 1));
-        set = !set;
-        run_start = run_end + 1;
+// Writes the first dest_bits bits of a GAP block into zeroed packed bits. A GAP block is run-length encoded:
+// gap_block[0] is a header whose bit 0 is the value of the first run, and gap_block[1..] are the (inclusive) last
+// positions of consecutive runs, which alternate between clear and set
+void gap_block_to_packed_bits(const bm::gap_word_t* gap_block, uint8_t* dest, size_t dest_bits) {
+    bool run_is_set = (gap_block[0] & 1) != 0;
+    size_t run_first = 0;
+    const unsigned gap_length = bm::gap_length(gap_block);
+    for (unsigned run = 1; run < gap_length && run_first < dest_bits; ++run) {
+        const size_t run_last = gap_block[run];
+        if (run_is_set)
+            set_packed_bit_range(dest, run_first, std::min(run_last, dest_bits - 1));
+        run_is_set = !run_is_set;
+        run_first = run_last + 1;
+    }
+}
+
+// Writes the first dest_bits bits of the bitset's block_index-th block into zeroed packed bits
+void block_to_packed_bits(
+        const bm::bvector<>::blocks_manager_type& blocks, size_t block_index, uint8_t* dest, size_t dest_bits
+) {
+    // Blocks live in a two-level array: top-level slot, then the block within it
+    unsigned top_index, sub_index;
+    bm::get_block_coord(bm::bvector<>::block_idx_type(block_index), top_index, sub_index);
+    // nullptr is an empty block, which stays zero. A full block comes back as FULL_BLOCK_REAL_ADDR, a real block of
+    // all ones, so it is copied like any bit block
+    const bm::word_t* block = blocks.get_block(top_index, sub_index);
+    if (!block)
+        return;
+    if (BM_IS_GAP(block)) {
+        gap_block_to_packed_bits(BMGAP_PTR(block), dest, dest_bits);
+    } else {
+        // BitMagic's bit blocks are arrays of 32-bit words with bit k of word w at position 32 * w + k, which on a
+        // little-endian host is the same byte layout as Arrow's LSB-first packed bits
+        static_assert(std::endian::native == std::endian::little);
+        std::memcpy(dest, block, dest_bits / 8);
     }
 }
 } // namespace
 
 void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
     const size_t num_bits = bv.size();
-    // BitMagic's bit blocks are arrays of 32-bit words with bit k of word w at position 32 * w + k, which on a
-    // little-endian host is the same byte layout as Arrow's LSB-first packed bits, so a block can be copied as is
-    static_assert(std::endian::native == std::endian::little);
     const size_t num_bytes = bitset_packed_size_bytes(num_bits);
     std::memset(dest_ptr, 0, num_bytes);
-    constexpr size_t block_bytes = bm::gap_max_bits / 8;
     const auto& blocks = bv.get_blocks_manager();
-    for (size_t block = 0; block * block_bytes < num_bytes; ++block) {
-        unsigned i, j;
-        bm::get_block_coord(bm::bvector<>::block_idx_type(block), i, j);
-        // Full blocks come back as FULL_BLOCK_REAL_ADDR, a block of all ones
-        const bm::word_t* bits = blocks.get_block(i, j);
-        if (!bits)
-            continue;
-        uint8_t* dest = dest_ptr + block * block_bytes;
-        const size_t dest_bits = std::min(block_bytes, num_bytes - block * block_bytes) * 8;
-        if (BM_IS_GAP(bits)) {
-            gap_block_to_packed_bits(BMGAP_PTR(bits), dest, dest_bits);
-        } else {
-            std::memcpy(dest, bits, dest_bits / 8);
-        }
+    for (size_t block_index = 0; block_index * bytes_per_block < num_bytes; ++block_index) {
+        const size_t block_first_byte = block_index * bytes_per_block;
+        const size_t dest_bits = std::min(bytes_per_block, num_bytes - block_first_byte) * 8;
+        block_to_packed_bits(blocks, block_index, dest_ptr + block_first_byte, dest_bits);
     }
+    // Blocks are copied in whole bytes, so clear any bits of the last byte past num_bits
     if (num_bits % 8 != 0)
         dest_ptr[num_bytes - 1] &= static_cast<uint8_t>((1u << (num_bits % 8)) - 1);
 }

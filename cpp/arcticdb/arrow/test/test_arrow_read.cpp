@@ -280,9 +280,46 @@ TEST_P(ArrowStringColumnRead, Basic) {
 }
 
 namespace {
-// A sparse dynamic-string column of `num_rows` rows, `density` of them stored; `runs` stores them in runs (GAP and full
-// BitMagic blocks) rather than independently (bit blocks). Every 37th stored value is not a string. Returns the column
-// and the value each row should read back as
+constexpr size_t bitmagic_block_bits = 65'536;
+// Every this-many-th stored value is None rather than a string
+constexpr size_t none_every = 37;
+// Rows read back as "s<row % distinct_strings>", so the dictionary has repeats
+constexpr size_t distinct_strings = 211;
+constexpr size_t max_run_length = 5'000;
+
+// Decides row by row whether each row is stored, with probability `density`: independently (giving BitMagic bit
+// blocks), or in runs of up to max_run_length rows (giving GAP and full blocks)
+class StoredRowPattern {
+  public:
+    StoredRowPattern(double density, bool runs, std::mt19937& rng) :
+        stored_(density),
+        run_length_(1, max_run_length),
+        runs_(runs),
+        rng_(rng),
+        in_stored_run_(stored_(rng)),
+        run_left_(run_length_(rng)) {}
+
+    bool next_row_is_stored() {
+        if (!runs_)
+            return stored_(rng_);
+        if (run_left_-- == 0) {
+            in_stored_run_ = stored_(rng_);
+            run_left_ = run_length_(rng_);
+        }
+        return in_stored_run_;
+    }
+
+  private:
+    std::bernoulli_distribution stored_;
+    std::uniform_int_distribution<size_t> run_length_;
+    bool runs_;
+    std::mt19937& rng_;
+    bool in_stored_run_;
+    size_t run_left_;
+};
+
+// A sparse dynamic-string column of num_rows rows, stored as StoredRowPattern decides, with every none_every-th stored
+// value None. Returns the column and the value each row should read back as
 std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
         size_t num_rows, double density, bool runs, StringPool& pool, std::mt19937& rng
 ) {
@@ -290,28 +327,15 @@ std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
             TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0}, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
     );
     std::vector<std::optional<std::string>> expected(num_rows);
-    std::bernoulli_distribution stored(density);
-    std::uniform_int_distribution<size_t> run_length(1, 5000);
-    bool in_run = stored(rng);
-    size_t run_left = run_length(rng);
+    StoredRowPattern pattern(density, runs, rng);
     size_t stored_count = 0;
     for (size_t row = 0; row < num_rows; ++row) {
-        bool is_stored;
-        if (runs) {
-            if (run_left-- == 0) {
-                in_run = stored(rng);
-                run_left = run_length(rng);
-            }
-            is_stored = in_run;
-        } else {
-            is_stored = stored(rng);
-        }
-        if (!is_stored)
+        if (!pattern.next_row_is_stored())
             continue;
-        if (stored_count++ % 37 == 36) {
+        if (stored_count++ % none_every == none_every - 1) {
             column.set_scalar(static_cast<ssize_t>(row), not_a_string());
         } else {
-            expected[row] = fmt::format("s{}", row % 211);
+            expected[row] = fmt::format("s{}", row % distinct_strings);
             column.set_scalar(static_cast<ssize_t>(row), pool.get(expected[row].value()).offset());
         }
     }
@@ -322,6 +346,21 @@ std::pair<Column, std::vector<std::optional<std::string>>> sparse_string_column(
         column.sparse_map().optimize();
     column.set_row_data(static_cast<ssize_t>(num_rows) - 1);
     return {std::move(column), std::move(expected)};
+}
+
+// The number of rows in [start, end) whose value in `array` (which starts at row start) differs from expected
+size_t count_mismatches(
+        const sparrow::array& array, const std::vector<std::optional<std::string>>& expected, size_t start, size_t end
+) {
+    size_t mismatches = 0;
+    for (size_t row = start; row < end; ++row) {
+        auto value = array[row - start];
+        const bool matches = value.has_value() == expected[row].has_value() &&
+                             (!value.has_value() ||
+                              std::get<sparrow::nullable<std::string_view>>(value).get() == expected[row].value());
+        mismatches += !matches;
+    }
+    return mismatches;
 }
 
 // Converts a dynamic-string column of num_rows rows, the only segment of its frame, to Arrow
@@ -350,17 +389,18 @@ Column convert_to_arrow(
 } // namespace
 
 TEST_P(ArrowStringColumnRead, SparseColumn) {
-    // Three BitMagic blocks (65536 bits each), the last one partial
-    const size_t num_rows = 150'000;
+    // Reads row ranges of sparse string columns of every density, with the stored rows independent or in runs, and
+    // checks each row's value
+    const size_t num_rows = 150'000; // Three BitMagic blocks, the last one partial
     std::mt19937 rng(17);
     const std::vector<std::pair<size_t, size_t>> row_ranges{
-            {0, num_rows},
-            {1, num_rows},
-            {63, 65'601},
-            {64, 128},
-            {70'000, 70'001},
-            {65'536, num_rows - 3},
-            {num_rows - 1'000, num_rows}
+            {0, num_rows},                       // whole column, no truncation
+            {1, num_rows},                       // starts just after the first row
+            {63, bitmagic_block_bits + 65},      // spans a block boundary, unaligned to words
+            {64, 128},                           // one 64-bit word
+            {70'000, 70'001},                    // one row
+            {bitmagic_block_bits, num_rows - 3}, // starts on a block boundary
+            {num_rows - 1'000, num_rows}         // the tail of the partial last block
     };
     for (double density : {0.0, 0.001, 0.01, 0.05, 0.5, 0.95, 1.0}) {
         for (bool runs : {false, true}) {
@@ -368,25 +408,18 @@ TEST_P(ArrowStringColumnRead, SparseColumn) {
             auto [source, expected] = sparse_string_column(num_rows, density, runs, *pool, rng);
             for (auto [start, end] : row_ranges) {
                 SCOPED_TRACE(fmt::format("density {} runs {} rows [{}, {})", density, runs, start, end));
+                const bool whole_column = start == 0 && end == num_rows;
                 auto dest = convert_to_arrow(
                         source,
                         num_rows,
                         pool,
                         output_string_format(),
-                        start != 0 || end != num_rows ? std::optional(ColumnTruncation{start, end}) : std::nullopt
+                        whole_column ? std::nullopt : std::optional(ColumnTruncation{start, end})
                 );
                 auto arrays = arrow_arrays_from_column(dest, "col");
                 ASSERT_EQ(arrays.size(), 1);
                 ASSERT_EQ(arrays[0].size(), end - start);
-                size_t mismatches = 0;
-                for (size_t row = start; row < end; ++row) {
-                    auto value = arrays[0][row - start];
-                    const bool ok = value.has_value() == expected[row].has_value() &&
-                                    (!value.has_value() || std::get<sparrow::nullable<std::string_view>>(value).get() ==
-                                                                   expected[row].value());
-                    mismatches += !ok;
-                }
-                EXPECT_EQ(mismatches, 0u);
+                EXPECT_EQ(count_mismatches(arrays[0], expected, start, end), 0u);
             }
         }
     }
@@ -399,10 +432,12 @@ TEST_P(ArrowStringColumnRead, SparseMapWithMoreBitsThanValues) {
     auto source = Column(
             TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0}, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
     );
-    for (size_t row = 0; row < num_rows; row += 10)
+    const size_t stored_every = 10;
+    for (size_t row = 0; row < num_rows; row += stored_every)
         source.set_scalar(static_cast<ssize_t>(row), pool->get(fmt::format("s{}", row)).offset());
     source.set_row_data(static_cast<ssize_t>(num_rows) - 1);
-    source.sparse_map().set_range(500, num_rows - 1);
+    // 100 stored values, but the map now claims 550 stored rows
+    source.sparse_map().set_range(num_rows / 2, num_rows - 1);
     // Release builds have no iterator bounds check, so the read itself must reject the map
     try {
         convert_to_arrow(source, num_rows, pool, output_string_format());

@@ -41,18 +41,23 @@ RC_GTEST_PROP(BitSet, PackedBitsToBuffer, (const std::vector<bool>& input)) {
         RC_ASSERT(dest[idx] == (input.at(idx + offset) ? 1u : 0u));
     }
 }
+
 namespace {
-// A bitset over num_bits made of runs of set and clear bits, so that optimize() leaves a mix of bit, GAP, full and
-// empty BitMagic blocks
-arcticdb::util::BitSet random_bitset(size_t num_bits, bool optimize) {
+constexpr size_t bitmagic_block_bits = 65'536;
+
+// A bitset of num_bits bits built from runs of set and clear bits, of random density and run length, so that
+// optimize() leaves a mix of bit, GAP, full and empty BitMagic blocks
+arcticdb::util::BitSet random_run_bitset(size_t num_bits, bool optimize) {
     using namespace arcticdb;
     const auto density = *rc::gen::element(0.0, 0.01, 0.5, 0.95, 0.999, 1.0);
+    // Runs of 1 give bit blocks, runs longer than a block give full and empty ones
     const auto max_run = *rc::gen::element(size_t(1), size_t(64), size_t(70'000));
     util::BitSet bitset(bv_size(num_bits));
     size_t pos = 0;
     while (pos < num_bits) {
         const auto run = std::min(num_bits - pos, *rc::gen::inRange(size_t(1), max_run + 1));
-        if (*rc::gen::inRange(0, 1000) < static_cast<int>(density * 1000))
+        const bool run_is_set = *rc::gen::inRange(0, 1000) < static_cast<int>(density * 1000);
+        if (run_is_set)
             bitset.set_range(bv_size(pos), bv_size(pos + run - 1), true);
         pos += run;
     }
@@ -61,6 +66,7 @@ arcticdb::util::BitSet random_bitset(size_t num_bits, bool optimize) {
     return bitset;
 }
 
+// The reference implementation of bitset_to_packed_bits: one bit at a time
 std::vector<uint8_t> packed_bits_one_at_a_time(const arcticdb::util::BitSet& bv, size_t num_bits) {
     std::vector<uint8_t> packed(arcticdb::bitset_packed_size_bytes(num_bits));
     for (auto en = bv.first(); en != bv.end() && *en < num_bits; ++en)
@@ -71,10 +77,18 @@ std::vector<uint8_t> packed_bits_one_at_a_time(const arcticdb::util::BitSet& bv,
 
 RC_GTEST_PROP(BitSet, PackedBitsMatchBitByBit, ()) {
     using namespace arcticdb;
+    // Sizes at and either side of word and block boundaries
     const auto num_bits = *rc::gen::element(
-            size_t(0), size_t(1), size_t(63), size_t(65'535), size_t(65'536), size_t(65'537), size_t(200'003)
+            size_t(0),
+            size_t(1),
+            size_t(63),
+            bitmagic_block_bits - 1,
+            bitmagic_block_bits,
+            bitmagic_block_bits + 1,
+            3 * bitmagic_block_bits + 3'395
     );
-    const auto bitset = random_bitset(num_bits, *rc::gen::arbitrary<bool>());
+    const auto bitset = random_run_bitset(num_bits, *rc::gen::arbitrary<bool>());
+    // Start from garbage, as bitset_to_packed_bits must zero the destination itself
     std::vector<uint8_t> packed(bitset_packed_size_bytes(num_bits), 0xAB);
     bitset_to_packed_bits(bitset, packed.data());
     RC_ASSERT(packed == packed_bits_one_at_a_time(bitset, num_bits));
@@ -82,17 +96,19 @@ RC_GTEST_PROP(BitSet, PackedBitsMatchBitByBit, ()) {
 
 RC_GTEST_PROP(BitSet, ExpansionMatchesBitByBit, ()) {
     using namespace arcticdb;
-    const auto num_rows = *rc::gen::element(size_t(1), size_t(63), size_t(64), size_t(1000), size_t(65'537));
-    const auto bitset = random_bitset(num_rows, *rc::gen::arbitrary<bool>());
+    const auto num_rows = *rc::gen::element(size_t(1), size_t(63), size_t(64), size_t(1000), bitmagic_block_bits + 1);
+    const auto bitset = random_run_bitset(num_rows, *rc::gen::arbitrary<bool>());
+    // Distinct dense values, promoted from int32 to double, with -1 marking rows the expansion must not write
     std::vector<int32_t> dense(bitset.count());
     for (size_t i = 0; i < dense.size(); ++i)
         dense[i] = static_cast<int32_t>(i * 7 - 3);
-    std::vector<double> expected(num_rows, -1.0);
+    constexpr double not_written = -1.0;
+    std::vector<double> expected(num_rows, not_written);
     size_t dense_pos = 0;
     for (size_t row = 0; row < num_rows; ++row)
         if (bitset.test(bv_size(row)))
             expected[row] = dense[dense_pos++];
-    std::vector<double> received(num_rows, -1.0);
+    std::vector<double> received(num_rows, not_written);
     util::expand_dense_buffer_and_promote_type<int32_t, double>(
             bitset, reinterpret_cast<const uint8_t*>(dense.data()), reinterpret_cast<uint8_t*>(received.data())
     );
