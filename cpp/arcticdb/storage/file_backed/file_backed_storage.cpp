@@ -106,13 +106,13 @@ void refresh_directory(const fs::path& dir) {
 void refresh_ancestors(const fs::path& dir, const fs::path& subpath) {
     fs::path to_check = subpath;
     assert(to_check.has_parent_path());
-    do {
+    while (to_check != dir) {
         // TODO: The stopping condition here can be relaxed. The only reason we traverse parents one by one
         //       is because of the possibility that they are **all missing**. If one of them successfully opens,
         //       we can stop.
         to_check = to_check.parent_path();
         refresh_directory(to_check);
-    } while (to_check != dir);
+    }
 }
 
 bool exists(
