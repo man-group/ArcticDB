@@ -14,7 +14,6 @@ from arcticdb.storage_fixtures.s3 import (
     MotoS3StorageFixtureFactory,
     MotoGcpS3StorageFixtureFactory,
 )
-import werkzeug.serving
 from werkzeug.serving import make_server
 
 from tests.util.mark import SKIP_CONDA_MARK
@@ -99,11 +98,6 @@ def _serve_with_keep_alive_handler(app):
         server.server_close()
 
 
-def _hello_app(environ, start_response):
-    start_response("200 OK", [("Content-Type", "text/plain")])
-    return [b"hello"]
-
-
 def test_mock_server_disables_nagle():
     # A response goes out in two sends, headers then body. With Nagle on, a kept-alive connection holds the body back
     # until the client ACKs the headers, which Linux delays by 40ms, so every request would take 40ms
@@ -120,6 +114,10 @@ def test_mock_server_disables_nagle():
 def test_mock_server_does_not_wait_for_more_request_data(monkeypatch):
     # After each response werkzeug waits up to 10ms for more request data to discard. On a kept-alive connection the
     # next request is only read after that wait, so every request would take 10ms longer
+    def hello_app(environ, start_response):
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [b"hello"]
+
     timed_out_selects = []
 
     class RecordingSelector(selectors.DefaultSelector):
@@ -129,8 +127,9 @@ def test_mock_server_does_not_wait_for_more_request_data(monkeypatch):
                 timed_out_selects.append(timeout)
             return events
 
-    monkeypatch.setattr(werkzeug.serving.selectors, "DefaultSelector", RecordingSelector)
-    with _serve_with_keep_alive_handler(_hello_app) as conn:
+    # Process-wide, but in this process only werkzeug's drain creates selectors while the test runs
+    monkeypatch.setattr(selectors, "DefaultSelector", RecordingSelector)
+    with _serve_with_keep_alive_handler(hello_app) as conn:
         for _ in range(3):
             conn.request("GET", "/")
             assert conn.getresponse().read() == b"hello"
