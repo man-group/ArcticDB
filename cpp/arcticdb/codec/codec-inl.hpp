@@ -6,7 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-// clang-tidy defines __clang_analyzer__ and analyses a changed header on its own
+// clang-tidy analyses a changed header on its own (defining __clang_analyzer__), so allow direct inclusion there
 #if !defined(ARCTICDB_SEGMENT_ENCODER_H_) && !defined(__clang_analyzer__)
 #error "This should only be included by codec.hpp"
 #endif

@@ -453,7 +453,7 @@ def test_sparse_append_all_nulls(lmdb_version_store_arrow):
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("str_data", [[None, None], [None, None, "a", None], ["a", None, None, None]])
 def test_sparse_string_segment_without_values_read_as_pandas(in_memory_store_factory, dynamic_schema, str_data):
-    # A segment whose string values are all null is written without a string pool
+    # segment_row_size=2, so at least one segment holds only nulls and is written without a string pool
     lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True)
     lib.set_output_format("pyarrow")
     sym = "test_sparse_string_segment_without_values_read_as_pandas"
