@@ -8,12 +8,17 @@
 
 #pragma once
 
+#include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/library_path.hpp>
+#include <arcticdb/util/error_code.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 
 #include <boost/container/small_vector.hpp>
+#include <fmt/ranges.h>
 
 namespace arcticdb::storage {
+
+using namespace entity;
 
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
   public:
@@ -56,7 +61,8 @@ class NoDataFoundException : public ArcticCategorizedException<ErrorCategory::MI
 class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
   public:
     explicit KeyNotFoundException(const std::string& message) :
-        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {}
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message),
+        keys_(std::make_shared<std::vector<VariantKey>>()) {}
 
     explicit KeyNotFoundException(std::vector<VariantKey>&& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
