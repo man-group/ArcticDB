@@ -331,8 +331,8 @@ The default is 10.
 The size, in bytes, of the blocks a segment's string pool is compressed in when it is written. Larger blocks compress
 better and make the segment header smaller.
 
-* A positive integer: the block size. Values below 4096 are treated as 4096. A pool whose strings are mostly longer than
-  a block keeps one block per page.
+* A positive integer: the block size. Values below 65536 (64 KiB) are treated as 65536 and values above 67108864
+  (64 MiB) as 67108864. A pool whose strings are mostly longer than a block keeps one block per page.
 * `0`: one block per 4 KB page of the pool, the layout written by older versions.
 
 The default is 262144 (256 KiB). Data written with any value is readable by all ArcticDB versions.

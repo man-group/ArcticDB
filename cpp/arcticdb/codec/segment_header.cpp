@@ -117,8 +117,6 @@ void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) 
         offset_[i] = *offsets++;
 }
 
-size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg) { return required_bytes(in_mem_seg, 0); }
-
 size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg, size_t block_bytes) {
     size_t required = 0UL;
     required += FIXED_HEADER_SIZE;

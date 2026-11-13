@@ -73,7 +73,7 @@ offsets are positions in the pages' concatenation. `encode_string_pool()` (`enco
 blocks of `Codec.StringPoolBlockBytes` (default 256 KiB; 0 keeps one block per page, the older layout) and compresses
 each, in V1 and V2. A string can straddle two blocks. `string_pool_encoded_value_blocks()` gives the block count, which
 also sizes the V2 header (`calc_required_header_fields_bytes`). The writer makes one transient copy of the pool.
-`encode_v1`/`encode_v2` read the setting once (`string_pool_block_bytes()`, values below 4096 are raised to 4096) and
+`encode_v1`/`encode_v2` read the setting once (`string_pool_block_bytes()`, clamped to 64 KiB..64 MiB) and
 pass it down, so a concurrent `set_config_int` cannot make the header and the blocks disagree. The pool is never cut
 into more blocks than it has pages, because the output buffer is sized from the pages (a pool of strings longer than a
 block keeps its pages).

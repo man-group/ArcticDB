@@ -18,6 +18,7 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
+#include <algorithm>
 #include <cstddef>
 
 namespace arcticdb {
@@ -197,11 +198,12 @@ void encode_metadata(
 /// whatever the block count, so the writer re-cuts it into blocks of this many bytes (0 keeps the pages).
 /// Read once per encode and passed down, since the config can change while an encode runs.
 inline size_t string_pool_block_bytes() {
-    constexpr int64_t min_block_bytes = 4096;
+    constexpr int64_t min_block_bytes = int64_t{64} * 1024;
+    constexpr int64_t max_block_bytes = int64_t{64} * 1024 * 1024;
     const auto configured = ConfigsMap::instance()->get_int("Codec.StringPoolBlockBytes", int64_t{256} * 1024);
     if (configured <= 0)
         return 0;
-    return static_cast<size_t>(std::max(configured, min_block_bytes));
+    return static_cast<size_t>(std::clamp(configured, min_block_bytes, max_block_bytes));
 }
 
 inline size_t string_pool_encoded_value_blocks(const ChunkedBuffer& pool, size_t block_bytes) {
