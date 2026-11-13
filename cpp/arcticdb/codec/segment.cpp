@@ -15,6 +15,8 @@
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
 
+#include <limits>
+
 namespace arcticdb {
 
 arcticdb::proto::encoding::SegmentHeader generate_v1_header(const SegmentHeader& header, const StreamDescriptor& desc) {
@@ -76,8 +78,15 @@ SegmentCompressedSize compressed(
         body_size = buffer_size;
     } else {
         buffer_size = seg_hdr.footer_offset();
-        if (seg_hdr.has_column_fields())
-            buffer_size += sizeof(EncodedMagic) + column_fields_size(seg_hdr);
+        if (seg_hdr.has_column_fields()) {
+            const size_t fields_size = sizeof(EncodedMagic) + column_fields_size(seg_hdr);
+            codec::check<ErrorCode::E_DECODE_ERROR>(
+                    buffer_size <= std::numeric_limits<size_t>::max() - fields_size,
+                    "Corrupt segment: footer offset {} overflows the segment size",
+                    buffer_size
+            );
+            buffer_size += fields_size;
+        }
 
         body_size = seg_hdr.footer_offset();
         ARCTICDB_DEBUG(log::codec(), "V2 size buffer: {} body {}", buffer_size, body_size);
@@ -243,8 +252,9 @@ void check_encoding(EncodingVersion encoding_version) {
 }
 
 void check_size(const FixedHeader* fixed_hdr, size_t buffer_bytes, size_t readable_size, size_t string_pool_size) {
+    // decode_header_and_fields has checked that the fixed and variable headers fit in readable_size.
     util::check(
-            FIXED_HEADER_SIZE + fixed_hdr->header_bytes + buffer_bytes <= readable_size,
+            buffer_bytes <= readable_size - FIXED_HEADER_SIZE - fixed_hdr->header_bytes,
             "Size disparity, fixed header size {} + variable header size {} + buffer size {}  (string pool size {}) >= "
             "total size {}",
             FIXED_HEADER_SIZE,

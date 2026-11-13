@@ -8,10 +8,13 @@ import pytest
 
 from arcticdb.options import OutputFormat
 
+LIBRARIES = ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_dynamic_schema_v2"]
 
+
+@pytest.mark.parametrize("lib_fixture", LIBRARIES)
 @pytest.mark.parametrize("output_format", [OutputFormat.PANDAS, OutputFormat.PYARROW])
-def test_all_none_string_column_reads(lmdb_version_store_v1, output_format):
-    lib = lmdb_version_store_v1
+def test_all_none_string_column_reads(request, lib_fixture, output_format):
+    lib = request.getfixturevalue(lib_fixture)
     df = pd.DataFrame({"a": [None, None, None], "b": [1, 2, 3]})
     lib.write("sym", df)
     result = lib.read("sym", output_format=output_format).data
@@ -21,9 +24,10 @@ def test_all_none_string_column_reads(lmdb_version_store_v1, output_format):
     assert list(result["b"]) == [1, 2, 3]
 
 
+@pytest.mark.parametrize("lib_fixture", LIBRARIES)
 @pytest.mark.parametrize("output_format", [OutputFormat.PANDAS, OutputFormat.PYARROW])
-def test_mixed_none_and_string_column_reads(lmdb_version_store_v1, output_format):
-    lib = lmdb_version_store_v1
+def test_mixed_none_and_string_column_reads(request, lib_fixture, output_format):
+    lib = request.getfixturevalue(lib_fixture)
     df = pd.DataFrame({"a": ["x", None, "y"]})
     lib.write("sym", df)
     result = lib.read("sym", output_format=output_format).data
@@ -32,3 +36,11 @@ def test_mixed_none_and_string_column_reads(lmdb_version_store_v1, output_format
     assert result["a"].iloc[0] == "x"
     assert result["a"].iloc[1] is None or pd.isna(result["a"].iloc[1])
     assert result["a"].iloc[2] == "y"
+
+
+@pytest.mark.parametrize("lib_fixture", LIBRARIES)
+def test_fixed_width_string_column_reads(request, lib_fixture):
+    lib = request.getfixturevalue(lib_fixture)
+    df = pd.DataFrame({"a": ["x", "yy", "zzz"]})
+    lib.write("sym", df, dynamic_strings=False)
+    assert list(lib.read("sym").data["a"]) == ["x", "yy", "zzz"]

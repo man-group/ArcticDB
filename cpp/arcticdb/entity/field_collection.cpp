@@ -10,6 +10,7 @@
 #include <arcticdb/entity/field_collection.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
+#include <algorithm>
 #include <cstring>
 
 namespace arcticdb {
@@ -38,34 +39,47 @@ void FieldCollection::regenerate_offsets() {
     auto shape_ptr = reinterpret_cast<shape_t*>(shapes_.data());
     auto offset_ptr = reinterpret_cast<shape_t*>(offsets_.data());
     auto end = shape_ptr + shapes_.bytes() / sizeof(shape_t);
-    // Field sizes and name lengths may come from a stored descriptor. Each field's start comes from the sizes before
-    // it; check the field header and name at that start lie within the buffer before anything reads them. The last size
-    // only marks the end of the buffer and is never used to read.
+    // Field sizes and name lengths may come from a stored descriptor. Fields are reached two ways: at offsets built
+    // from the stored sizes, and by the field iterator, which steps by each field's own name length. Check that every
+    // field either way reaches lies within the buffer before anything reads it. The last stored size only marks the end
+    // of the buffer and is never used to read.
     const size_t total = buffer_.bytes();
     constexpr size_t field_header = offsetof(Field, name_);
-    size_t offset = 0;
-    while (shape_ptr != end) {
+    // Field::calc_size(name) is field_header + max(NameSize, name size).
+    static_assert(field_header == sizeof(uint32_t) + sizeof(TypeDescriptor));
+    const auto check_field_at = [this, total](size_t pos) {
         codec::check<ErrorCode::E_DECODE_ERROR>(
-                offset <= total && field_header <= total - offset,
+                pos <= total && field_header <= total - pos,
                 "Corrupt segment: descriptor field at {} does not fit its {}-byte buffer",
-                offset,
+                pos,
                 total
         );
         uint32_t name_size;
-        std::memcpy(&name_size, buffer_.buffer().ptr_cast<uint8_t>(offset, sizeof(name_size)), sizeof(name_size));
+        std::memcpy(&name_size, buffer_.buffer().ptr_cast<uint8_t>(pos, sizeof(name_size)), sizeof(name_size));
+        const size_t field_size = field_header + std::max(Field::NameSize, static_cast<size_t>(name_size));
         codec::check<ErrorCode::E_DECODE_ERROR>(
-                name_size <= total - offset - field_header,
-                "Corrupt segment: descriptor field name of {} bytes at {} exceeds its {}-byte buffer",
-                name_size,
-                offset,
+                field_size <= total - pos,
+                "Corrupt segment: descriptor field of {} bytes at {} exceeds its {}-byte buffer",
+                field_size,
+                pos,
                 total
         );
-        // Unsigned wraparound of a corrupt size is caught by the start check of the next field.
+        return field_size;
+    };
+    size_t offset = 0;
+    while (shape_ptr != end) {
+        check_field_at(offset);
+        // Unsigned wraparound of a corrupt size is caught by the check of the next field.
         offset += static_cast<size_t>(*shape_ptr);
         *offset_ptr = static_cast<shape_t>(offset);
         ++shape_ptr;
         ++offset_ptr;
     }
+    // Mirrors FieldCollectionIterator::increment, which never steps less than sizeof(Field).
+    static_assert(sizeof(Field) <= field_header + Field::NameSize);
+    size_t pos = 0;
+    while (pos < total)
+        pos += check_field_at(pos);
     offsets_.commit();
 }
 

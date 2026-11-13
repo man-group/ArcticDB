@@ -12,6 +12,8 @@
 #include <arcticdb/codec/input_bounds.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
+#include <arcticdb/pipeline/string_pool_utils.hpp>
+#include <arcticdb/storage/memory_layout.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
@@ -26,8 +28,10 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 // Regression tests for crashes on corrupted storage objects. Each test hand-crafts corrupt
@@ -662,11 +666,15 @@ TEST(CorruptionSafety, SparseRowPastDestinationRejectedArrowBool) {
 // ---- Descriptor field collections: stored field sizes and name lengths ----
 
 namespace {
-// Fields "first" and "second" as decode_ndarray leaves a stored descriptor before regenerate_offsets, with the stored
-// size of one field, or the name length of the second, optionally overwritten.
+// Fields "first" and "second" as decode_ndarray leaves a stored descriptor before regenerate_offsets, optionally with
+// one field's stored size, or one field's stored name length, overwritten.
+struct FieldOverride {
+    size_t field_index;
+    int64_t value;
+};
+
 FieldCollection stored_field_collection(
-        size_t corrupt_size_of = 0, std::optional<shape_t> field_bytes = std::nullopt,
-        std::optional<uint32_t> second_name_size = std::nullopt
+        std::optional<FieldOverride> stored_size = std::nullopt, std::optional<FieldOverride> name_size = std::nullopt
 ) {
     FieldCollection fields;
     size_t field_index = 0;
@@ -674,11 +682,13 @@ FieldCollection stored_field_collection(
         const auto size = Field::calc_size(name);
         auto* data = fields.allocate_data(size);
         Field::emplace(make_scalar_type(DataType::INT64), name, data);
-        if (field_index == 1 && second_name_size)
-            std::memcpy(data, &*second_name_size, sizeof(*second_name_size));
+        if (name_size && name_size->field_index == field_index) {
+            const auto stored_name_size = static_cast<uint32_t>(name_size->value);
+            std::memcpy(data, &stored_name_size, sizeof(stored_name_size));
+        }
         fields.advance_data(size);
-        const bool corrupt = field_bytes && corrupt_size_of == field_index;
-        *fields.allocate_shapes(sizeof(shape_t)) = corrupt ? *field_bytes : static_cast<shape_t>(size);
+        const bool corrupt = stored_size && stored_size->field_index == field_index;
+        *fields.allocate_shapes(sizeof(shape_t)) = corrupt ? stored_size->value : static_cast<shape_t>(size);
         fields.advance_shapes(sizeof(shape_t));
         ++field_index;
     }
@@ -687,24 +697,31 @@ FieldCollection stored_field_collection(
 } // namespace
 
 TEST(CorruptionSafety, DescriptorFieldStartPastBufferRejected) {
-    auto fields = stored_field_collection(0, 1'000'000);
+    auto fields = stored_field_collection(FieldOverride{0, 1'000'000});
     expect_corrupt([&] { fields.regenerate_offsets(); });
 }
 
 TEST(CorruptionSafety, DescriptorFieldNegativeSizeRejected) {
-    auto fields = stored_field_collection(0, -1'000);
+    auto fields = stored_field_collection(FieldOverride{0, -1'000});
     expect_corrupt([&] { fields.regenerate_offsets(); });
 }
 
 TEST(CorruptionSafety, DescriptorFieldNamePastBufferRejected) {
-    auto fields = stored_field_collection(0, std::nullopt, 1'000'000);
+    auto fields = stored_field_collection(std::nullopt, FieldOverride{1, 1'000'000});
+    expect_corrupt([&] { fields.regenerate_offsets(); });
+}
+
+// The field iterator steps by each field's own name length, so a name length that disagrees with the stored sizes
+// would walk it off the buffer.
+TEST(CorruptionSafety, DescriptorFieldNameSizeBreakingIterationRejected) {
+    auto fields = stored_field_collection(std::nullopt, FieldOverride{0, 0});
     expect_corrupt([&] { fields.regenerate_offsets(); });
 }
 
 // The last stored size only marks the end of the buffer; nothing reads with it, so it does not reject a readable
 // descriptor.
 TEST(CorruptionSafety, DescriptorLastFieldSizeIsNotUsedToRead) {
-    auto fields = stored_field_collection(1, 1'000'000);
+    auto fields = stored_field_collection(FieldOverride{1, 1'000'000});
     fields.regenerate_offsets();
     ASSERT_EQ(fields.size(), 2u);
     EXPECT_EQ(fields[0].name(), "first");
@@ -728,6 +745,24 @@ TEST(CorruptionSafety, V2HeaderNegativeFieldOffsetRejected) {
     const uint32_t minus_one = 0xFFFFFFFF;
     std::memcpy(vec.data() + column_offset_pos, &minus_one, sizeof(minus_one));
     expect_corrupt([&] { (void)Segment::from_bytes(vec.data(), vec.size()); });
+}
+
+TEST(CorruptionSafety, V2FooterOffsetOverflowRejected) {
+    auto vec = serialize_segment(make_numeric_segment_v2());
+    const uint64_t footer_offset = std::numeric_limits<uint64_t>::max() - 7;
+    std::memcpy(
+            vec.data() + FIXED_HEADER_SIZE + offsetof(HeaderData, footer_offset_), &footer_offset, sizeof(footer_offset)
+    );
+    expect_corrupt([&] { (void)Segment::from_bytes(vec.data(), vec.size()); });
+}
+
+TEST(CorruptionSafety, FixedWidthStringWithoutPoolRejected) {
+    ChunkedBuffer offsets;
+    offsets.ensure(2 * sizeof(entity::position_t));
+    const entity::position_t values[] = {not_a_string(), 0};
+    std::memcpy(offsets.data(), values, sizeof(values));
+    EXPECT_TRUE(std::holds_alternative<entity::position_t>(get_string_from_buffer(0, offsets, nullptr)));
+    expect_corrupt([&] { (void)get_string_from_buffer(1, offsets, nullptr); });
 }
 
 } // namespace arcticdb

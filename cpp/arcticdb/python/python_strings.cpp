@@ -7,6 +7,7 @@
  */
 #include <arcticdb/python/python_strings.hpp>
 #include <optional>
+#include <folly/ScopeGuard.h>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
@@ -117,18 +118,20 @@ static auto assign_python_strings(
     {
         ARCTICDB_SUBSAMPLE(CreatePythonStrings, 0)
         py::gil_scoped_acquire gil_lock;
+        // A corrupt pool can make the loop raise part way; release the strings already built.
+        SCOPE_FAIL {
+            for (const auto& [built_offset, built_obj] : py_strings) {
+                for (size_t c = 0; c < unique_counts.at(built_offset); ++c)
+                    Py_DECREF(built_obj);
+            }
+        };
         for (const auto& [offset, count] : unique_counts) {
             const auto sv = get_string_from_pool(offset, string_pool);
             auto obj = StringCreator::create(sv, has_type_conversion);
             // A corrupt string pool can hold bytes that are invalid for the column's string type
             // (e.g. invalid UTF-8); the constructor then returns null with a Python error set.
-            // Raise a decode error rather than inc_ref-ing null, releasing what we already built.
             if (ARCTICDB_UNLIKELY(obj == nullptr)) {
                 PyErr_Clear();
-                for (const auto& [built_offset, built_obj] : py_strings) {
-                    for (size_t c = 0; c < unique_counts.at(built_offset); ++c)
-                        Py_DECREF(built_obj);
-                }
                 codec::raise<ErrorCode::E_DECODE_ERROR>(
                         "Corrupt segment: invalid string in string pool failed to decode"
                 );
