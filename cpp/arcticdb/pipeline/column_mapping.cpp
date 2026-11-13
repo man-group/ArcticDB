@@ -163,6 +163,10 @@ ColumnTruncation segment_truncation(const ColumnMapping& mapping) {
     return {to_segment_row(mapping.truncate_.start_), to_segment_row(mapping.truncate_.end_)};
 }
 
+void handle_truncation(util::BitSet& bv, const ColumnMapping& mapping) {
+    handle_truncation(bv, segment_truncation(mapping));
+}
+
 void create_dense_bitmap(
         size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type
 ) {

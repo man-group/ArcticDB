@@ -457,6 +457,7 @@ TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
     // validity bitmap must cover only kRowsRead rows.
     constexpr size_t kFirstSegmentRows = 40'000;
     constexpr size_t kSecondSegmentRows = 30'000;
+    // Not a multiple of 8, so a bitmap sized in frame rows has a different byte count from one sized in segment rows
     constexpr size_t kRowsRead = 10'003;
     const auto read_ends_in_second_segment = ColumnTruncation{std::nullopt, kFirstSegmentRows + kRowsRead};
     auto read_options = ReadOptions();

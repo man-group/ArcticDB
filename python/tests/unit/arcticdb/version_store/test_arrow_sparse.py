@@ -112,6 +112,39 @@ def test_sparse_arrow_date_range(
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
+# The kept rows of the end-truncated last segment have no nulls, but the rows cut off do. Rows 3-12 make that
+# segment's validity bitmap 13 bits (2 bytes) for a 3-row block when sized in frame rows, which ASan reports as
+# new-delete-type-mismatch when sparrow frees it as 1 byte. Rows 6-12 start inside the second segment, so the frame
+# starts there too.
+@pytest.mark.parametrize("first_row, last_row", [(3, 12), (6, 12)], ids=["starts_in_first", "starts_in_second"])
+@pytest.mark.parametrize("use_date_range", [True, False], ids=["date_range", "row_range"])
+def test_sparse_arrow_read_ends_inside_later_segment(in_memory_store_factory, first_row, last_row, use_date_range):
+    lib = in_memory_store_factory(segment_row_size=5, dynamic_schema=True)
+    lib.set_output_format("pyarrow")
+    sym = "test_sparse_arrow_read_ends_inside_later_segment"
+    dates = pd.date_range("2025-01-01", periods=15)
+    valid = [True, False, True, True, True, True, False, True, True, True, True, True, True, False, True]
+    table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(dates, type=pa.timestamp("ns")),
+            "int_col": pa.array([i if v else None for i, v in enumerate(valid)], pa.int64()),
+            "float_col": pa.array([float(i) if v else None for i, v in enumerate(valid)], pa.float64()),
+            "bool_col": pa.array([bool(i % 2) if v else None for i, v in enumerate(valid)], pa.bool_()),
+            "str_col": pa.array([str(i) if v else None for i, v in enumerate(valid)], pa.large_string()),
+        }
+    )
+    lib.write(sym, table, index_column=True)
+    if use_date_range:
+        received = lib.read(sym, date_range=(dates[first_row], dates[last_row])).data
+    else:
+        received = lib.read(sym, row_range=(first_row, last_row + 1)).data
+    assert table.slice(first_row, last_row - first_row + 1).equals(undictionarify_table(received))
+    for name in ["int_col", "float_col", "bool_col", "str_col"]:
+        last_chunk = received.column(name).chunks[-1]
+        assert last_chunk.null_count == 0, name
+        assert last_chunk.buffers()[0] is None, name
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
