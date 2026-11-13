@@ -14,8 +14,14 @@
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
+#include <arcticdb/util/constructors.hpp>
+#include <ankerl/unordered_dense.h>
+#include <array>
 #include <memory>
+#include <optional>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace arcticdb {
 
@@ -90,8 +96,11 @@ struct ExpressionNode {
 
     std::variant<Leaf, Operation> kind_;
 
-    // Used as a memoization hash key and for debugging
+    // Used as a memoization hash key and for debugging. Large expressions are truncated, ending in their hash_.
     std::string label_;
+
+    // Structural hash, consistent with structural equality of the nodes
+    size_t hash_{0};
 
     explicit ExpressionNode(Leaf leaf);
 
@@ -103,6 +112,11 @@ struct ExpressionNode {
     ExpressionNode(std::shared_ptr<ExpressionNode> left, std::shared_ptr<ExpressionNode> right, OperationType op);
 
     ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op);
+
+    // Iterative, so that destroying a deeply nested expression does not overflow the stack
+    ~ExpressionNode();
+
+    ARCTICDB_MOVE_COPY_DEFAULT(ExpressionNode)
 
     [[nodiscard]] bool is_operation() const { return std::holds_alternative<Operation>(kind_); }
 
@@ -119,15 +133,93 @@ struct ExpressionNode {
   private:
     enum class ValueSetState { NOT_A_SET, EMPTY_SET, NON_EMPTY_SET };
 
+    struct ReturnType {
+        std::variant<BitSetTag, DataType> type_;
+        ValueSetState value_set_state_{ValueSetState::NOT_A_SET};
+    };
+
+    static std::variant<BitSetTag, DataType> operation_return_type(
+            const Operation& operation, const ReturnType& left, const ReturnType* right, const ReturnType* condition
+    );
+
     static std::variant<BitSetTag, DataType> leaf_return_type(
             const Leaf& leaf, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
             ValueSetState& value_set_state
     );
-
-    static std::variant<BitSetTag, DataType> child_return_type(
-            const ExpressionNode& child, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
-            ValueSetState& value_set_state
-    );
 };
+
+/*
+ * Evaluates the expression rooted at root bottom-up, without recursion, so the depth of the expression is not limited
+ * by the stack. Each distinct node is evaluated once, so sub-expressions shared between several parents cost the same
+ * as in a tree, and a result is freed once its last parent has used it. Operands are evaluated left, condition, right.
+ *  - on_leaf(const ExpressionNode::Leaf&) -> Result
+ *  - before_operation(const ExpressionNode&) -> std::optional<Result>: a result for the node that skips its operands
+ *  - on_operation(const ExpressionNode&, const ExpressionNode::Operation&, operand) -> Result, where operand(child)
+ *    returns the result of an operand as a const reference
+ */
+template<typename Result, typename OnLeaf, typename BeforeOperation, typename OnOperation>
+Result evaluate_bottom_up(
+        const ExpressionNode& root, const OnLeaf& on_leaf, const BeforeOperation& before_operation,
+        const OnOperation& on_operation
+) {
+    const auto operands_of = [](const ExpressionNode::Operation& op) {
+        return std::array<const ExpressionNode*, 3>{op.right_.get(), op.condition_.get(), op.left_.get()};
+    };
+    // Number of parent evaluations that still need each node's result, counting a node used twice by a parent twice
+    ankerl::unordered_dense::map<const ExpressionNode*, size_t> pending_uses{{&root, 0}};
+    std::vector<const ExpressionNode*> to_count{&root};
+    while (!to_count.empty()) {
+        const auto* node = to_count.back();
+        to_count.pop_back();
+        if (const auto* op = std::get_if<ExpressionNode::Operation>(&node->kind_)) {
+            for (const ExpressionNode* child : operands_of(*op)) {
+                if (child) {
+                    const auto [it, first_use] = pending_uses.try_emplace(child, 0);
+                    ++it->second;
+                    if (first_use) {
+                        to_count.push_back(child);
+                    }
+                }
+            }
+        }
+    }
+    // Not ankerl: erasing from it needs move-assignment, which results do not have
+    std::unordered_map<const ExpressionNode*, Result> results;
+    const auto operand = [&results](const std::shared_ptr<ExpressionNode>& child) -> const Result& {
+        return results.at(child.get());
+    };
+    std::vector<std::pair<const ExpressionNode*, bool>> stack{{&root, false}};
+    while (!stack.empty()) {
+        const auto [node, operands_ready] = stack.back();
+        if (results.contains(node)) {
+            stack.pop_back();
+        } else if (const auto* leaf = std::get_if<ExpressionNode::Leaf>(&node->kind_)) {
+            results.emplace(node, on_leaf(*leaf));
+            stack.pop_back();
+        } else {
+            const auto& op = std::get<ExpressionNode::Operation>(node->kind_);
+            if (operands_ready) {
+                results.emplace(node, on_operation(*node, op, operand));
+                stack.pop_back();
+                for (const ExpressionNode* child : operands_of(op)) {
+                    if (child && --pending_uses.at(child) == 0) {
+                        results.erase(child);
+                    }
+                }
+            } else if (std::optional<Result> known = before_operation(*node)) {
+                results.emplace(node, std::move(*known));
+                stack.pop_back();
+            } else {
+                stack.back().second = true;
+                for (const ExpressionNode* child : operands_of(op)) {
+                    if (child && !results.contains(child)) {
+                        stack.emplace_back(child, false);
+                    }
+                }
+            }
+        }
+    }
+    return std::move(results.at(&root));
+}
 
 } // namespace arcticdb
