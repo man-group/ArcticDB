@@ -302,7 +302,7 @@ class File {
         auto buffer = std::make_shared<arcticdb::Buffer>(buffer_size);
         size_t read = 0;
         while (read < buffer_size) {
-            const ssize_t n = posix_.read(fd_, buffer->data(), buffer_size - read);
+            const ssize_t n = posix_.read(fd_, buffer->data() + read, buffer_size - read);
             if (n > 0)
                 read += static_cast<size_t>(n);
             else if (n == 0)
