@@ -22,6 +22,7 @@
 #include <arcticdb/log/log.hpp>
 
 #include <aws/core/Aws.h>
+#include <aws/core/config/ConfigAndCredentialsCacheManager.h>
 #include <aws/core/utils/memory/stl/AWSStringStream.h>
 #ifndef WIN32
 #include <aws/core/http/HttpClientFactory.h>
@@ -155,7 +156,7 @@ TEST_F(ProxyEnvVarSetHttpProxyForHttpsEndpointFixture, test_config_resolution_pr
     arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("https://test.endpoint.com");
     s3_config.set_https(true);
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
     ASSERT_EQ(ret_cfg.proxyHost, "http-proxy.com");
     ASSERT_EQ(ret_cfg.proxyPort, 443);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
@@ -164,7 +165,7 @@ TEST_F(ProxyEnvVarSetHttpProxyForHttpsEndpointFixture, test_config_resolution_pr
 TEST_F(ProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config_http;
     s3_config_http.set_endpoint("http://test.endpoint.com");
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config_http);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
     ASSERT_EQ(ret_cfg.proxyHost, "http-proxy-2.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
@@ -172,7 +173,7 @@ TEST_F(ProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config_https;
     s3_config_https.set_endpoint("https://test.endpoint.com");
     s3_config_https.set_https(true);
-    ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config_https);
+    ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_https);
     ASSERT_EQ(ret_cfg.proxyHost, "https-proxy-2.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTPS);
@@ -182,7 +183,7 @@ TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
     SKIP_WIN("Env vars are not case-sensitive on Windows");
     arcticdb::proto::s3_storage::Config s3_config_http;
     s3_config_http.set_endpoint("http://test.endpoint.com");
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config_http);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
     ASSERT_EQ(ret_cfg.proxyHost, "http-proxy-1.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
@@ -190,7 +191,7 @@ TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config_https;
     s3_config_https.set_endpoint("https://test.endpoint.com");
     s3_config_https.set_https(true);
-    ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config_https);
+    ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_https);
     ASSERT_EQ(ret_cfg.proxyHost, "https-proxy-1.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTPS);
@@ -199,7 +200,7 @@ TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
 TEST_F(NoProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("http://test.endpoint.com");
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
 
     Aws::Utils::Array<Aws::String> expected_non_proxy_hosts{1};
     expected_non_proxy_hosts[0] = "http://test-1.endpoint.com";
@@ -210,12 +211,87 @@ TEST_F(NoProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
     SKIP_WIN("Env vars are not case-sensitive on Windows");
     arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("http://test.endpoint.com");
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
 
     Aws::Utils::Array<Aws::String> expected_non_proxy_hosts{2};
     expected_non_proxy_hosts[0] = "http://test-1.endpoint.com";
     expected_non_proxy_hosts[1] = "http://test-2.endpoint.com";
     ASSERT_EQ(ret_cfg.nonProxyHosts, expected_non_proxy_hosts);
+}
+
+namespace {
+constexpr const char* response_checksum_env_var = "AWS_RESPONSE_CHECKSUM_VALIDATION";
+constexpr const char* request_checksum_env_var = "AWS_REQUEST_CHECKSUM_CALCULATION";
+
+std::optional<std::string> get_env(const char* name) {
+    const char* value = std::getenv(name);
+    return value ? std::optional<std::string>(value) : std::nullopt;
+}
+
+void set_env(const char* name, const std::optional<std::string>& value) {
+#if (WIN32)
+    _putenv_s(name, value.value_or("").c_str());
+#else
+    if (value) {
+        ::setenv(name, value->c_str(), 1);
+    } else {
+        ::unsetenv(name);
+    }
+#endif
+}
+} // namespace
+
+struct ChecksumEnvVarFixture : ::testing::Test {
+    std::optional<std::string> saved_response_checksum = get_env(response_checksum_env_var);
+    std::optional<std::string> saved_request_checksum = get_env(request_checksum_env_var);
+    std::optional<std::string> saved_config_file = get_env("AWS_CONFIG_FILE");
+
+    ChecksumEnvVarFixture() {
+        arcticdb::storage::s3::S3ApiInstance::instance();
+        // So that checksum settings in the developer's AWS profile do not apply
+        set_env("AWS_CONFIG_FILE", "nonexistent-aws-config");
+        Aws::Config::ReloadCachedConfigFile();
+    }
+
+    ~ChecksumEnvVarFixture() override {
+        set_env(response_checksum_env_var, saved_response_checksum);
+        set_env(request_checksum_env_var, saved_request_checksum);
+        set_env("AWS_CONFIG_FILE", saved_config_file);
+        Aws::Config::ReloadCachedConfigFile();
+    }
+};
+
+TEST_F(ChecksumEnvVarFixture, checksum_config_follows_env_vars_without_changing_them) {
+    using Aws::Client::RequestChecksumCalculation;
+    using Aws::Client::ResponseChecksumValidation;
+    const std::vector<std::optional<std::string>> values{std::nullopt, "when_required", "when_supported", "invalid"};
+    for (const auto& response : values) {
+        for (const auto& request : values) {
+            SCOPED_TRACE(
+                    fmt::format("response={} request={}", response.value_or("<unset>"), request.value_or("<unset>"))
+            );
+            set_env(response_checksum_env_var, response);
+            set_env(request_checksum_env_var, request);
+            arcticdb::proto::s3_storage::Config s3_config;
+            const auto cfg = arcticdb::storage::s3::get_s3_config(s3_config);
+
+            // Both are off unless either is when_supported. Then the SDK resolves each by itself, so unset or
+            // invalid means when_supported.
+            const bool opted_in = response == "when_supported" || request == "when_supported";
+            const bool response_on = opted_in && response != "when_required";
+            const bool request_on = opted_in && request != "when_required";
+            ASSERT_EQ(
+                    cfg.checksumConfig.responseChecksumValidation,
+                    response_on ? ResponseChecksumValidation::WHEN_SUPPORTED : ResponseChecksumValidation::WHEN_REQUIRED
+            );
+            ASSERT_EQ(
+                    cfg.checksumConfig.requestChecksumCalculation,
+                    request_on ? RequestChecksumCalculation::WHEN_SUPPORTED : RequestChecksumCalculation::WHEN_REQUIRED
+            );
+            ASSERT_EQ(get_env(response_checksum_env_var), response);
+            ASSERT_EQ(get_env(request_checksum_env_var), request);
+        }
+    }
 }
 
 using namespace arcticdb;

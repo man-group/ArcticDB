@@ -250,8 +250,9 @@ inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpo
 // Since aws-sdk-cpp >= 1.11.486, it has turned on checksum integrity check `x-amz-checksum-mode: enabled`
 // This feature is not supported in many s3 implementations. SDK with this feature ON will reject responses from
 // s3 implementations that do not provide checksum, which leads to storage exception in arcticdb
-// Update environment variable before import arcticdb_ext to disable checksum validation
-inline void configure_s3_checksum_validation() {
+// So default both to when_required unless the user opts in via either env var. Set on the client config rather than
+// the process env, overriding what the SDK resolved from the env vars and AWS profile.
+inline void configure_s3_checksum_validation(Aws::Client::ClientConfiguration& client_configuration) {
     const char* response_checksum = std::getenv("AWS_RESPONSE_CHECKSUM_VALIDATION");
     const char* request_checksum = std::getenv("AWS_REQUEST_CHECKSUM_CALCULATION");
 
@@ -261,22 +262,18 @@ inline void configure_s3_checksum_validation() {
                             "If endpoint doesn't support it, 1. incorrect objects could be silently written "
                             "2. Endpoint response will be rejected by SDK and lead to storage exception in arcticdb");
     } else {
-#ifdef _WIN32
-        _putenv_s("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required");
-        _putenv_s("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required");
-#else
-        setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required", 1);
-        setenv("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required", 1);
-#endif
+        client_configuration.checksumConfig.responseChecksumValidation =
+                Aws::Client::ResponseChecksumValidation::WHEN_REQUIRED;
+        client_configuration.checksumConfig.requestChecksumCalculation =
+                Aws::Client::RequestChecksumCalculation::WHEN_REQUIRED;
     }
 }
 
 template<typename ConfigType>
-auto get_s3_config_and_set_env_var(const ConfigType& conf) {
-    configure_s3_checksum_validation();
-
+auto get_s3_config(const ConfigType& conf) {
     auto endpoint_scheme = conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
     Aws::Client::ClientConfiguration client_configuration = get_proxy_config(endpoint_scheme);
+    configure_s3_checksum_validation(client_configuration);
     client_configuration.scheme = endpoint_scheme;
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Endpoint Scheme: {}", conf.https() ? "https" : "http");
 
