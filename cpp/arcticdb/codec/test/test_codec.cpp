@@ -340,7 +340,7 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
 
 namespace {
 template<typename MakeString>
-SegmentInMemory segment_of_strings(size_t rows, MakeString&& make_string) {
+SegmentInMemory segment_of_strings(size_t rows, const MakeString& make_string) {
     const auto stream_desc =
             stream_descriptor(StreamId{"pool"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "s")});
     SegmentInMemory seg{stream_desc.clone()};
