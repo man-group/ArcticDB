@@ -480,18 +480,11 @@ class ChunkedBufferImpl {
     // Similar to `bytes_at` but will work if the requested range spans multiple continuous blocks.
     // If buffer has extra_bytes_per_block, the extra bytes are NOT counted towards the required bytes
     std::vector<std::pair<uint8_t*, size_t>> byte_blocks_at(size_t pos_bytes, size_t required_bytes) {
-        check_bytes(pos_bytes, required_bytes);
-        std::vector<std::pair<uint8_t*, size_t>> result;
-        auto [block, pos, block_index] = block_and_offset(pos_bytes);
-        while (required_bytes > 0) {
-            block = blocks_[block_index];
-            const auto size_to_write = std::min(required_bytes, block->logical_size() - pos);
-            result.push_back({block->ptr(pos), size_to_write});
-            required_bytes -= size_to_write;
-            ++block_index;
-            pos = 0;
-        }
-        return result;
+        return byte_blocks_at_impl<uint8_t*>(pos_bytes, required_bytes);
+    }
+
+    std::vector<std::pair<const uint8_t*, size_t>> byte_blocks_at(size_t pos_bytes, size_t required_bytes) const {
+        return byte_blocks_at_impl<const uint8_t*>(pos_bytes, required_bytes);
     }
 
     template<typename T>
@@ -671,6 +664,22 @@ class ChunkedBufferImpl {
     }
 
   private:
+    template<typename Ptr>
+    std::vector<std::pair<Ptr, size_t>> byte_blocks_at_impl(size_t pos_bytes, size_t required_bytes) const {
+        check_bytes(pos_bytes, required_bytes);
+        std::vector<std::pair<Ptr, size_t>> result;
+        auto [block, pos, block_index] = block_and_offset(pos_bytes);
+        while (required_bytes > 0) {
+            block = blocks_[block_index];
+            const auto size_to_write = std::min(required_bytes, block->logical_size() - pos);
+            result.push_back({block->ptr(pos), size_to_write});
+            required_bytes -= size_to_write;
+            ++block_index;
+            pos = 0;
+        }
+        return result;
+    }
+
     BlockType* copy_subset_to_block(BlockType* source, size_t pos, size_t size) {
         switch (source->get_type()) {
         case MemBlockType::DYNAMIC: {

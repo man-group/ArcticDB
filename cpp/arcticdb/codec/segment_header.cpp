@@ -61,9 +61,7 @@ size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg, size
 
     if (in_mem_seg.has_string_pool()) {
         const auto string_pool_size =
-                calc_field_bytes(
-                        string_pool_encoded_value_blocks(in_mem_seg.const_string_pool().data(), block_bytes) + 1
-                ) +
+                calc_field_bytes(string_pool_block_count(in_mem_seg.const_string_pool().data(), block_bytes) + 1) +
                 sizeof(uint64_t); // String pool has a custom shapes buffer
         required += string_pool_size;
         ARCTICDB_TRACE(log::codec(), "String pool size {}", string_pool_size);

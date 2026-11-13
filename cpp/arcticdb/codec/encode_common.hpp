@@ -37,12 +37,18 @@ struct EncodingPolicyType {
     using ColumnEncoder = VersionedColumnEncoder;
 };
 
+/// Encoded blocks a field of num_value_blocks takes: V1 writes a shapes block per values block, V2 one shapes block
+template<typename EncodingPolicyType>
+size_t encoded_field_blocks(size_t num_value_blocks, bool has_shapes) {
+    if constexpr (EncodingPolicyType::version == EncodingVersion::V1)
+        return num_value_blocks + (num_value_blocks * has_shapes);
+    else
+        return num_value_blocks + has_shapes;
+}
+
 template<typename EncodingPolicyType>
 size_t calc_num_blocks(const ColumnData& column_data) {
-    if constexpr (EncodingPolicyType::version == EncodingVersion::V1)
-        return column_data.num_blocks() + (column_data.num_blocks() * !column_data.shapes()->empty());
-    else
-        return column_data.num_blocks() + !column_data.shapes()->empty();
+    return encoded_field_blocks<EncodingPolicyType>(column_data.num_blocks(), !column_data.shapes()->empty());
 }
 
 template<typename EncodingPolicyType>
@@ -209,15 +215,35 @@ inline size_t string_pool_block_bytes() {
 /// Pools whose pages average at least this many bytes (long strings) gain too little from re-cutting to pay for it
 inline constexpr size_t string_pool_large_page_bytes = size_t{32} * 1024;
 
-inline size_t string_pool_encoded_value_blocks(const ChunkedBuffer& pool, size_t block_bytes) {
-    if (block_bytes == 0 || pool.num_blocks() <= 1 || pool.bytes() >= string_pool_large_page_bytes * pool.num_blocks())
-        return pool.num_blocks();
+/// Whether the pool is encoded one block per page rather than re-cut into blocks of block_bytes
+inline bool string_pool_keeps_pages(const ChunkedBuffer& pool, size_t block_bytes) {
+    const auto pages = pool.num_blocks();
+    if (block_bytes == 0 || pages <= 1 || pool.bytes() >= string_pool_large_page_bytes * pages)
+        return true;
     // More blocks than pages would outgrow the output buffer, which is sized from the pages
-    return std::min(pool.num_blocks(), (pool.bytes() + block_bytes - 1) / block_bytes);
+    return (pool.bytes() + block_bytes - 1) / block_bytes >= pages;
 }
 
-/// Encodes the pool re-cut into num_blocks blocks of block_bytes (the last one shorter), one block at a time. A block
-/// inside a single page is encoded from the page; any other is gathered into one reused block-sized scratch buffer.
+inline size_t string_pool_block_count(const ChunkedBuffer& pool, size_t block_bytes) {
+    return string_pool_keeps_pages(pool, block_bytes) ? pool.num_blocks()
+                                                      : (pool.bytes() + block_bytes - 1) / block_bytes;
+}
+
+/// The pool's bytes [offset, offset + size): read in place when they lie inside one page, else gathered into scratch
+inline const uint8_t* string_pool_bytes_at(const ChunkedBuffer& pool, size_t offset, size_t size, Buffer& scratch) {
+    const auto spans = pool.byte_blocks_at(offset, size);
+    if (spans.size() == 1)
+        return spans[0].first;
+    size_t gathered = 0;
+    for (const auto& [data, bytes] : spans) {
+        memcpy(scratch.data() + gathered, data, bytes);
+        gathered += bytes;
+    }
+    return scratch.data();
+}
+
+/// Encodes the pool re-cut into num_blocks blocks of block_bytes, one block at a time, so that at most one block is
+/// ever copied
 template<typename EncodingPolicyType, typename EncodedFieldType>
 void encode_string_pool_blocks(
         const ChunkedBuffer& pool, size_t block_bytes, size_t num_blocks,
@@ -226,6 +252,7 @@ void encode_string_pool_blocks(
 ) {
     using Encoder = TypedBlockEncoderImpl<TypedBlockData, ByteArrayTDT, EncodingPolicyType::version>;
     const auto total_bytes = pool.bytes();
+    // Every block is block_bytes long except the last
     std::vector<shape_t> shapes(num_blocks);
     for (size_t i = 0; i < num_blocks; ++i)
         shapes[i] = static_cast<shape_t>(std::min(block_bytes, total_bytes - i * block_bytes));
@@ -239,34 +266,9 @@ void encode_string_pool_blocks(
     }
 
     Buffer scratch(std::min(block_bytes, total_bytes));
-    const auto& pages = pool.blocks();
-    size_t page = 0;
-    size_t page_offset = 0;
-    const auto skip_exhausted_pages = [&] {
-        while (page_offset == pages[page]->physical_bytes()) {
-            ++page;
-            page_offset = 0;
-            util::check(page < pages.size(), "String pool pages hold fewer than {} bytes", total_bytes);
-        }
-    };
     for (size_t i = 0; i < num_blocks; ++i) {
         const auto size = static_cast<size_t>(shapes[i]);
-        skip_exhausted_pages();
-        const uint8_t* data = nullptr;
-        if (pages[page]->physical_bytes() - page_offset >= size) {
-            data = pages[page]->data() + page_offset;
-            page_offset += size;
-        } else {
-            size_t copied = 0;
-            while (copied < size) {
-                skip_exhausted_pages();
-                const auto n = std::min(size - copied, pages[page]->physical_bytes() - page_offset);
-                memcpy(scratch.data() + copied, pages[page]->data() + page_offset, n);
-                copied += n;
-                page_offset += n;
-            }
-            data = scratch.data();
-        }
+        const auto* data = string_pool_bytes_at(pool, i * block_bytes, size, scratch);
         const TypedBlockData<ByteArrayTDT> block{data, &shapes[i], size, 1u, nullptr};
         if constexpr (EncodingPolicyType::version == EncodingVersion::V1)
             Encoder::encode(codec_opts, block, encoded_field, out_buffer, pos);
@@ -275,9 +277,6 @@ void encode_string_pool_blocks(
     }
 }
 
-/// Test-only: called at the start of the string pool encode.
-inline void (*string_pool_encode_hook)() = nullptr;
-
 template<typename EncodingPolicyType>
 void encode_string_pool(
         const SegmentInMemory& in_mem_seg, SegmentHeader& segment_header,
@@ -285,19 +284,17 @@ void encode_string_pool(
         size_t block_bytes
 ) {
     if (in_mem_seg.has_string_pool()) {
-        if (string_pool_encode_hook)
-            string_pool_encode_hook();
         ARCTICDB_TRACE(log::codec(), "Encoding string pool to position {}", pos);
         const auto& pool = in_mem_seg.const_string_pool().data();
-        const auto num_blocks = string_pool_encoded_value_blocks(pool, block_bytes);
-        if (num_blocks == pool.num_blocks()) {
+        if (string_pool_keeps_pages(pool, block_bytes)) {
             auto col = in_mem_seg.string_pool_data();
             auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
             EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
         } else {
-            auto& encoded_field = segment_header.mutable_string_pool_field(
-                    EncodingPolicyType::version == EncodingVersion::V1 ? 2 * num_blocks : num_blocks + 1
-            );
+            const auto num_blocks = string_pool_block_count(pool, block_bytes);
+            auto& encoded_field =
+                    segment_header.mutable_string_pool_field(encoded_field_blocks<EncodingPolicyType>(num_blocks, true)
+                    );
             encode_string_pool_blocks<EncodingPolicyType>(
                     pool, block_bytes, num_blocks, codec_opts, encoded_field, out_buffer, pos
             );

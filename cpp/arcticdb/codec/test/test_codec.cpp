@@ -13,7 +13,6 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/random.h>
 #include <arcticdb/util/configs_map.hpp>
-#include <folly/ScopeGuard.h>
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
@@ -340,17 +339,36 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
 }
 
 namespace {
-SegmentInMemory segment_with_large_string_pool(size_t rows) {
+template<typename MakeString>
+SegmentInMemory segment_of_strings(size_t rows, MakeString&& make_string) {
     const auto stream_desc =
             stream_descriptor(StreamId{"pool"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "s")});
     SegmentInMemory seg{stream_desc.clone()};
     for (size_t i = 0; i < rows; ++i) {
-        // One string longer than a pool page, so the pool also holds an irregular page
-        seg.set_string(0, i == rows / 2 ? std::string(10'000, 'x') : fmt::format("value_{}_{}", i, i * 7919));
+        seg.set_string(0, make_string(i));
         seg.end_row();
     }
     return seg;
 }
+
+std::string short_string(size_t i) { return fmt::format("value_{}_{}", i, i * 7919); }
+
+std::string long_string(size_t i, size_t length) {
+    return fmt::format("{}{}", i, std::string(length, static_cast<char>('a' + i % 26)));
+}
+
+/// Short strings, with one string longer than a pool page so the pool also holds an irregular page
+SegmentInMemory segment_with_large_string_pool(size_t rows) {
+    return segment_of_strings(rows, [rows](size_t i) {
+        return i == rows / 2 ? std::string(10'000, 'x') : short_string(i);
+    });
+}
+
+constexpr size_t default_block_bytes = size_t{256} * 1024;
+
+size_t pool_blocks(const Segment& seg) { return static_cast<size_t>(seg.header().string_pool_field().values_size()); }
+
+size_t blocks_needed(size_t pool_bytes, size_t block_bytes) { return (pool_bytes + block_bytes - 1) / block_bytes; }
 
 void check_strings_round_trip(Segment& seg, const SegmentInMemory& expected, size_t rows) {
     std::vector<uint8_t> vec(seg.calculate_size());
@@ -373,8 +391,8 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolPagesAreCoalescedIntoLargerBlock
     auto copy = in_mem.clone();
     Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
 
+    ASSERT_EQ(pool_blocks(seg), blocks_needed(pool_bytes, block_bytes));
     const auto& pool_field = seg.header().string_pool_field();
-    ASSERT_EQ(pool_field.values_size(), (pool_bytes + block_bytes - 1) / block_bytes);
     size_t in_bytes = 0;
     for (int i = 0; i < pool_field.values_size(); ++i)
         in_bytes += pool_field.values(i).in_bytes();
@@ -388,85 +406,47 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesZeroKeepsPages) {
     auto in_mem = segment_with_large_string_pool(5'000);
     const auto pages = in_mem.const_string_pool().num_blocks();
     Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
-    ASSERT_EQ(static_cast<size_t>(seg.header().string_pool_field().values_size()), pages);
+    ASSERT_EQ(pool_blocks(seg), pages);
 }
 
 TYPED_TEST(SegmentStringEncodingTest, StringPoolDefaultBlockIs256KiB) {
     auto in_mem = segment_with_large_string_pool(50'000);
     const auto pool_bytes = in_mem.const_string_pool().data().bytes();
-    ASSERT_GT(pool_bytes, 512u * 1024);
+    ASSERT_GT(pool_bytes, 2 * default_block_bytes);
     Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
+    ASSERT_EQ(pool_blocks(seg), blocks_needed(pool_bytes, default_block_bytes));
     const auto& pool_field = seg.header().string_pool_field();
-    constexpr size_t block_bytes = size_t{256} * 1024;
-    ASSERT_EQ(static_cast<size_t>(pool_field.values_size()), (pool_bytes + block_bytes - 1) / block_bytes);
     for (int i = 0; i + 1 < pool_field.values_size(); ++i)
-        ASSERT_EQ(pool_field.values(i).in_bytes(), block_bytes);
+        ASSERT_EQ(pool_field.values(i).in_bytes(), default_block_bytes);
 }
 
-namespace {
-int64_t block_bytes_after_sizing = 0;
-
-void check_block_bytes_changed_mid_encode(EncodingVersion version, int64_t initial, int64_t changed) {
-    ScopedConfig config("Codec.StringPoolBlockBytes", initial);
-    block_bytes_after_sizing = changed;
-    string_pool_encode_hook = [] {
-        ConfigsMap::instance()->set_int("Codec.StringPoolBlockBytes", block_bytes_after_sizing);
-    };
-    const auto reset_hook = folly::makeGuard([] { string_pool_encode_hook = nullptr; });
-    constexpr size_t rows = 50'000;
-    auto in_mem = segment_with_large_string_pool(rows);
-    const auto pool_bytes = in_mem.const_string_pool().data().bytes();
-    auto copy = in_mem.clone();
-    Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), version);
-
-    const auto& pool_field = seg.header().string_pool_field();
-    const auto block_bytes = static_cast<size_t>(initial);
-    ASSERT_EQ(static_cast<size_t>(pool_field.values_size()), (pool_bytes + block_bytes - 1) / block_bytes);
-    check_strings_round_trip(seg, copy, rows);
-}
-} // namespace
-
-TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesRaisedMidEncodeUsesOneSnapshot) {
-    check_block_bytes_changed_mid_encode(TypeParam::value, 100'000, 400'000);
-}
-
-TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesLoweredMidEncodeUsesOneSnapshot) {
-    check_block_bytes_changed_mid_encode(TypeParam::value, 400'000, 100'000);
+TYPED_TEST(SegmentStringEncodingTest, StringPoolReCutRoundTripsUnderEveryCodec) {
+    // Passthrough leaves no compression slack in the output buffer, which is sized from the pages
+    arcticdb::proto::encoding::VariantCodec zstd;
+    zstd.mutable_zstd()->set_level(3);
+    for (const auto& codec_opts : {codec::default_lz4_codec(), zstd, codec::default_passthrough_codec()}) {
+        constexpr size_t rows = 50'000;
+        auto in_mem = segment_with_large_string_pool(rows);
+        const auto pool_bytes = in_mem.const_string_pool().data().bytes();
+        auto copy = in_mem.clone();
+        Segment seg = encode_dispatch(std::move(in_mem), codec_opts, TypeParam::value);
+        ASSERT_EQ(pool_blocks(seg), blocks_needed(pool_bytes, default_block_bytes));
+        check_strings_round_trip(seg, copy, rows);
+    }
 }
 
 TYPED_TEST(SegmentStringEncodingTest, StringPoolWithPagesLargerThanABlockKeepsPagesUnderPassthrough) {
-    const auto stream_desc =
-            stream_descriptor(StreamId{"pool"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "s")});
-    SegmentInMemory in_mem{stream_desc.clone()};
+    // One 1 MiB string among four rows: the pages average over 32 KiB, so they are kept
     constexpr size_t rows = 4;
-    for (size_t i = 0; i < rows; ++i) {
-        in_mem.set_string(0, i == 1 ? std::string(size_t{1} << 20, 'x') : fmt::format("value_{}", i));
-        in_mem.end_row();
-    }
+    auto in_mem = segment_of_strings(rows, [](size_t i) {
+        return i == 1 ? std::string(size_t{1} << 20, 'x') : fmt::format("value_{}", i);
+    });
     const auto pages = in_mem.const_string_pool().num_blocks();
     auto copy = in_mem.clone();
     Segment seg = encode_dispatch(std::move(in_mem), codec::default_passthrough_codec(), TypeParam::value);
-    ASSERT_EQ(static_cast<size_t>(seg.header().string_pool_field().values_size()), pages);
+    ASSERT_EQ(pool_blocks(seg), pages);
     check_strings_round_trip(seg, copy, rows);
 }
-
-namespace {
-template<typename MakeString>
-SegmentInMemory segment_of_strings(size_t rows, MakeString&& make_string) {
-    const auto stream_desc =
-            stream_descriptor(StreamId{"pool"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "s")});
-    SegmentInMemory seg{stream_desc.clone()};
-    for (size_t i = 0; i < rows; ++i) {
-        seg.set_string(0, make_string(i));
-        seg.end_row();
-    }
-    return seg;
-}
-
-std::string long_string(size_t i, size_t length) {
-    return fmt::format("{}{}", i, std::string(length, static_cast<char>('a' + i % 26)));
-}
-} // namespace
 
 TYPED_TEST(SegmentStringEncodingTest, StringPoolOfLongStringsKeepsPages) {
     // 40 KB strings take a page each, so pages average over 32 KiB
@@ -476,7 +456,7 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolOfLongStringsKeepsPages) {
     ASSERT_GE(pages, rows);
     auto copy = in_mem.clone();
     Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
-    ASSERT_EQ(static_cast<size_t>(seg.header().string_pool_field().values_size()), pages);
+    ASSERT_EQ(pool_blocks(seg), pages);
     check_strings_round_trip(seg, copy, rows);
 }
 
@@ -485,16 +465,12 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolMixingPagesAndPagesLargerThanABl
     // and others straddle pages
     constexpr size_t rows = 50'000;
     auto in_mem = segment_of_strings(rows, [](size_t i) {
-        return i % 20'000 == 7 ? long_string(i, 600'000) : fmt::format("value_{}_{}", i, i * 7919);
+        return i % 20'000 == 7 ? long_string(i, 600'000) : short_string(i);
     });
     const auto pool_bytes = in_mem.const_string_pool().data().bytes();
     auto copy = in_mem.clone();
     Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
-    constexpr size_t block_bytes = size_t{256} * 1024;
-    ASSERT_EQ(
-            static_cast<size_t>(seg.header().string_pool_field().values_size()),
-            (pool_bytes + block_bytes - 1) / block_bytes
-    );
+    ASSERT_EQ(pool_blocks(seg), blocks_needed(pool_bytes, default_block_bytes));
     check_strings_round_trip(seg, copy, rows);
 }
 
@@ -503,11 +479,8 @@ TYPED_TEST(SegmentStringEncodingTest, StringPoolBlockBytesBelowMinimumIsRaised) 
     auto in_mem = segment_with_large_string_pool(50'000);
     const auto pool_bytes = in_mem.const_string_pool().data().bytes();
     Segment seg = encode_dispatch(std::move(in_mem), codec::default_lz4_codec(), TypeParam::value);
-    constexpr size_t block_bytes = size_t{64} * 1024; // the minimum
-    ASSERT_EQ(
-            static_cast<size_t>(seg.header().string_pool_field().values_size()),
-            (pool_bytes + block_bytes - 1) / block_bytes
-    );
+    constexpr size_t min_block_bytes = size_t{64} * 1024;
+    ASSERT_EQ(pool_blocks(seg), blocks_needed(pool_bytes, min_block_bytes));
 }
 
 TEST(StringPoolBlockBytes, AboveMaximumIsCapped) {
