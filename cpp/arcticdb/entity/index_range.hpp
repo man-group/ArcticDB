@@ -125,6 +125,29 @@ struct IndexRange {
     bool empty() const { return inclusive_start() > inclusive_end(); }
 };
 
+// A segment's end_index is stored as its last index value + 1. When the last value is INT64_MAX this wraps to
+// INT64_MIN, which is never otherwise a valid end_index (INT64_MIN is NaT), so it means "ends at INT64_MAX inclusive".
+constexpr timestamp end_index_from_last_index_value(timestamp last) {
+    return static_cast<timestamp>(static_cast<uint64_t>(last) + 1);
+}
+
+constexpr bool is_end_index_wrapped(timestamp end_index) { return end_index == std::numeric_limits<timestamp>::min(); }
+
+constexpr timestamp last_index_value_from_end_index(timestamp end_index) {
+    return is_end_index_wrapped(end_index) ? std::numeric_limits<timestamp>::max() : end_index - 1;
+}
+
+// The end-exclusive range covered by a segment, which is end-inclusive at INT64_MAX if its end_index wrapped
+inline IndexRange segment_index_range(IndexValue start_index, IndexValue end_index) {
+    IndexRange range{std::move(start_index), std::move(end_index)};
+    range.end_closed_ = false;
+    if (std::holds_alternative<NumericIndex>(range.end_) && is_end_index_wrapped(std::get<NumericIndex>(range.end_))) {
+        range.end_ = std::numeric_limits<timestamp>::max();
+        range.end_closed_ = true;
+    }
+    return range;
+}
+
 inline IndexRange unspecified_range() { return {}; }
 
 inline IndexRange universal_range() {
