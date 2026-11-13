@@ -139,11 +139,12 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
     if (!stats_lhs.min) {
         return StatsComparison::UNKNOWN;
     }
+    const Value resolved_rhs = val_rhs.resolved_against(stats_lhs.min->data_type());
 
     auto result = details::visit_type(stats_lhs.min->data_type(), [&](auto stats_tag) -> StatsComparison {
         using StatsTag = std::remove_reference_t<decltype(stats_tag)>;
 
-        return details::visit_type(val_rhs.data_type(), [&](auto val_tag) -> StatsComparison {
+        return details::visit_type(resolved_rhs.data_type(), [&](auto val_tag) -> StatsComparison {
             using ValTag = std::remove_reference_t<decltype(val_tag)>;
 
             // Monday: 8065794446 we should disallow comparing time types to non-time numeric types
@@ -155,14 +156,14 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
             // Mixed bool/non-bool comparisons are rejected at runtime by check_no_mixed_bool_comparison.
             // MSVC C4804 treats `numeric > bool` as an error.
             constexpr bool bool_compatible = is_bool_type(StatsTag::data_type) == is_bool_type(ValTag::data_type);
-            check_no_mixed_bool_comparison<StatsTag::data_type, ValTag::data_type>(*stats_lhs.min, val_rhs);
+            check_no_mixed_bool_comparison<StatsTag::data_type, ValTag::data_type>(*stats_lhs.min, resolved_rhs);
             if constexpr (stats_supported && val_supported && bool_compatible) {
                 using StatsRawType = StatsTag::raw_type;
                 using ValRawType = ValTag::raw_type;
                 using comp = Comparable<StatsRawType, ValRawType>;
                 auto min_val = static_cast<comp::left_type>(stats_lhs.min->get<StatsRawType>());
                 auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
-                auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
+                auto query_value = static_cast<comp::right_type>(resolved_rhs.get<ValRawType>());
                 if constexpr (is_time_type(StatsTag::data_type)) {
                     using F = std::remove_reference_t<Func>;
                     constexpr auto nat_result = std::is_same_v<F, NotEqualsOperator> ? StatsComparison::ALL_MATCH

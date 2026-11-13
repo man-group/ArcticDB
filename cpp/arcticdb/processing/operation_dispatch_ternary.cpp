@@ -570,11 +570,11 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                         return transform_to_placeholder(result);
                     },
                     [&c](const ColumnWithStrings& l, const std::shared_ptr<Value>& r) -> VariantData {
-                        auto result = ternary_operator(c, l, *r);
+                        auto result = ternary_operator(c, l, r->resolved_against(l.column_->type().data_type()));
                         return transform_to_placeholder(result);
                     },
                     [&c](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) -> VariantData {
-                        auto result = ternary_operator<true>(c, r, *l);
+                        auto result = ternary_operator<true>(c, r, l->resolved_against(r.column_->type().data_type()));
                         return transform_to_placeholder(result);
                     },
                     [&c](const ColumnWithStrings& l, FullResult) -> VariantData {
@@ -614,7 +614,9 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                         return transform_to_placeholder(result);
                     },
                     [&c](const std::shared_ptr<Value>& l, const std::shared_ptr<Value>& r) -> VariantData {
-                        auto result = ternary_operator(c, *l, *r);
+                        auto result = ternary_operator(
+                                c, l->resolved_against(r->data_type()), r->resolved_against(l->data_type())
+                        );
                         return transform_to_placeholder(result);
                     },
                     [&c](const std::shared_ptr<Value>& l, FullResult) -> VariantData {

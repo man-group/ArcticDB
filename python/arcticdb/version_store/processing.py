@@ -53,6 +53,7 @@ from arcticdb_ext.version_store import (
     ValueInt64,
     ValueFloat32,
     ValueFloat64,
+    ValuePythonFloat,
     ValueTimestamp,
 )
 from arcticdb_ext.version_store import ExpressionNode as _ExpressionNode
@@ -1347,6 +1348,9 @@ def create_value(value):
         f = ValueInt64
     elif isinstance(value, bool):
         f = ValueBool
+    elif isinstance(value, float):
+        # Weakly typed like NumPy's NEP 50: float64, but compared at float32 precision against float32 columns
+        f = ValuePythonFloat
     else:
         f = _Value
     return f(value)

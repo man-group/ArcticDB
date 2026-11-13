@@ -146,3 +146,59 @@ TEST(OperationDispatch, binary_membership) {
     ASSERT_TRUE(std::holds_alternative<FullResult>(visit_binary_membership(empty_column, value_set, IsNotInOperator{}))
     );
 }
+namespace {
+template<typename T>
+arcticdb::ColumnWithStrings float_column(std::initializer_list<T> values) {
+    using namespace arcticdb;
+    auto column = std::make_unique<Column>(
+            make_scalar_type(data_type_from_raw_type<T>()), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED
+    );
+    ssize_t row = 0;
+    for (auto value : values) {
+        column->template set_scalar<T>(row++, value);
+    }
+    return {std::move(column), "float_col"};
+}
+
+std::vector<bool> to_bools(const arcticdb::VariantData& data, size_t num_rows) {
+    using namespace arcticdb;
+    std::vector<bool> res(num_rows, false);
+    if (std::holds_alternative<FullResult>(data)) {
+        res.assign(num_rows, true);
+    } else if (std::holds_alternative<util::BitSet>(data)) {
+        const auto& bitset = std::get<util::BitSet>(data);
+        for (size_t idx = 0; idx < num_rows; ++idx) {
+            res[idx] = bitset.get_bit(idx);
+        }
+    }
+    return res;
+}
+} // namespace
+
+TEST(OperationDispatch, python_float_literal_compared_at_float64_precision_against_float64_column) {
+    using namespace arcticdb;
+    auto column = float_column<double>({0.05, 0.07, 0.04, 0.05});
+    auto literal = std::make_shared<Value>(construct_python_float_value(0.05));
+    ASSERT_EQ(
+            to_bools(visit_binary_comparator(column, literal, EqualsOperator{}), 4),
+            (std::vector{true, false, false, true})
+    );
+    ASSERT_EQ(
+            to_bools(visit_binary_comparator(literal, column, LessThanEqualsOperator{}), 4),
+            (std::vector{true, true, false, true})
+    );
+}
+
+TEST(OperationDispatch, python_float_literal_compared_at_float32_precision_against_float32_column) {
+    using namespace arcticdb;
+    auto column = float_column<float>({0.05f, 0.07f, 0.04f, 0.05f});
+    auto literal = std::make_shared<Value>(construct_python_float_value(0.05));
+    ASSERT_EQ(
+            to_bools(visit_binary_comparator(column, literal, EqualsOperator{}), 4),
+            (std::vector{true, false, false, true})
+    );
+    ASSERT_EQ(
+            to_bools(visit_binary_comparator(column, literal, LessThanEqualsOperator{}), 4),
+            (std::vector{true, false, true, true})
+    );
+}
