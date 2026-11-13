@@ -1069,7 +1069,8 @@ def test_sparse_arrow_sort_and_finalize_staged_data(arrow_library, values, mask)
         assert_frame_equal(received, expected)
 
 
-# Longer than two BitMagic blocks (65,536 rows each)
+BITMAGIC_BLOCK_ROWS = 65_536
+# Longer than two BitMagic blocks
 MANY_ROWS = 150_003
 # Shorter than MANY_ROWS, so the read spans two segments
 MANY_ROWS_SEGMENT_SIZE = 140_000
@@ -1082,10 +1083,10 @@ NULL_RUN = slice(80_000, 100_000)
     "row_range",
     [
         None,
-        (1, 150_000),  # Starts after the first row, ends before the last, spans both segments
-        (63, 65_601),  # Spans the first block boundary, unaligned to words
+        (1, MANY_ROWS - 3),  # Starts after the first row, ends before the last, spans both segments
+        (63, BITMAGIC_BLOCK_ROWS + 65),  # Spans the first block boundary, unaligned to words
         (70_000, 70_001),  # One row
-        (149_003, 150_003),  # The tail, in the second segment
+        (MANY_ROWS - 1_000, MANY_ROWS),  # The tail, in the second segment
     ],
 )
 def test_sparse_arrow_many_rows(

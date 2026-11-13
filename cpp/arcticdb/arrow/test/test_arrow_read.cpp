@@ -280,17 +280,19 @@ TEST_P(ArrowStringColumnRead, Basic) {
 }
 
 namespace {
-constexpr size_t bitmagic_block_bits = 65'536;
+constexpr size_t bitmagic_block_bits = bm::gap_max_bits;
 // Every this-many-th stored value is None rather than a string
 constexpr size_t none_every = 37;
 // Rows read back as "s<row % distinct_strings>", so the dictionary has repeats
 constexpr size_t distinct_strings = 211;
 constexpr size_t max_run_length = 5'000;
 
-// Decides row by row whether each row is stored, with probability `density`: independently (giving BitMagic bit
-// blocks), or in runs of up to max_run_length rows (giving GAP and full blocks)
+// Decides row by row whether each row is stored, with probability `density`: independently (mostly BitMagic bit blocks
+// at mid densities), or in runs of up to max_run_length rows (GAP and full blocks)
 class StoredRowPattern {
   public:
+    // Draws the first run even when !runs, as the original generator did, so the same seed gives the same columns.
+    // The draws in the initialiser list rely on stored_ and run_length_ being declared first
     StoredRowPattern(double density, bool runs, std::mt19937& rng) :
         stored_(density),
         run_length_(1, max_run_length),

@@ -43,14 +43,14 @@ RC_GTEST_PROP(BitSet, PackedBitsToBuffer, (const std::vector<bool>& input)) {
 }
 
 namespace {
-constexpr size_t bitmagic_block_bits = 65'536;
+constexpr size_t bitmagic_block_bits = bm::gap_max_bits;
 
 // A bitset of num_bits bits built from runs of set and clear bits, of random density and run length, so that
 // optimize() leaves a mix of bit, GAP, full and empty BitMagic blocks
 arcticdb::util::BitSet random_run_bitset(size_t num_bits, bool optimize) {
     using namespace arcticdb;
     const auto density = *rc::gen::element(0.0, 0.01, 0.5, 0.95, 0.999, 1.0);
-    // Runs of 1 give bit blocks, runs longer than a block give full and empty ones
+    // Runs of 1 give mostly bit blocks at mid densities, runs longer than a block give full and empty ones
     const auto max_run = *rc::gen::element(size_t(1), size_t(64), size_t(70'000));
     util::BitSet bitset(bv_size(num_bits));
     size_t pos = 0;

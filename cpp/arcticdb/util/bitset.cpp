@@ -42,8 +42,9 @@ void gap_block_to_packed_bits(const bm::gap_word_t* gap_block, uint8_t* dest, si
     bool run_is_set = (gap_block[0] & 1) != 0;
     size_t run_first = 0;
     const unsigned gap_length = bm::gap_length(gap_block);
-    for (unsigned run = 1; run < gap_length && run_first < dest_bits; ++run) {
-        const size_t run_last = gap_block[run];
+    // The last run always ends at the block's last bit, gap_max_bits - 1
+    for (unsigned run_end_index = 1; run_end_index < gap_length && run_first < dest_bits; ++run_end_index) {
+        const size_t run_last = gap_block[run_end_index];
         if (run_is_set)
             set_packed_bit_range(dest, run_first, std::min(run_last, dest_bits - 1));
         run_is_set = !run_is_set;

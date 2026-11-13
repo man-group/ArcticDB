@@ -119,11 +119,11 @@ util::BitSet append_stored_values(
     util::BitSet not_strings;
     util::BitSet::bulk_insert_iterator not_strings_inserter(not_strings);
     const auto data = column.data();
-    auto value = data.citerator_at<TDT>(first_value_index);
+    auto value_it = data.citerator_at<TDT>(first_value_index);
     iterate_over_set_positions(column.sparse_map(), first_row, end_row, [&](size_t row) {
-        if (!append(static_cast<ssize_t>(row), *value))
+        if (!append(static_cast<ssize_t>(row), *value_it))
             not_strings_inserter = util::BitSetSizeType(row);
-        ++value;
+        ++value_it;
     });
     not_strings_inserter.flush();
     return not_strings;
@@ -134,18 +134,20 @@ util::BitSet append_stored_values(
 template<typename TDT, typename F>
 util::BitSet append_sparse_strings(const Column& column, size_t first_row, size_t end_row, F append) {
     const auto& sparse_map = column.sparse_map();
-    if (first_row >= end_row ||
-        !sparse_map.any_range(util::BitSetSizeType(first_row), util::BitSetSizeType(end_row - 1)))
+    if (first_row >= end_row)
+        return util::BitSet{};
+    const auto first_bit = util::BitSetSizeType(first_row);
+    const auto last_bit = util::BitSetSizeType(end_row - 1);
+    if (!sparse_map.any_range(first_bit, last_bit))
         return util::BitSet{};
     util::BitSet validity = stored_rows_in_range(sparse_map, first_row, end_row);
     const size_t first_value_index = count_stored_rows_before(sparse_map, first_row);
-    // Release builds do not bounds-check the value iterator, so a corrupt map must be rejected before the walk
+    // Release builds do not bounds-check the value iterator, so a corrupt map must be rejected before the walk. Only
+    // the range is counted, as those are the values the walk reads, and a whole-map popcount costs ~2 us per read
+    const size_t stored_in_range = sparse_map.count_range(first_bit, last_bit);
     const auto value_count = static_cast<size_t>(column.row_count());
     util::check(
-            first_value_index + sparse_map.count_range(
-                                        util::BitSetSizeType(first_row), util::BitSetSizeType(end_row - 1)
-                                ) <=
-                    value_count,
+            first_value_index + stored_in_range <= value_count,
             "Sparse map has more set bits than the column's {} values",
             value_count
     );
@@ -230,6 +232,8 @@ void encode_variable_length(
                             strings.emplace_back(strv);
                             return true;
                         };
+                        // A sparse column gets its validity, a dense one the rows that are not strings, which the
+                        // populate_inverted_bitset step below inverts (`inserter` is only used by fixed-width strings)
                         dest_bitset = append_dynamic_strings<typename source_type_info::TDT>(
                                 source_column, positions, mapping.num_rows_, append_string
                         );
@@ -381,6 +385,8 @@ void encode_dictionary(
                             dest_ptr[row] = dictionary_key_of(offset);
                             return true;
                         };
+                        // A sparse column gets its validity, a dense one the rows that are not strings, which the
+                        // populate_inverted_bitset step below inverts (`inserter` is only used by fixed-width strings)
                         dest_bitset = append_dynamic_strings<typename source_type_info::TDT>(
                                 source_column, positions, mapping.num_rows_, append_key
                         );
