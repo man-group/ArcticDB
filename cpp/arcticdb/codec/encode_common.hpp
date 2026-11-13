@@ -235,6 +235,23 @@ inline size_t string_pool_block_count(const ChunkedBuffer& pool, size_t block_by
     return string_pool_keeps_pages(pool, block_bytes) ? pool.num_blocks() : string_pool_recut_blocks(pool, block_bytes);
 }
 
+/// This thread's buffer for gathering string pool blocks, at least `bytes` long. It is reused across encodes because
+/// allocating and freeing a block-sized buffer per segment changes glibc's mmap and trim thresholds, so the next
+/// segment's string pool pages are faulted in afresh.
+inline std::vector<uint8_t>& string_pool_scratch(size_t bytes) {
+    thread_local std::vector<uint8_t> scratch;
+    if (scratch.size() < bytes)
+        scratch.resize(bytes);
+    return scratch;
+}
+
+/// Frees this thread's buffer when a large configured block size grew it past what is worth keeping
+inline void release_large_string_pool_scratch() {
+    constexpr size_t max_retained_bytes = size_t{1} << 20;
+    if (auto& scratch = string_pool_scratch(0); scratch.size() > max_retained_bytes)
+        std::vector<uint8_t>().swap(scratch);
+}
+
 /// The pool's bytes [offset, offset + size): read in place when they lie inside one page, else gathered into scratch
 inline const uint8_t* string_pool_bytes_at(
         const ChunkedBuffer& pool, size_t offset, size_t size, std::vector<uint8_t>& scratch
@@ -280,15 +297,8 @@ void encode_string_pool_blocks(
         ShapesEncoder::encode_shapes(codec::default_shapes_codec(), shapes_block, encoded_field, out_buffer, pos);
     }
 
-    // Reused across encodes on this thread: allocating and freeing a block-sized buffer per segment changes glibc's
-    // mmap and trim thresholds, so the next segment's string pool pages are faulted in afresh
-    thread_local std::vector<uint8_t> scratch;
-    constexpr size_t max_retained_scratch_bytes = size_t{1} << 20;
-    scratch.resize(std::max(scratch.size(), std::min(block_bytes, total_bytes)));
-    const auto release_large_scratch = folly::makeGuard([] {
-        if (scratch.size() > max_retained_scratch_bytes)
-            std::vector<uint8_t>().swap(scratch);
-    });
+    auto& scratch = string_pool_scratch(std::min(block_bytes, total_bytes));
+    const auto release_scratch = folly::makeGuard(release_large_string_pool_scratch);
     for (size_t i = 0; i < num_blocks; ++i) {
         const auto size = static_cast<size_t>(shapes[i]);
         const auto* data = string_pool_bytes_at(pool, i * block_bytes, size, scratch);
