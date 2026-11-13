@@ -339,12 +339,20 @@ TEST_F(S3StorageFixture, test_async_read_missing_key_in_exception) {
         ASSERT_EQ(keys.size(), 1);
         ASSERT_EQ(variant_key_id(keys.at(0)), StreamId{"snap-not-present"});
     }
+}
+
+TEST_F(S3StorageFixture, test_async_read_unexpected_error) {
     auto throttled = S3ClientTestWrapper::get_failure_trigger(
             "symbol", StorageOperation::READ, Aws::S3::S3Errors::THROTTLING, false
     );
-    ASSERT_THROW(
-            store.async_api()->async_read(get_test_key(throttled), ReadKeyOpts{}).get(), UnexpectedS3ErrorException
-    );
+    auto key = get_test_key(throttled);
+    auto object_path = store.key_path(key);
+    try {
+        store.async_api()->async_read(std::move(key), ReadKeyOpts{}).get();
+        FAIL();
+    } catch (UnexpectedS3ErrorException& e) {
+        ASSERT_NE(std::string(e.what()).find(fmt::format("for object '{}'", object_path)), std::string::npos);
+    }
 }
 
 TEST_P(S3AndNfsStorageFixture, test_read_missing_key_in_exception) {
