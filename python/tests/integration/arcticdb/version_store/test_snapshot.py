@@ -13,10 +13,13 @@ import random
 import re
 
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
-from arcticdb.exceptions import UserInputException, ArcticNativeException
-from arcticdb_ext.exceptions import InternalException
-from arcticdb_ext.version_store import NoSuchVersionException
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb.exceptions import (
+    UserInputException,
+    ArcticNativeException,
+    InternalException,
+    NoSuchVersionException,
+    NoDataFoundException,
+)
 from arcticdb.util.test import distinct_timestamps
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -224,6 +227,20 @@ def test_read_after_delete_with_snap(basic_store):
 
     with pytest.raises(Exception):
         basic_store.read("random")
+
+
+@pytest.mark.xfail(reason="Deleting a version loses data shared with a non-adjacent snapshotted version (13461808558)")
+def test_delete_keeps_data_shared_with_non_adjacent_snapshotted_version(lmdb_version_store_tombstone):
+    lib = lmdb_version_store_tombstone
+    lib.write("sym", pd.DataFrame({"x": [0, 1, 2]}))
+    lib.write("sym", pd.DataFrame({"x": [3, 4]}))
+    lib.snapshot("a")
+    lib.delete_version("sym", 1)
+    lib.append("sym", pd.DataFrame({"x": [3, 4]}))  # Shares v0's data key
+    lib.snapshot("b")
+    lib.delete_version("sym", 2)
+    lib.delete_version("sym", 0)
+    assert_frame_equal(lib.read("sym", as_of="b").data, pd.DataFrame({"x": [0, 1, 2, 3, 4]}))
 
 
 @pytest.mark.storage

@@ -25,7 +25,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install test dependencies
-        run: pip install pytest
+        run: pip install pytest markdown pymdown-extensions
 
       - name: Run tests
         working-directory: .github/scripts

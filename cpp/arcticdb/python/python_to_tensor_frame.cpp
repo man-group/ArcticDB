@@ -252,7 +252,7 @@ static std::pair<Column, std::vector<sparrow::record_batch>> record_batches_to_s
     for (const auto& rbd : chunks) {
         owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
     }
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    proto::descriptors::NormalizationMetadata::Arrow arrow_meta;
     auto cols = record_batches_to_columns(owners, arrow_meta).first;
     util::check(cols.size() == 1, "Expected exactly one Arrow column for '{}', got {}", column_name, cols.size());
     return {std::move(cols[0]), std::move(owners)};
@@ -404,10 +404,8 @@ void record_batches_to_frame(
         const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, InputFrame& frame,
         pipelines::SortednessScan sortedness_scan
 ) {
-    util::check(
-            frame.norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data"
-    );
-    auto& arrow_norm_metadata = *frame.norm_meta.mutable_experimental_arrow();
+    util::check(frame.norm_meta.has_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
+    auto& arrow_norm_metadata = *frame.norm_meta.mutable_arrow();
     // Move the ArrowArray/ArrowSchema out of each RecordBatchData into owning sparrow record_batches.
     // sparrow::record_batch(ArrowArray&&, ArrowSchema&&) takes ownership and will decref the arrow buffers on
     // destruction.

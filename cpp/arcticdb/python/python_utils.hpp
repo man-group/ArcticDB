@@ -92,12 +92,10 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
 
 enum class IncrementRefCount { ON, OFF };
 
-void prefill_with_none(
-        PyObject** ptr_dest, size_t num_rows, size_t sparse_count, PythonHandlerData& python_handler_data,
-        IncrementRefCount inc_ref_count = IncrementRefCount::ON
+PyObject** fill_with_none_or_nan(
+        PyObject** ptr_dest, size_t num_rows, PythonHandlerData& handler_data, PandasMissingValue value,
+        IncrementRefCount inc_ref_count = IncrementRefCount::ON, size_t sparse_count = 0
 );
-
-PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& handler_data);
 
 template<typename Msg>
 py::object pb_to_python(const Msg& out) {

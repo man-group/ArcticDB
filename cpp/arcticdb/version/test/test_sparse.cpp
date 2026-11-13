@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "util/constants.hpp"
 #include <gtest/gtest.h>
 
 #include <arcticdb/stream/index.hpp>
@@ -15,7 +16,13 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/python/python_strings.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
 
@@ -23,6 +30,147 @@ struct SparseTestStore : arcticdb::TestStore {
   protected:
     std::string get_name() override { return "test.sparse"; }
 };
+
+TEST(ReadOptions, PandasNoneValueForType) {
+    using namespace arcticdb;
+
+    ReadOptions options;
+    const auto utf = make_scalar_type(DataType::UTF_DYNAMIC64);
+    const auto ascii = make_scalar_type(DataType::ASCII_DYNAMIC64);
+    const auto empty = make_scalar_type(DataType::EMPTYVAL);
+    const auto fixed_utf = make_scalar_type(DataType::UTF_FIXED64);
+    EXPECT_EQ(options.pandas_none_value_for_type(utf), PandasMissingValue::None);
+    options.set_output_config(PandasOutputConfig{PandasStringFormat::OBJECT_WITH_NANS_ONLY});
+    const ReadOptions& const_options = options;
+    EXPECT_EQ(const_options.pandas_none_value_for_type(utf), PandasMissingValue::NaN);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(ascii), PandasMissingValue::None);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(empty), PandasMissingValue::None);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(fixed_utf), PandasMissingValue::None);
+
+    options.set_output_config(PandasOutputConfig{PandasStringFormat::ARROW_LARGE_STRING});
+    EXPECT_EQ(const_options.pandas_none_value_for_type(utf), PandasMissingValue::None);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(ascii), PandasMissingValue::None);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(empty), PandasMissingValue::None);
+
+    options.set_output_config(ArrowOutputConfig{});
+    EXPECT_THROW(static_cast<void>(const_options.pandas_none_value_for_type(utf)), InternalException);
+}
+
+TEST(PythonEmptyHandler, ConvertTypeRespectsDestinationType) {
+    using namespace arcticdb;
+
+    auto check = [](DataType dest_type, PandasStringFormat format, bool expect_nan) {
+        const auto source_desc = make_scalar_type(DataType::EMPTYVAL);
+        const auto dest_desc = make_scalar_type(dest_type);
+        const entity::FieldWrapper field(dest_desc, "column");
+        const ColumnMapping mapping(
+                source_desc, dest_desc, field.field(), sizeof(PyObject*), 1, 0, 0, sizeof(PyObject*), 0
+        );
+        Column source(source_desc);
+        Column dest(dest_desc);
+        dest.allocate_and_advance_by(sizeof(PyObject*));
+        ReadOptions options;
+        options.set_output_config(PandasOutputConfig{format});
+        std::any handler_data{PythonHandlerData{}};
+
+        PythonEmptyHandler{}.convert_type(
+                source, dest, mapping, DecodePathData{}, handler_data, std::make_shared<StringPool>(), options
+        );
+
+        const auto actual = *reinterpret_cast<PyObject**>(dest.bytes_at(0, sizeof(PyObject*)));
+        const auto expected =
+                expect_nan ? std::any_cast<PythonHandlerData&>(handler_data).non_owning_nan_handle() : Py_None;
+        EXPECT_EQ(actual, expected);
+    };
+
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, true);
+    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::EMPTYVAL, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::BOOL_OBJECT8, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT, false);
+}
+
+TEST(PythonEmptyHandler, DefaultInitializeKeepsEmptyAsNone) {
+    using namespace arcticdb;
+
+    ReadOptions options;
+    options.set_output_config(PandasOutputConfig{PandasStringFormat::OBJECT_WITH_NANS_ONLY});
+    std::any handler_data{PythonHandlerData{}};
+    ChunkedBuffer buffer = ChunkedBuffer::presized(sizeof(PyObject*));
+
+    PythonEmptyHandler{}.default_initialize(buffer, 0, sizeof(PyObject*), DecodePathData{}, handler_data, options);
+
+    EXPECT_EQ(*buffer.ptr_cast<PyObject*>(0, sizeof(PyObject*)), Py_None);
+}
+
+TEST(PythonHandlerData, GetMissingValue) {
+    using namespace arcticdb;
+
+    PythonHandlerData handler_data;
+    EXPECT_EQ(handler_data.get_missing_value(PandasMissingValue::None), Py_None);
+    EXPECT_EQ(handler_data.get_missing_value(PandasMissingValue::NaN), handler_data.non_owning_nan_handle());
+}
+
+TEST(PythonStringHandler, DefaultInitializeRespectsStringType) {
+    using namespace arcticdb;
+
+    register_python_string_types();
+
+    auto check = [](DataType type, PandasStringFormat format, bool expect_nan) {
+        auto handler = get_type_handler(OutputFormat::PANDAS, make_scalar_type(type));
+        ASSERT_NE(handler, nullptr);
+
+        ReadOptions options;
+        options.set_output_config(PandasOutputConfig{format});
+        std::any handler_data{PythonHandlerData{}};
+        ChunkedBuffer buffer = ChunkedBuffer::presized(sizeof(PyObject*));
+        handler->default_initialize(buffer, 0, sizeof(PyObject*), DecodePathData{}, handler_data, options);
+
+        auto actual = *buffer.ptr_cast<PyObject*>(0, sizeof(PyObject*));
+        auto expected = expect_nan ? std::any_cast<PythonHandlerData&>(handler_data).non_owning_nan_handle() : Py_None;
+        EXPECT_EQ(actual, expected);
+    };
+
+    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, true);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT, false);
+}
+
+TEST(PythonStringHandler, PresentNullRespectsStringFormatAndEncoding) {
+    using namespace arcticdb;
+
+    StringPool string_pool;
+    DecodePathData shared_data;
+
+    auto check = [&](DataType type, PandasStringFormat format, bool expect_nan) {
+        const auto descriptor = make_scalar_type(type);
+        const entity::FieldWrapper field(descriptor, "string");
+        const ColumnMapping mapping(
+                descriptor, descriptor, field.field(), sizeof(PyObject*), 1, 0, 0, sizeof(PyObject*), 0
+        );
+        Column source(descriptor);
+        source.set_scalar(0, string_none);
+        PythonHandlerData handler_data;
+        PyObject* output = nullptr;
+
+        ReadOptions options;
+        options.set_output_config(PandasOutputConfig{format});
+        write_python_dynamic_strings_to_dest(
+                &output,
+                source,
+                mapping,
+                string_pool,
+                shared_data,
+                handler_data,
+                options.pandas_none_value_for_type(descriptor)
+        );
+        EXPECT_EQ(output, expect_nan ? handler_data.non_owning_nan_handle() : Py_None);
+    };
+
+    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, true);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT, false);
+}
 
 TEST(Sparse, Simple) {
     using namespace arcticdb;

@@ -1,0 +1,58 @@
+diff --git a/src/aws-cpp-sdk-core/include/aws/core/client/RetryStrategy.h b/src/aws-cpp-sdk-core/include/aws/core/client/RetryStrategy.h
+index 8f9260c..93b1801 100644
+--- a/src/aws-cpp-sdk-core/include/aws/core/client/RetryStrategy.h
++++ b/src/aws-cpp-sdk-core/include/aws/core/client/RetryStrategy.h
+@@ -38,49 +38,53 @@ namespace Aws
+         class AWS_CORE_API RetryStrategy
+         {
+         public:
+             virtual ~RetryStrategy() = default;
+             /**
+              * Returns true if the error can be retried given the error and the number of times already tried.
+              */
+             virtual bool ShouldRetry(const AWSError<CoreErrors>& error, long attemptedRetries) const = 0;
+ 
+             /**
+              * Calculates the time in milliseconds the client should sleep before attempting another request based on the error and attemptedRetries count.
+              */
+             virtual long CalculateDelayBeforeNextRetry(const AWSError<CoreErrors>& error, long attemptedRetries) const = 0;
+ 
+             /**
+              * Gets max number of attempts allowed for an operation.
+              * Returns non positive value if not defined.
+              */
+             virtual long GetMaxAttempts() const { return 0; }
+ 
+             /**
+              * Retrieves send tokens from the bucket. Throws an exception if not available.
+              */
+             virtual void GetSendToken() {}
+ 
+             /**
+              * Retrieves send tokens from the bucket. Returns true is send token is retrieved.
+              */
+             virtual bool HasSendToken()
+             {
+                 GetSendToken();  // first call old method for backward compatibility
+                 return true;
+             }
+ 
+             /**
+              * Update status, like the information of retry quota when receiving a response.
+              */
+             virtual void RequestBookkeeping(const HttpResponseOutcome& /* httpResponseOutcome */) {}
+             virtual void RequestBookkeeping(const HttpResponseOutcome& /* httpResponseOutcome */, const AWSError<CoreErrors>& /* lastError */) {}
+ 
+             /**
+              * Get return strategy name.
+              */
+             virtual const char* GetStrategyName() const
+             {
+                 // SDK provided strategies will provide actual name
+                 return "custom";
+             }
++
++            // ArcticDB patch: no-op. Its context is this whole class, so it stops applying when an SDK upgrade changes
++            // the interface. ChecksumMismatchRetryStrategy in arcticdb/storage/s3 forwards every virtual here: update it,
++            // then regenerate this patch.
+         };

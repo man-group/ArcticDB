@@ -13,6 +13,14 @@
 
 namespace arcticdb::util {
 
+namespace detail {
+template<typename>
+struct is_pair : std::false_type {};
+
+template<typename T1, typename T2>
+struct is_pair<std::pair<T1, T2>> : std::true_type {};
+} // namespace detail
+
 template<template<typename...> class TT, typename T>
 struct is_instantiation_of : std::false_type {};
 
@@ -30,6 +38,12 @@ concept any_of = std::disjunction_v<std::is_same<T, U>...>;
 
 template<typename T>
 concept type_descriptor_tag = instantiation_of<T, entity::TypeDescriptorTag>;
+
+template<typename T>
+concept scalar_type_descriptor_tag = type_descriptor_tag<T> && T::dimension() == entity::Dimension::Dim0;
+
+template<typename TDT>
+concept scalar_sequence_type = scalar_type_descriptor_tag<TDT> && is_sequence_type(TDT::data_type());
 
 template<typename T>
 struct function_arg_types : function_arg_types<decltype(&std::decay_t<T>::operator())> {};
@@ -53,5 +67,8 @@ struct function_arg_types<ReturnType (ClassType::*)(Args...) const> {
     using args_t = std::tuple<Args...>;
     using return_t = ReturnType;
 };
+
+template<typename T>
+concept is_pair = detail::is_pair<T>::value;
 
 } // namespace arcticdb::util

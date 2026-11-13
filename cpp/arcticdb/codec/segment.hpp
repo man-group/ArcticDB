@@ -193,6 +193,8 @@ class Segment {
         return {std::move(header), std::move(buffer), std::move(data), std::move(fields), std::move(stream_id)};
     }
 
+    void set_fields(FieldCollection&& fields);
+
   private:
     Segment(SegmentHeader&& header, std::shared_ptr<Buffer> buffer, std::shared_ptr<SegmentDescriptorImpl> data,
             std::shared_ptr<FieldCollection> fields, StreamId stream_id) :

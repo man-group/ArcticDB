@@ -8,7 +8,9 @@
 
 #pragma once
 
-#include <arcticdb/util/decode_path_data.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 
 namespace arcticdb {
 

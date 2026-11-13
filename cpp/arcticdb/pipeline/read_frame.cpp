@@ -861,13 +861,14 @@ class NullValueReducer {
     DecodePathData shared_data_;
     std::shared_ptr<std::any> handler_data_;
     const OutputFormat output_format_;
+    ReadOptions read_options_;
     std::optional<Value> default_value_;
 
   public:
     NullValueReducer(
             Column& column, std::shared_ptr<PipelineContext>& context, SegmentInMemory frame,
             DecodePathData shared_data, std::shared_ptr<std::any> handler_data, OutputFormat output_format,
-            std::optional<Value> default_value = {}
+            std::optional<Value> default_value = {}, const ReadOptions& read_options = {}
     ) :
         column_(column),
         type_bytes_(column_.type().get_type_bytes()),
@@ -877,6 +878,7 @@ class NullValueReducer {
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
         output_format_(output_format),
+        read_options_(read_options),
         default_value_(default_value) {
         if (column_.data().buffer().allocation_type() != AllocationType::DETACHABLE) {
             // Non-detachable buffers are never truncated, so we can just set the first and last positions to the frame
@@ -928,7 +930,12 @@ class NullValueReducer {
                 handler) {
                 auto type_size = data_type_size(column_.type());
                 handler->default_initialize(
-                        column_.buffer(), start_row * type_size, num_rows * type_size, shared_data_, *handler_data_
+                        column_.buffer(),
+                        start_row * type_size,
+                        num_rows * type_size,
+                        shared_data_,
+                        *handler_data_,
+                        read_options_
                 );
             } else if (output_format_ != OutputFormat::ARROW || default_value_.has_value()) {
                 // Arrow does not care what values are in the main buffer where the validity bitmap is zero
@@ -1012,14 +1019,28 @@ struct ReduceColumnTask : async::BaseTask {
                 swap(prev_buffer, new_buffer);
             } else {
                 NullValueReducer null_reducer{
-                        column, context_, frame_, shared_data_, handler_data_, output_format_for_column, default_value
+                        column,
+                        context_,
+                        frame_,
+                        shared_data_,
+                        handler_data_,
+                        output_format_for_column,
+                        default_value,
+                        read_options_
                 };
                 null_reducer.finalize();
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if (dynamic_schema) {
                 NullValueReducer null_reducer{
-                        column, context_, frame_, shared_data_, handler_data_, output_format_for_column, default_value
+                        column,
+                        context_,
+                        frame_,
+                        shared_data_,
+                        handler_data_,
+                        output_format_for_column,
+                        default_value,
+                        read_options_
                 };
                 for (const auto& row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};

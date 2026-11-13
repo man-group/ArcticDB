@@ -21,7 +21,7 @@ Let's revisit the structures that ArcticDB provides for organising data, illustr
 The object stores available will typically be decided by external factors such as
 
 * Environment: prod/uat/research
-* Permissions: enviroments that grant/deny read/write permission to different groups of users/systems
+* Permissions: environments that grant/deny read/write permission to different groups of users/systems
 * Accounting: different cloud buckets may be charged to different internal accounts
 * Storage Quotas: different amounts of storage may be allocated for different purposes
 * Storage Performance: faster/slower storage for different applications according to requirements and cost
@@ -78,7 +78,7 @@ System problems are often caused by suspected bad data. It is worth thinking abo
 * Tooling to find and examine suspected bad data
 * Consider how to reconcile suspected bad data vs the original data source
 * Manual overrides to fix bad data to allow the system to run effectively while data is re-sourced
-* Versioning and snaphsots makes it easy to return to a last known good state
+* Versioning and snapshots makes it easy to return to a last known good state
 
 ### Maintenance
 
@@ -140,7 +140,7 @@ You can defragment a symbol manually using the [compact_data](../api/library.md)
 
 ## Examples Based on Market Data
 
-### Seperate Symbol for Each Security
+### Separate Symbol for Each Security
 
 The data for a single security would be a timeseries of market data. In this set of sample data this would be all the price data for AAPL.
 

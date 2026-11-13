@@ -21,17 +21,18 @@ from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
-from arcticdb.exceptions import ArcticNativeException, UnsortedDataException
-from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
-
-from arcticdb_ext.exceptions import (
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    UnsortedDataException,
+    NoSuchVersionException,
     InternalException,
     NormalizationException,
     UserInputException,
     MissingDataException,
     SchemaException,
+    StreamDescriptorMismatch,
 )
+from arcticdb.version_store.processing import QueryBuilder
 
 
 from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
@@ -294,7 +295,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
 
     # Test append with mismatched index type
     for frame in [df_different_index, df_no_index]:
-        with pytest.raises((NormalizationException)):
+        with pytest.raises(SchemaException):
             lib.append(symbol, frame)
     assert lib.list_symbols() == [symbol]
     assert len(lib.list_versions()) == 2
@@ -329,7 +330,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
 
     # Cannot append pickle data to dataframe
     for pick in [pickled_data, pickled_data_2]:
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             lib.append(symbol, pick)
 
     # Append with different schema works on dynamic schema only

@@ -55,6 +55,11 @@ cd docs/mkdocs
 pybind11-stubgen arcticdb_ext --ignore-all-errors -o .
 ```
 
+The Release Notes page is generated from GitHub Releases and is not committed. Generate it first from the repository root. It needs an authenticated `gh`; without one, it writes a placeholder page:
+```
+python .github/scripts/release_notes.py
+```
+
 To build the latest mkdocs to docs/mkdocs/site:
 ```
 cd docs/mkdocs
@@ -109,4 +114,4 @@ The reason for the separate docs tags is to allow improvements to the docs to be
 
 ## Deployment of `docs.arcticdb.io`
 
-[docs.arcticdb.io](https://docs.arcticdb.io) is hosted by netlify and runs continous deployment on the `docs-pages` branch of ArcticDB.
+[docs.arcticdb.io](https://docs.arcticdb.io) is hosted by netlify and runs continuous deployment on the `docs-pages` branch of ArcticDB.

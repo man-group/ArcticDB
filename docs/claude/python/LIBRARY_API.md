@@ -95,7 +95,7 @@ lib.delete("my_symbol")
 ## Class Definition
 
 `Library` class in `python/arcticdb/version_store/library.py` provides:
-- `write(symbol, data, metadata, prune_previous_versions, staged, validate_index)` - Write data
+- `write(symbol, data, metadata, prune_previous_versions, validate_index)` - Write data
 - `read(symbol, as_of, date_range, columns, query_builder)` - Read data
 - `append(symbol, data, metadata, prune_previous_versions)` - Append rows
 - `update(symbol, data, metadata, upsert, date_range)` - Update rows
@@ -243,8 +243,8 @@ except SchemaException:
 
 ```python
 # Stage data (not committed)
-lib.write("symbol", df1, staged=True)
-lib.write("symbol", df2, staged=True)
+lib.stage("symbol", df1)
+lib.stage("symbol", df2)
 
 # Finalize staged writes
 lib.finalize_staged_data("symbol")

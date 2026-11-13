@@ -91,6 +91,38 @@ Any other value, including a differently cased `MD5` or `CRC64NVME`, raises `Use
     Note if either environment variable `AWS_REQUEST_CHECKSUM_CALCULATION` or `AWS_RESPONSE_CHECKSUM_VALIDATION` is set to `when_supported`, the setting of `S3Storage.DeleteObjectsChecksum` will have no effect. crc64nvme checksum will always be sent.
     See the [AWS documentation](https://docs.aws.amazon.com/sdkref/latest/guide/feature-dataintegrity.html) for more details.
 
+### S3Storage.ChecksumMismatchMaxRetries
+
+Controls retrying an S3 request after a response checksum mismatch, i.e. when the `x-amz-checksum-*` header of a
+response does not match the body received. The AWS SDK does not retry these by itself.
+
+A request is retried after a mismatch only while it has been retried fewer than `S3Storage.ChecksumMismatchMaxRetries`
+times in total, and the AWS SDK's own attempt limit (`AWS_MAX_ATTEMPTS`) also allows another attempt. The delay between
+retries follows the AWS SDK retry mode (`AWS_RETRY_MODE`).
+
+The default is 1. Set it to 0 to disable these retries.
+
+Each mismatch is logged as a warning. When the retries are exhausted, the read fails with `E_S3_RETRYABLE`.
+
+It is read when the S3 client is created, e.g. with `ARCTICDB_S3Storage_ChecksumMismatchMaxRetries_int=3`.
+
+Response checksums are only validated if the AWS SDK is asked to, e.g. with
+`AWS_RESPONSE_CHECKSUM_VALIDATION=when_supported`.
+
+!!! warning "Counts every retry of the request, not only checksum mismatches"
+
+    The AWS SDK only tracks one retry count per request, covering every error, so this setting is compared against
+    that count. A request that hits a mix of retryable errors behaves awkwardly as a result:
+
+    * Retries for other errors use it up. With the default of 1, a request that was already retried once for, say, a
+      network error is not retried when it then gets a checksum mismatch, even though it is its first mismatch.
+    * Retries for checksum mismatches count towards `AWS_MAX_ATTEMPTS`, so they leave fewer retries for other errors
+      in the same request.
+
+    A request that only hits checksum mismatches is retried up to `S3Storage.ChecksumMismatchMaxRetries` times, as
+    long as `AWS_MAX_ATTEMPTS` allows it. With the AWS SDK's defaults (`AWS_MAX_ATTEMPTS` unset), that is at most 2
+    retries
+
 ### S3Storage.VerifySSL
 
 Control whether the client should verify the SSL certificate of the storage. If set, this will override the library option set upon library creation.
@@ -113,6 +145,42 @@ The INet backend does not allow SSL verification to be disabled with the current
 Values:
 * 0: Use WinHTTP
 * 1: Use WinINet
+
+### LMDBStorage.ExtraFlags
+
+Extra LMDB environment flags (a bitwise OR of `MDB_*` values from `lmdb.h`) passed to `mdb_env_open` for every LMDB
+library opened by the process, on top of the flags in the library's storage config.
+
+Intended for throwaway data, e.g. `MDB_NOSYNC | MDB_NOMETASYNC` (`0x50000`, i.e. `327680`) skips the fsync on every
+commit. Do not use those flags for data you need to survive a crash or power loss.
+
+On Windows, `MDB_WRITEMAP` makes the OS allocate the whole `map_size` of every library on disk (LMDB otherwise extends
+the file lazily there), and with `MDB_NOSYNC` a full disk is not reported and pages are lost silently, so avoid
+`MDB_WRITEMAP` there. ArcticDB's own CI uses `MDB_NOSYNC | MDB_NOMETASYNC` on its Windows test jobs.
+
+Default: 0 (no extra flags).
+
+### LMDBStorage.Diagnostics
+
+Whether `MDB_CORRUPTED`, `MDB_PAGE_NOTFOUND`, `MDB_PANIC`, `MDB_INVALID`, `MDB_MAP_RESIZED` and `MDB_BAD_TXN` carry a
+dump of the environment state — `mdb_env_info`/`mdb_stat` next to the two meta pages read straight from `data.mdb`,
+bypassing the memory map — in the raised message and the storage log. That comparison is what distinguishes "the map
+and the file disagree" from "both are garbage".
+
+Reading the meta pages means decoding `MDB_meta` at fixed byte offsets, which is tied to LMDB's on-disk layout rather
+than to any API it promises to keep, so it is off unless you ask for it. ArcticDB's own CI turns it on.
+
+Default: 0 (off).
+
+### AzureStorage.HttpKeepAlive
+
+Whether the Azure client reuses pooled HTTP connections (`1`, the default) or opens a new connection per request
+(`0`). Only applies to the libcurl transport, i.e. Linux and macOS.
+
+The Azure SDK blocks for several seconds when it reuses a pooled connection the server has already closed, so set
+this to `0` against servers that close idle connections quickly — notably Azurite, which closes them after 5
+seconds, and ArcticDB's own Azurite test fixture sets it to `0` for that reason. Leave it at the default against real
+Azure Blob Storage, where connection reuse avoids a TLS handshake per request.
 
 ### VersionStore.NumCPUThreads and VersionStore.NumIOThreads
 
@@ -217,7 +285,11 @@ Values:
 
 ### VersionStore.RecursiveNormalizerMetastructure
 
-Controls whether the recursive normalizer will use meta structure V2
+Controls whether the recursive normalizer will use meta structure V2.
+
+**The default changed to V2 in v7.0.0.** V2 removes the dependency on pickle for normalizing the
+meta structure, but can only be read by ArcticDB v6.7.0 and later. To keep data readable by
+clients older than v6.7.0, set this option explicitly to `1`.
 
 **Read Compatibility:**
 
@@ -226,24 +298,20 @@ Controls whether the recursive normalizer will use meta structure V2
 | V1 | All existing and future ArcticDB releases |
 | V2 | ArcticDB v6.7.0 and later |
 
+Please note that if meta structure V2 is read by < v6.7.0, exception KeyError will be raised.
+
 **V1 meta structure phase-out plan:**
 
 | Version | Change |
 |---------|--------|
 | >= v6.7.0 | Deprecation warning when writing V1 meta structure; V2 meta structure can be enabled optionally |
-| >= v7.0.0 | V2 meta structure will be enabled by default |
+| >= v7.0.0 | V2 meta structure is enabled by default; V1 must be opted into explicitly |
 
-Values: * 1: V1 (Default) * 2: V2  
 
-### VersionStore.VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning
-
-Control whether deprecation warning will be given if meta structure V1 for recursive normalizer is still in use
 
 Values:
-* 0: Disable
-* 1: Enable (Default)
-
-Please note that if meta structure V2 is read by < v6.7.0, exception KeyError will be raised
+* 1: V1
+* 2: V2 (Default since v7.0.0)
 
 ### Compact.LogProgressPercentage
 

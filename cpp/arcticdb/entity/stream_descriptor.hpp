@@ -13,6 +13,7 @@
 #include <arcticdb/entity/field_collection_proto.hpp>
 #include <arcticdb/entity/types_proto.hpp>
 #include <arcticdb/pipeline/value.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 
 #include <ankerl/unordered_dense.h>
 
@@ -156,6 +157,11 @@ struct StreamDescriptor {
 
     [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const { return fields_; }
 
+    void set_fields(std::shared_ptr<FieldCollection> fields) {
+        util::check(static_cast<bool>(fields), "Setting field collection to null pointer");
+        fields_ = std::move(fields);
+    }
+
     [[nodiscard]] std::shared_ptr<SegmentDescriptorImpl> data_ptr() const { return segment_desc_; }
 
     decltype(auto) begin() { return fields().begin(); }
@@ -200,11 +206,37 @@ struct OutputSchema {
 
     OutputSchema() = default;
 
-    OutputSchema(StreamDescriptor stream_descriptor, proto::descriptors::NormalizationMetadata norm_metadata) :
+    OutputSchema(
+            StreamDescriptor stream_descriptor, proto::descriptors::NormalizationMetadata norm_metadata,
+            bool inferred_from_empty_frame = false
+    ) :
         norm_metadata_(std::move(norm_metadata)),
-        stream_descriptor_(std::move(stream_descriptor)) {};
+        stream_descriptor_(std::move(stream_descriptor)),
+        inferred_from_empty_frame_(inferred_from_empty_frame) {};
 
     const StreamDescriptor& stream_descriptor() const { return stream_descriptor_; }
+
+    // Invalidates column_types(), as the caller may change the fields through the returned reference
+    StreamDescriptor& mutable_stream_descriptor() {
+        column_types_ = std::nullopt;
+        return stream_descriptor_;
+    }
+
+    // Whether this schema came from a frame that had no rows in it when it was normalized, in which case pandas
+    // index normalization metadata depends on pandas version. For example:
+    // - pandas 2 normalizes an empty default range index into a DatetimeIndex
+    // If `inferred_from_empty_frame` is True, pandas index metadata should be ignored.
+    [[nodiscard]] bool inferred_from_empty_frame() const { return inferred_from_empty_frame_; }
+
+    // Index metadata and column dtypes can be incorrect when inferred from an empty pandas dataframe. Arrow data that
+    // carries pandas metadata is not affected: its own fields describe its shape.
+    [[nodiscard]] bool is_inferred_from_empty_pandas() const {
+        return inferred_from_empty_frame_ && is_pandas_input_type(norm_metadata_);
+    }
+
+    void set_inferred_from_empty_frame(bool inferred_from_empty_frame) {
+        inferred_from_empty_frame_ = inferred_from_empty_frame;
+    }
 
     void set_stream_descriptor(StreamDescriptor&& stream_descriptor) {
         stream_descriptor_ = std::move(stream_descriptor);
@@ -244,6 +276,7 @@ struct OutputSchema {
     StreamDescriptor stream_descriptor_;
     std::optional<ankerl::unordered_dense::map<std::string, DataType>> column_types_;
     ankerl::unordered_dense::map<std::string, Value> default_values_;
+    bool inferred_from_empty_frame_{false};
 };
 
 template<class IndexType>

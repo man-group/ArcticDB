@@ -34,7 +34,6 @@ def test_sparse_arrow_row_range(
 ):
     lib = in_memory_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_sparse_arrow_row_range"
     # Three segments of 5 rows with complementary null patterns across dtypes
     str_data = [None, "a", None, "b", None, "c", None, None, None, None, None, None, "d", "e", "f"]
@@ -77,7 +76,6 @@ def test_sparse_arrow_date_range(
 ):
     lib = in_memory_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_sparse_arrow_date_range"
     # Three segments of 5 rows with complementary null patterns across dtypes
     dates = pd.date_range("2025-01-01", periods=15)
@@ -175,7 +173,6 @@ def test_sparse_arrow_hypothesis(in_memory_version_store_arrow, df, rows_per_sli
 def test_sparse_column_selection(in_memory_store_factory, column_group_size, use_row_range, index_column, columns):
     lib = in_memory_store_factory(column_group_size=column_group_size)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_sparse_col_selection"
     if index_column:
         ts = pa.Array.from_pandas(pd.date_range("2025-01-01", periods=5), type=pa.timestamp("ns"))
@@ -526,7 +523,7 @@ def test_sparse_update_roundtrip(
             }
         )
     lib.write(sym, to_format(write_table, arrow_output_format), index_column=True)
-    lib.update(sym, to_format(update_table, arrow_output_format), index_column=True, date_range=date_range)
+    lib.update(sym, to_format(update_table, arrow_output_format), date_range=date_range)
 
     # Compute expected
     start = date_range[0] if date_range is not None else update_dates[0]
@@ -562,7 +559,7 @@ def test_sparse_update_all_nulls(in_memory_version_store_arrow):
             "col": pa.array([None, None], pa.int64()),
         }
     )
-    lib.update(sym, update_table, index_column=True)
+    lib.update(sym, update_table)
     received = lib.read(sym).data
     expected = pa.table(
         {
@@ -578,7 +575,6 @@ def test_sparse_update_all_nulls(in_memory_version_store_arrow):
 def test_sparse_dynamic_schema_combined(in_memory_store_factory):
     lib = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True)
     lib.set_output_format(OutputFormat.PYARROW)
-    lib._set_allow_arrow_input()
     sym = "test_sparse_dynschema_combined"
     # Segment 1: int_col (sparse) + bool_col (sparse), no str_col
     t1 = pa.table(
@@ -645,7 +641,6 @@ def test_sparse_dynamic_schema_type_upgrade(
 ):
     lib = in_memory_store_factory(dynamic_schema=True)
     lib.set_output_format(OutputFormat.PYARROW)
-    lib._set_allow_arrow_input()
     sym = "test_sparse_type_upgrade"
 
     def make_array(values, nulls, typ):
@@ -719,7 +714,6 @@ class TestSparseArrowGroupBy:
     def setup(self, in_memory_store_factory):
         self.lib = in_memory_store_factory(segment_row_size=3)
         self.lib.set_output_format(OutputFormat.POLARS)
-        self.lib._set_allow_arrow_input()
         self.pldf = pl.DataFrame(
             {
                 "group_str": ["a", "a", "b", "b", "b", "a", "all_null", "all_null"],
@@ -765,7 +759,6 @@ class TestSparseArrowResample:
     def setup(self, in_memory_store_factory):
         self.lib = in_memory_store_factory(segment_row_size=4)
         self.lib.set_output_format(OutputFormat.POLARS)
-        self.lib._set_allow_arrow_input()
         # First timestamp is 00:15 (mid-bucket) so `origin="start"` produces different bucket
         # boundaries than the default `origin="epoch"`.
         # Bucket 2 (hours 6-8) is fully null for every column when resampled at 3h
@@ -903,7 +896,6 @@ class TestSparseArrowConcat:
     def setup(self, mem_library_factory):
         self.lib = mem_library_factory(LibraryOptions())
         self.lib._nvs.set_output_format(OutputFormat.POLARS)
-        self.lib._nvs._set_allow_arrow_input()
 
     @pytest.mark.parametrize(
         "t1,t2",

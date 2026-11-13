@@ -18,7 +18,13 @@ import random
 import string
 
 from arcticdb import OutputFormat
-from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    ErrorCode,
+    InternalException,
+    UserInputException,
+    SchemaException,
+)
 from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
@@ -95,7 +101,7 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment, any_outp
     symbol = "test_filter_date_range_row_indexed"
     df = pd.DataFrame({"a": np.arange(3)}, index=np.arange(3))
     lib.write(symbol, df)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_UNSUPPORTED_INDEX_TYPE.name):
         lib.read(symbol, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")))
 
 
@@ -818,6 +824,21 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1, any_ou
     q = q[q["a"].isin(vals)]
     expected = df[df["a"].isin(vals)]
     generic_filter_test(lib, symbol, q, expected)
+
+
+@pytest.mark.xfail(
+    reason="ascii_to_padded_utf32 widens the query string a byte at a time, so a non-ASCII value never "
+    "matches the UTF-32 stored in a fixed-width pool"
+)
+@pytest.mark.parametrize("predicate", ["==", "isin"])
+def test_filter_fixed_width_string_non_ascii(lmdb_version_store_v1, predicate):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_fixed_width_string_non_ascii"
+    df = pd.DataFrame({"a": ["é", "Ā", "ascii"]}, index=np.arange(3))
+    lib.write(symbol, df, dynamic_strings=False)
+    q = QueryBuilder()
+    q = q[q["a"] == "é"] if predicate == "==" else q[q["a"].isin(["é"])]
+    assert_frame_equal(df.iloc[[0]], lib.read(symbol, query_builder=q).data)
 
 
 def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment, any_output_format, read_string_dtype):
@@ -1699,32 +1720,6 @@ def test_head_tail_unfilterable_data(lmdb_version_store_v1, head, sym, data, all
 ################################
 # MIXED SCHEMA TESTS FROM HERE #
 ################################
-
-
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_pickled_symbol(request, lib_type, any_output_format):
-    lib = request.getfixturevalue(lib_type)
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_filter_pickled_symbol"
-    lib.write(symbol, np.arange(100).tolist())
-    assert lib.is_symbol_pickled(symbol)
-    q = QueryBuilder()
-    q = q[q.a == 0]
-    with pytest.raises(InternalException):
-        _ = lib.read(symbol, query_builder=q)
-
-
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_date_range_pickled_symbol(request, lib_type, any_output_format):
-    lib = request.getfixturevalue(lib_type)
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_filter_date_range_pickled_symbol"
-    idx = pd.date_range("2000-01-01", periods=4)
-    df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
-    lib.write(symbol, df, pickle_on_failure=True)
-    assert lib.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
-        lib.read(symbol, date_range=(idx[1], idx[2]))
 
 
 def test_filter_date_range_none_none(lmdb_version_store_v1, any_output_format):

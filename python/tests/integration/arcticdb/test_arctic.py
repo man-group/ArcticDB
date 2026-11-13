@@ -23,30 +23,40 @@ from enum import Enum
 import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
-from arcticdb_ext.exceptions import InternalException, StorageException, UnsortedDataException, UserInputException
-from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
-from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
+from arcticdb_ext.storage import KeyType, AWSAuthMethod
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    NoSuchVersionException,
+    InternalException,
+    StorageException,
+    UnsortedDataException,
+    UserInputException,
+    NoDataFoundException,
+    ArcticUnsupportedDataTypeException,
+    ArcticInvalidApiUsageException,
+    ArcticException,
+)
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
+from arcticdb.dependencies import pyarrow as pa
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
 from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.storage_fixtures.utils import GracefulProcessUtils
-from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context, config_context_string
+from arcticdb.util.test import (
+    assert_frame_equal,
+    sample_dataframe,
+    config_context,
+    config_context_multi,
+    config_context_string,
+)
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.config import Defaults
-from arcticdb.version_store.library import (
-    WritePayload,
-    ArcticUnsupportedDataTypeException,
-    ReadRequest,
-    StagedDataFinalizeMethod,
-    DeleteRequest,
-)
+from arcticdb.version_store.library import WritePayload, ReadRequest, StagedDataFinalizeMethod, DeleteRequest
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.version_store.library import ArcticInvalidApiUsageException
 from tests.conftest import Marks
 from tests.util.marking import marks
 from tests.util.storage_test import get_s3_storage_config
@@ -411,19 +421,19 @@ def test_staged_data(arctic_library, finalize_method):
     expected = pd.concat([df_0, df_1, df_2])
 
     if finalize_method == StagedDataFinalizeMethod.APPEND:
-        lib.write(sym_with_metadata, df_0, staged=False)
-        lib.write(sym_without_metadata, df_0, staged=False)
+        lib.write(sym_with_metadata, df_0)
+        lib.write(sym_without_metadata, df_0)
     else:
-        lib.write(sym_with_metadata, df_0, staged=True)
-        lib.write(sym_without_metadata, df_0, staged=True)
-        lib.write(sym_unfinalized, df_0, staged=True)
+        lib.stage(sym_with_metadata, df_0)
+        lib.stage(sym_without_metadata, df_0)
+        lib.stage(sym_unfinalized, df_0)
 
-    lib.write(sym_with_metadata, df_1, staged=True)
-    lib.write(sym_with_metadata, df_2, staged=True)
-    lib.write(sym_without_metadata, df_1, staged=True)
-    lib.write(sym_without_metadata, df_2, staged=True)
-    lib.write(sym_unfinalized, df_1, staged=True)
-    lib.write(sym_unfinalized, df_2, staged=True)
+    lib.stage(sym_with_metadata, df_1)
+    lib.stage(sym_with_metadata, df_2)
+    lib.stage(sym_without_metadata, df_1)
+    lib.stage(sym_without_metadata, df_2)
+    lib.stage(sym_unfinalized, df_1)
+    lib.stage(sym_unfinalized, df_2)
 
     metadata = {"hello": "world"}
     finalize_result_meta = lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
@@ -456,8 +466,8 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
         lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
     df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03T12"), pd.Timestamp("2024-01-05")])
-    lib.write(sym, df_2, staged=True)
-    lib.write(sym, df_1, staged=True)
+    lib.stage(sym, df_2)
+    lib.stage(sym, df_1)
     if validate_index is None:
         # Test default behaviour when arg isn't provided
         with pytest.raises(UnsortedDataException):
@@ -494,7 +504,7 @@ class TestAppendStagedData:
         )
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")], dtype="datetime64[ns]"))
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
         with pytest.raises(UnsortedDataException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
@@ -518,7 +528,7 @@ class TestAppendStagedData:
                 dtype="datetime64[ns]",
             ),
         )
-        lib.write("sym", df_to_append, staged=True)
+        lib.stage("sym", df_to_append)
         lib.finalize_staged_data("sym", mode=mode)
         res = lib.read("sym").data
         expected_df = pd.concat([df, df_to_append])
@@ -992,6 +1002,15 @@ def test_append_prune_previous_versions(arctic_library):
 
 
 @pytest.mark.storage
+def test_append_missing_symbol_creates(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.append("new_symbol", df)
+    assert "new_symbol" in lib.list_symbols()
+    assert_frame_equal(lib.read("new_symbol").data, df)
+
+
+@pytest.mark.storage
 def test_update_documented_example(arctic_library):
     """Test the example given on the `update` docstring."""
     lib = arctic_library
@@ -1170,8 +1189,9 @@ def test_update_with_daterange_restrictive(arctic_library):
 @pytest.mark.storage
 def test_update_with_upsert(arctic_library):
     lib = arctic_library
-    with pytest.raises(Exception):
+    with pytest.raises(NoSuchVersionException) as ex_info:
         lib.update("symbol", pd.DataFrame())
+    assert all(s in str(ex_info.value) for s in ["upsert", "Cannot update", "symbol"])
     assert not lib.list_symbols()
     lib.update("symbol", pd.DataFrame(), upsert=True)
     assert "symbol" in lib.list_symbols()
@@ -1268,6 +1288,50 @@ def test_get_description_multiindex(lmdb_library, names):
     assert len(index_info) == 2
     assert index_info[0].name == (names[0] if names is not None else None)
     assert index_info[1].name == (names[1] if names is not None else None)
+
+
+@pytest.mark.parametrize(
+    "input, expected_format",
+    [
+        (pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", periods=3)), "DATAFRAME"),
+        (pd.Series([1, 2, 3], name="column", index=pd.date_range(start="1/1/2018", periods=3)), "SERIES"),
+        (np.arange(5), "NDARRAY"),
+        (pa.table({"column": pa.array([1, 2, 3], type=pa.int64())}), "ARROW_DATAFRAME"),
+        (pa.chunked_array([[1, 2, 3]], type=pa.int64()), "ARROW_SERIES"),
+    ],
+)
+def test_get_description_input_format(arrow_library, input, expected_format):
+    lib = arrow_library
+    sym = "test_get_description_input_format"
+    lib.write(sym, input)
+    assert lib.get_description(sym).input_format == expected_format
+
+
+def test_get_description_input_format_pickled(lmdb_library):
+    lib = lmdb_library
+    sym = "test_get_description_input_format_pickled"
+    lib.write_pickle(sym, {"not": "normalizable"})
+    desc = lib.get_description(sym)
+    assert desc.input_format == "PICKLED"
+    assert desc.row_count is None
+
+
+def test_get_description_input_format_normalizable_data_written_with_write_pickle(lmdb_library):
+    # write_pickle only pickles as a fallback, so normalizable input is still reported as its normalized format
+    lib = lmdb_library
+    sym = "test_get_description_input_format_normalizable_data_written_with_write_pickle"
+    lib.write_pickle(sym, pd.DataFrame({"column": [1, 2, 3]}))
+    assert lib.get_description(sym).input_format == "DATAFRAME"
+
+
+def test_get_description_input_format_recursive_normalized(lmdb_library):
+    # Recursively normalized data has no input_type of its own - it is a tree of independently normalized
+    # sub-objects stored under a single MULTI_KEY, which is what input_format is derived from instead
+    lib = lmdb_library
+    sym = "test_get_description_input_format_recursive_normalized"
+    data = {"a": np.arange(5), "b": pd.DataFrame({"column": [1, 2, 3]})}
+    lib.write(sym, data, recursive_normalizers=True)
+    assert lib.get_description(sym).input_format == "RECURSIVE_NORMALIZED"
 
 
 # See test_write_tz in test_normalization.py for the V1 API equivalent
@@ -1586,6 +1650,79 @@ def test_s3_delete_objects_checksum_no_effect_in_when_supported_mode(
         requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
 
 
+@contextlib.contextmanager
+def _corrupting_get_responses(s3_storage):
+    endpoint = s3_storage.factory.endpoint
+    verify = s3_storage.factory.client_cert_file or False
+
+    def corrupt(count):
+        requests.post(endpoint + "/corrupt_get_responses", str(count).encode(), verify=verify).raise_for_status()
+
+    requests.post(endpoint + "/reject_checksum_mode", b"0", verify=verify).raise_for_status()
+    try:
+        yield corrupt
+    finally:
+        corrupt(0)
+        requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+
+
+def _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries):
+    # Every attempt fails while the mock corrupts responses, so max_retries + 1 bad responses exhaust the retries.
+    # Keep the version map cached, so that each read only fetches the index key, rather than the version ref key, whose
+    # failure is caught and retried through other keys.
+    with config_context("VersionMap.ReloadInterval", 3_600_000_000_000):
+        assert_frame_equal(lib.read("sym").data, df)
+        corrupt(max_retries)
+        assert_frame_equal(lib.read("sym").data, df)
+        corrupt(max_retries + 1)
+        with pytest.raises(ArcticException, match="E_S3_RETRYABLE.*Response checksums mismatch"):
+            lib.read("sym")
+
+
+def test_s3_response_checksum_mismatch_is_retried_once_by_default(
+    s3_storage, lib_name, monkeypatch, route_env_to_extension
+):
+    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+    with _corrupting_get_responses(s3_storage) as corrupt:
+        create_library(s3_storage.arctic_uri, lib_name)
+        lib = Arctic(s3_storage.arctic_uri)[lib_name]
+        df = pd.DataFrame({"col": np.arange(1000)})
+        lib.write("sym", df)
+        _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries=1)
+
+
+@pytest.mark.parametrize(
+    "aws_max_attempts, max_retries, expected_retries",
+    [
+        ("5", 3, 3),
+        ("2", 3, 1),  # Mismatch retries also count towards AWS_MAX_ATTEMPTS
+    ],
+)
+@pytest.mark.parametrize("retry_mode", ["adaptive", "standard"])
+def test_s3_response_checksum_mismatch_max_retries(
+    s3_storage,
+    lib_name,
+    monkeypatch,
+    route_env_to_extension,
+    retry_mode,
+    aws_max_attempts,
+    max_retries,
+    expected_retries,
+):
+    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+    monkeypatch.setenv("AWS_RETRY_MODE", retry_mode)
+    monkeypatch.setenv("AWS_MAX_ATTEMPTS", aws_max_attempts)
+    with (
+        config_context("S3Storage.ChecksumMismatchMaxRetries", max_retries),
+        _corrupting_get_responses(s3_storage) as corrupt,
+    ):
+        create_library(s3_storage.arctic_uri, lib_name)
+        lib = Arctic(s3_storage.arctic_uri)[lib_name]
+        df = pd.DataFrame({"col": np.arange(1000)})
+        lib.write("sym", df)
+        _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries=expected_retries)
+
+
 @pytest.mark.parametrize("checksum", ["MD5", "CRC64NVME", "crc32", "sha256"])
 def test_s3_delete_objects_checksum_invalid_value(s3_storage, lib_name, checksum):
     create_library(s3_storage.arctic_uri, lib_name)
@@ -1711,7 +1848,12 @@ def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
 @SLOW_TESTS_MARK
 @MONGO_TESTS_MARK
 def test_mongo_retryable_network_error(mongo_server_fn_scope, sym):
-    with config_context("VersionMap.MaxReadRefTrials", 0):
+    # The server is killed below, so every operation waits for server selection on each retry. The defaults
+    # (120s selection timeout, backoff up to 2s) make this test take ~15 minutes; the error path is the same
+    # with short timeouts. Both settings are read when the Arctic instance creates the mongo client.
+    with config_context_multi(
+        {"VersionMap.MaxReadRefTrials": 0, "MongoClient.SelectionTimeoutMs": 500, "MongoClient.RetryWaitMaxMs": 200}
+    ):
         ac = Arctic(mongo_server_fn_scope.mongo_uri)
         lib = ac.get_library("test", create_if_missing=True)
         lt = lib._nvs.library_tool()

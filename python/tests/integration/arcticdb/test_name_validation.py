@@ -9,7 +9,7 @@ will be governed by the Apache License, version 2.0.
 
 import pytest
 
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException
 from arcticdb.storage_fixtures.azure import AzureContainer
 from arcticdb.util.test import assert_frame_equal, config_context, sample_dataframe
 from tests.util.mark import AZURE_TESTS_MARK

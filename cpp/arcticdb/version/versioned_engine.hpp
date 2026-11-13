@@ -182,6 +182,11 @@ class VersionedEngine {
             const StreamId& stream_id, std::shared_ptr<InputFrame> source, bool prune_previous_versions, bool upsert,
             const MergeStrategy& strategy, std::vector<std::string>&& on
     ) = 0;
+
+    virtual VersionedItem rename_columns_arrow_compat_internal(
+            const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+            const bool prune_previous_versions
+    ) = 0;
 };
 
 } // namespace arcticdb::version_store

@@ -402,14 +402,19 @@ class AsyncStore : public Store {
             return async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
         }
         auto chunks = chunk_keys(std::move(keys), *batch_size);
+        // Capture the library by value: window() keeps submitting chunks after an earlier one fails, which can
+        // outlive this store. collectAll() then waits for every chunk before rethrowing the first error.
         auto futs = folly::window(
                 std::move(chunks),
-                [this, opts](std::vector<entity::VariantKey>&& chunk) {
-                    return async::submit_io_task(RemoveBatchTask{std::move(chunk), library_, opts});
+                [lib = library_, opts](std::vector<entity::VariantKey>&& chunk) {
+                    return async::submit_io_task(RemoveBatchTask{std::move(chunk), lib, opts});
                 },
                 async::TaskScheduler::instance()->io_thread_count()
         );
-        return folly::collect(std::move(futs)).via(&async::io_executor()).thenValue([](auto&&) {
+        return folly::collectAll(std::move(futs)).via(&async::io_executor()).thenValue([](auto&& results) {
+            for (auto& result : results) {
+                result.throwUnlessValue();
+            }
             return folly::Unit{};
         });
     }
@@ -451,14 +456,23 @@ class AsyncStore : public Store {
         );
     }
 
-    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)> make_uncompressed_reader(
-            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
+    stream::SegmentReader make_uncompressed_reader(std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
     ) override {
         return [this, columns_to_decode](pipelines::RangesAndKey&& ranges_and_key) {
             const auto key = ranges_and_key.key_;
             return read_and_continue(
                     key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
             );
+        };
+    }
+
+    stream::SegmentReader make_compressed_reader() override {
+        return [this](pipelines::RangesAndKey&& ranges_and_key) {
+            const auto key = ranges_and_key.key_;
+            return read_compressed(key, storage::ReadKeyOpts{})
+                    .thenValueInline([ranges_and_key](storage::KeySegmentPair&& key_segment) mutable {
+                        return SegmentAndSlice{std::move(ranges_and_key), key_segment.segment_ptr()};
+                    });
         };
     }
 

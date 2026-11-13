@@ -55,6 +55,13 @@ def test_serial_admission_env_var_reaches_config():
         assert get_config_int(label) == 1
 
 
+def test_s3_checksum_mismatch_max_retries_env_var_reaches_config():
+    label = "S3Storage.ChecksumMismatchMaxRetries"
+    with config_context(label, -1):
+        set_config_from_env_vars({"ARCTICDB_S3Storage_ChecksumMismatchMaxRetries_int": "3"})
+        assert get_config_int(label) == 3
+
+
 @pytest.fixture()
 def log_mocks():
     with patch(_MODULE + ".set_config_int") as s_int, patch(_MODULE + ".set_log_level") as s_log:

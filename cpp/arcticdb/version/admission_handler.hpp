@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <folly/ExceptionWrapper.h>
 #include <folly/futures/Future.h>
@@ -22,8 +23,6 @@
 #include <vector>
 
 namespace arcticdb::version_store {
-
-using SegmentReader = std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>;
 
 // Feeds segment reads to the IO pool under two independent controls.
 //
@@ -44,7 +43,7 @@ using SegmentReader = std::function<folly::Future<pipelines::SegmentAndSlice>(pi
 class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<ProcessingUnitAdmissionHandler> {
   public:
     ProcessingUnitAdmissionHandler(
-            SegmentReader reader, std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
+            stream::SegmentReader reader, std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
             std::vector<std::vector<size_t>>&& processing_units, size_t max_processing_units_in_flight,
             size_t read_window
     ) :
@@ -164,7 +163,7 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
         fill_read_window();
     }
 
-    SegmentReader reader_;
+    stream::SegmentReader reader_;
     std::shared_ptr<std::vector<pipelines::RangesAndKey>> ranges_and_keys_;
 
     // We accumulate promises for all segments up front, but they do not start to execute until the read is dispatched.

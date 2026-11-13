@@ -14,6 +14,17 @@ PROTOC_VERS      ?=
 VENV_DIR         ?= ~/venvs
 VENV_NAME		 ?= dev-venv
 TMPDIR_OVERRIDE  ?=
+CLANG_TIDY       ?= clang-tidy
+# Base ref that `make tidy-diff` diffs against
+TIDY_BASE        ?= origin/master
+# conda-forge build (see the conda-* targets)
+CONDA_PRESET       ?= linux-conda-debug
+CONDA_ENV_NAME     ?= arcticdb
+MAMBA_ROOT_PREFIX  ?= $(HOME)/micromamba
+MICROMAMBA_DIR     ?= $(HOME)/.local/micromamba
+MICROMAMBA_VERSION ?= 2.1.0-0
+# Overrides where the `conda-forge` channel is fetched from, e.g. an Artifactory mirror
+CONDA_CHANNEL_ALIAS ?=
 
 # ── Build directory paths ────────────────────────────────────────────────────
 _RELEASE_BUILD_DIR := cpp/out/$(RELEASE_PRESET)-build
@@ -31,11 +42,13 @@ _VENV_PYTHON := $(_VENV_ROOT)/bin/python
 _VENV_PIP := $(VENV_DIR)/$(VENV_NAME)/bin/pip
 
 # ── Phony targets ────────────────────────────────────────────────────────────
-.PHONY: help setup protoc venv activate lint lint-check \
+.PHONY: help setup protoc venv activate lint lint-check tidy tidy-diff \
         build build-debug configure configure-debug \
         test-cpp test-cpp-debug test-cpp-rapidcheck test-cpp-rapidcheck-debug symlink symlink-debug \
         test-py build-and-test-py build-and-test-py-debug \
-        wheel bench-cpp bench-cpp-build bench-py install-editable
+        wheel bench-cpp bench-cpp-build bench-py install-editable \
+        conda-env conda-protoc conda-configure conda-build conda-test-cpp conda-test-py conda-build-and-test-py \
+        conda-shell
 
 # ── help ─────────────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -52,6 +65,14 @@ help: ## Show this help
 	@echo "  PROTOC_VERS      $(or $(PROTOC_VERS),(unset))"
 	@echo "  VENV_DIR         $(VENV_DIR)"
 	@echo "  TMPDIR_OVERRIDE  $(or $(TMPDIR_OVERRIDE),(unset))"
+	@echo "  CLANG_TIDY       $(CLANG_TIDY)"
+	@echo "  TIDY_BASE        $(TIDY_BASE)"
+	@echo "  CLANG_TIDY_DIFF  $(CLANG_TIDY_DIFF)"
+	@echo "  RUN_CLANG_TIDY   $(RUN_CLANG_TIDY)"
+	@echo "  CONDA_PRESET     $(CONDA_PRESET)"
+	@echo "  CONDA_ENV_NAME   $(CONDA_ENV_NAME)"
+	@echo "  MAMBA_ROOT_PREFIX $(MAMBA_ROOT_PREFIX)"
+	@echo "  CONDA_CHANNEL_ALIAS $(or $(CONDA_CHANNEL_ALIAS),(unset))"
 
 # ── protoc ───────────────────────────────────────────────────────────────────
 protoc: ## Generate protobuf stubs
@@ -85,6 +106,30 @@ lint: ## Run formatters (in-place)
 
 lint-check: ## Check formatting (no changes)
 	$(_VENV_PYTHON) build_tooling/format.py --check --type all
+
+# ── clang-tidy ───────────────────────────────────────────────────────────────
+# Both targets read the debug build's compile_commands.json, which must have been
+# produced by clang: clang-tidy uses clang's driver, so a gcc-configured build gives
+# spurious errors from libstdc++ and vcpkg headers. Set CLANG_TIDY= to a specific
+# binary if clang-tidy is not on PATH (CI uses the official LLVM 19.1.7 release).
+# The wrappers default to the release layout relative to that binary
+# (<prefix>/share/clang/clang-tidy-diff.py, <prefix>/bin/run-clang-tidy); override
+# CLANG_TIDY_DIFF= / RUN_CLANG_TIDY= for distro packages that place them elsewhere.
+_TIDY_PREFIX := $(abspath $(dir $(shell command -v $(CLANG_TIDY) 2>/dev/null || echo /usr/bin/clang-tidy))..)
+CLANG_TIDY_DIFF ?= $(_TIDY_PREFIX)/share/clang/clang-tidy-diff.py
+RUN_CLANG_TIDY  ?= $(_TIDY_PREFIX)/bin/run-clang-tidy
+_TIDY_DB := $(_DEBUG_BUILD_DIR)
+
+tidy-diff: ## clang-tidy on changed lines only (TIDY_BASE= base ref, default origin/master)
+	git diff -U0 --no-color $(TIDY_BASE)...HEAD -- '*.cpp' '*.hpp' | \
+		python3 $(CLANG_TIDY_DIFF) -p1 -path $(_TIDY_DB) \
+			-clang-tidy-binary $(CLANG_TIDY) -j $(CMAKE_JOBS) -quiet 2>&1 | \
+		tee clang-tidy.log
+
+tidy: ## clang-tidy over all of cpp/arcticdb
+	$(RUN_CLANG_TIDY) -p $(_TIDY_DB) \
+		-clang-tidy-binary $(CLANG_TIDY) -j $(CMAKE_JOBS) -quiet \
+		'$(CURDIR)/cpp/arcticdb/.*' 2>&1 | tee clang-tidy.log
 
 # ── configure ────────────────────────────────────────────────────────────────
 # Files whose changes should trigger a cmake reconfigure.
@@ -205,3 +250,67 @@ install-editable: ## Install arcticdb in editable mode
 # ── bench-py ─────────────────────────────────────────────────────────────────
 bench-py: install-editable ## Run ASV Python benchmarks (BENCH= for --bench filter, QUICK=1 for single iteration)
 	$(_VENV_PYTHON) -m asv run --python=same -v --show-stderr $(if $(QUICK),--quick) $(if $(BENCH),--bench $(BENCH))
+
+# ── conda ────────────────────────────────────────────────────────────────────
+# Mirrors .github/workflows/compile_and_test_with_conda.yml: a micromamba env built from
+# environment-dev.yml, ARCTICDB_USING_CONDA=1 and a *-conda-* preset. All dependencies come
+# from conda-forge, so vcpkg is not used.
+_MICROMAMBA      := $(MICROMAMBA_DIR)/bin/micromamba
+_UNAME           := $(shell uname -s)-$(shell uname -m)
+_MAMBA_PLATFORM  := $(or $(if $(filter Linux-x86_64,$(_UNAME)),linux-64), \
+                         $(if $(filter Linux-aarch64,$(_UNAME)),linux-aarch64), \
+                         $(if $(filter Darwin-arm64,$(_UNAME)),osx-arm64),unsupported)
+_MAMBA           := MAMBA_ROOT_PREFIX=$(MAMBA_ROOT_PREFIX) $(_MICROMAMBA)
+_CONDA_ALIAS_ARG := $(if $(CONDA_CHANNEL_ALIAS),--channel-alias $(CONDA_CHANNEL_ALIAS))
+_CONDA_RUN       := $(_MAMBA) run -n $(CONDA_ENV_NAME) env ARCTICDB_USING_CONDA=1 $(_TMPDIR_ENV)
+_CONDA_PREFIX    := $(MAMBA_ROOT_PREFIX)/envs/$(CONDA_ENV_NAME)
+_CONDA_BUILD_DIR := cpp/out/$(CONDA_PRESET)-build
+
+$(_MICROMAMBA):
+	mkdir -p $(MICROMAMBA_DIR)
+	$(PROXY_CMD) curl -fsSL -o $(MICROMAMBA_DIR)/micromamba.tar.bz2 \
+		https://github.com/mamba-org/micromamba-releases/releases/download/$(MICROMAMBA_VERSION)/micromamba-$(_MAMBA_PLATFORM).tar.bz2
+	tar -xjf $(MICROMAMBA_DIR)/micromamba.tar.bz2 -C $(MICROMAMBA_DIR) bin/micromamba
+	rm $(MICROMAMBA_DIR)/micromamba.tar.bz2
+
+conda-env: $(_MICROMAMBA) ## Create or update the conda env from environment-dev.yml (CLEAN=1 to recreate)
+ifdef CLEAN
+	$(_MAMBA) env remove -y -n $(CONDA_ENV_NAME)
+endif
+	if [ -d $(_CONDA_PREFIX) ]; then \
+		$(_MAMBA) install -y -n $(CONDA_ENV_NAME) -f environment-dev.yml $(_CONDA_ALIAS_ARG); \
+	else \
+		$(_MAMBA) create -y -n $(CONDA_ENV_NAME) -f environment-dev.yml $(_CONDA_ALIAS_ARG); \
+	fi
+
+conda-protoc: ## Generate protobuf stubs with the conda env's grpc_tools
+	$(_CONDA_RUN) sh -c 'ARCTICDB_PROTOC_VERS=$$(python -c "import google.protobuf as p; print(p.__version__.split(\".\")[0])") \
+		python setup.py protoc --build-lib python'
+
+$(_CONDA_BUILD_DIR)/.configure-stamp: $(_CMAKE_INPUTS) environment-dev.yml $$(wildcard cpp/CMakeUserPresets.json)
+	cd cpp && $(_CONDA_RUN) cmake -DTEST=ON --preset $(CONDA_PRESET) .
+	@touch $@
+
+conda-configure: ## CMake configure in the conda env (CONDA_PRESET=, default linux-conda-debug)
+	cd cpp && $(_CONDA_RUN) cmake -DTEST=ON --preset $(CONDA_PRESET) .
+	@touch $(_CONDA_BUILD_DIR)/.configure-stamp
+
+_CONDA_EXT_SUFFIX = $(shell $(_CONDA_PREFIX)/bin/python -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+
+conda-build: $(_CONDA_BUILD_DIR)/.configure-stamp ## Build arcticdb_ext in the conda env and symlink it into python/
+	$(_CONDA_RUN) cmake --build $(_CONDA_BUILD_DIR) -j $(CMAKE_JOBS) --target arcticdb_ext
+	ln -sfn ../$(_CONDA_BUILD_DIR)/arcticdb/arcticdb_ext$(_CONDA_EXT_SUFFIX) python/arcticdb_ext$(_CONDA_EXT_SUFFIX)
+	@echo "Created python/arcticdb_ext$(_CONDA_EXT_SUFFIX) -> $(CONDA_PRESET) build"
+
+conda-test-cpp: $(_CONDA_BUILD_DIR)/.configure-stamp ## Build and run C++ unit tests in the conda env (FILTER= for gtest_filter)
+	$(_CONDA_RUN) cmake --build $(_CONDA_BUILD_DIR) -j $(CMAKE_JOBS) --target test_unit_arcticdb
+	$(_CONDA_RUN) $(_CONDA_BUILD_DIR)/arcticdb/test_unit_arcticdb $(if $(FILTER),--gtest_filter=$(FILTER))
+
+conda-test-py: ## Run Python tests in the conda env (TYPE=, FILE=, ARGS= as for test-py)
+	cd python && $(_CONDA_RUN) python -m pytest $(_TEST_TARGET) $(ARGS)
+
+conda-build-and-test-py: conda-build ## conda build + symlink + run Python tests
+	$(MAKE) conda-test-py
+
+conda-shell: ## Open a shell with the conda env activated and ARCTICDB_USING_CONDA=1
+	$(_CONDA_RUN) bash

@@ -270,3 +270,20 @@ cat /tmp/ci_failures/slack_summary.txt
 
 **Note:** `track_ci_issues.py` will create real GitHub issues — use a test
 repository if you want to avoid that.
+
+# Release Notes Page
+
+`release_notes.py` is unrelated to failure tracking. `docs_build.yml` calls it
+before `mike deploy` to generate `docs/mkdocs/docs/release_notes.md` (git-ignored)
+from every stable `vX.Y.Z` GitHub Release, newest first. It rewrites release
+bodies so GitHub-flavoured markdown renders the same under mkdocs: it demotes
+headings, strips the wheels footer, fixes list and line-break differences, and
+links `#NNNN` refs.
+
+```bash
+python3 .github/scripts/release_notes.py  # needs an authenticated gh >= 2.48
+```
+
+In CI, it retries the GitHub API 3 times before failing the docs build. Locally,
+if `gh` is missing or fails, it writes a placeholder page so `mkdocs build --strict`
+still works.

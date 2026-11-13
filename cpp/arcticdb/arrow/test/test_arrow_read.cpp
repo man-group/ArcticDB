@@ -111,17 +111,17 @@ TEST(ColumnMetadata, NonArrow) {
 
 TEST(ColumnMetadata, MissingColumn) {
     proto::descriptors::NormalizationMetadata norm_meta;
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col"] =
-            proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta();
+    (*norm_meta.mutable_arrow()->mutable_columns())["col"] =
+            proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta();
     ASSERT_FALSE(column_metadata(norm_meta, "missing col").has_value());
 }
 
 TEST(ColumnMetadata, PresentColumn) {
     std::string tz{"Europe/Brussels"};
     proto::descriptors::NormalizationMetadata norm_meta;
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta col_meta;
+    proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta col_meta;
     col_meta.set_timezone(tz);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col"] = col_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["col"] = col_meta;
     auto new_col_meta = column_metadata(norm_meta, "col");
     ASSERT_TRUE(new_col_meta.has_value());
     ASSERT_TRUE(new_col_meta->has_timezone());
@@ -334,11 +334,11 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
     // Verify the index column has the expected number of chunks
     EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
 
-    std::string tz_str{"Europe/Brussels"};
+    std::string tz_str{"Europe/Amsterdam"};
     proto::descriptors::NormalizationMetadata norm_meta;
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta column_meta;
+    proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta column_meta;
     column_meta.set_timezone(tz_str);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col_with_tz"] = column_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["col_with_tz"] = column_meta;
     auto arrow_data = segment_to_arrow_data(segment, norm_meta);
     // We expect to see num_chunks record batches
     EXPECT_EQ(arrow_data.size(), num_chunks);
@@ -354,9 +354,20 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
         ASSERT_TRUE(dtz == nullptr);
         EXPECT_EQ(names[1], "col_with_tz");
         EXPECT_EQ(columns[1].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
-        dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[1]));
+        const auto& proxy = sparrow::detail::array_access::get_arrow_proxy(columns[1]);
+        EXPECT_EQ(std::string{proxy.format()}, std::string{"tsn:"} + tz_str);
+        dtz = sparrow::get_timezone(proxy);
         ASSERT_FALSE(dtz == nullptr);
-        ASSERT_EQ(dtz->name(), tz_str);
+        // The zone's name is OS-dependent for a link like Amsterdam, so check its offsets instead
+        const date::sys_days summer{date::year{2025} / 7 / 15};
+        EXPECT_EQ(dtz->get_info(summer).offset, std::chrono::hours{2});
+        // conda-forge's date ignores the POSIX TZ footer of conda-forge's slim tzdata files, so offsets after the last
+        // explicit transition (1996 for Amsterdam) are wrong. ArcticDB stores only the zone name, so Python output
+        // read through pyarrow, polars or pandas is unaffected.
+#ifndef ARCTICDB_USING_CONDA
+        const date::sys_days winter{date::year{2025} / 1 / 15};
+        EXPECT_EQ(dtz->get_info(winter).offset, std::chrono::hours{1});
+#endif
         EXPECT_EQ(names[2], "col_without_tz");
         EXPECT_EQ(columns[2].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
         dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[2]));
@@ -565,13 +576,13 @@ TEST(ModifyArrowOutputConfigFromNormMeta, NonArrowNormMeta) {
 
 TEST(ModifyArrowOutputConfigFromNormMeta, ArrowNormMeta) {
     proto::descriptors::NormalizationMetadata norm_meta;
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta column_meta;
+    proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta column_meta;
     column_meta.set_string_format(proto::descriptors::LARGE_STRING);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["large string"] = column_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["large string"] = column_meta;
     column_meta.set_string_format(proto::descriptors::SMALL_STRING);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["small string"] = column_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["small string"] = column_meta;
     column_meta.set_string_format(proto::descriptors::CATEGORICAL);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["categorical"] = column_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["categorical"] = column_meta;
 
     // Default unspecified takes all values from norm meta and sets default to large string
     ArrowOutputConfig arrow_output_config{};

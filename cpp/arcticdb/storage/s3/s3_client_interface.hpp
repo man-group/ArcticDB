@@ -53,10 +53,15 @@ struct ListObjectsOutput {
 struct FailedDelete {
     std::string s3_object_name;
     std::string error_message;
+    // The per-object S3 error code, e.g. "InternalError" or "AccessDenied". Empty if not known.
+    std::string error_code;
 
 #ifdef __apple_build_version__
     // Required because Apple Clang doesn't support aggregate initialization.
-    FailedDelete(const std::string& name, const std::string& message) : s3_object_name(name), error_message(message) {}
+    FailedDelete(const std::string& name, const std::string& message, const std::string& code = "") :
+        s3_object_name(name),
+        error_message(message),
+        error_code(code) {}
 #endif
 };
 

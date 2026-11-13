@@ -197,6 +197,36 @@ def test_unnamed_index_sets_fake_name(in_memory_version_store, series_or_df):
     _assert_df_or_series_roundtrip(lib, sym, obj)
 
 
+def _write_with_cleared_index_name(lib, sym, obj):
+    """Write ``obj`` with its stored index name cleared and ``fake_name`` left unset."""
+    udm, item, norm_meta = lib._try_normalize(sym, obj, None, False, None, None)
+    common = getattr(norm_meta, norm_meta.WhichOneof("input_type")).common
+    common.index.name = ""
+    assert not common.index.fake_name
+    lib.version_store.write_versioned_dataframe(sym, item, norm_meta, udm, False, False, False)
+
+
+@pytest.mark.parametrize("series_or_df", ["df", "series"])
+@pytest.mark.parametrize("operation", ["update", "append"])
+def test_cleared_index_name_takes_descriptor_name(in_memory_version_store, series_or_df, operation):
+    lib = in_memory_version_store
+    sym = "test_cleared_index_name_takes_descriptor_name"
+    index = pd.date_range("2025-01-01", periods=6, name="Date")
+    full = _build_df_or_series(series_or_df, index)
+    _write_with_cleared_index_name(lib, sym, full.iloc[:3])
+    assert lib.read(sym).data.index.name == "Date"
+
+    if operation == "update":
+        lib.update(sym, full.iloc[2:])
+    else:
+        lib.append(sym, full.iloc[3:])
+    _assert_df_or_series_roundtrip(lib, sym, full)
+
+    renamed = _build_df_or_series(series_or_df, index.rename("Other"))
+    with pytest.raises(SchemaException):
+        getattr(lib, operation)(sym, renamed.iloc[5:])
+
+
 @pytest.mark.parametrize("series_or_df", ["df", "series"])
 def test_index_name_int(in_memory_version_store, series_or_df):
     """An integer index name sets ``is_int`` so it is cast back to int on read."""
@@ -648,7 +678,7 @@ def test_append_series_and_dataframe_incompatible(request, lib_fixture, series_f
     first = _series([0, 1]) if series_first else _one_col_frame([0, 1])
     second = _one_col_frame([2, 3], "2025-01-03") if series_first else _series([2, 3], "2025-01-03")
     lib.write("sym", first)
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.append("sym", second)
 
 
@@ -660,18 +690,20 @@ def test_update_series_and_dataframe_incompatible(request, lib_fixture, series_f
     first = _series([0, 1, 2, 3]) if series_first else _one_col_frame([0, 1, 2, 3])
     second = _one_col_frame([9], "2025-01-02") if series_first else _series([9], "2025-01-02")
     lib.write("sym", first)
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.update("sym", second)
 
 
 @pytest.mark.parametrize("lib_fixture", ["in_memory_library", "in_memory_library_dynamic"], ids=["static", "dynamic"])
 @pytest.mark.parametrize("series_first", [True, False], ids=["series-first", "df-first"])
 def test_concat_series_and_dataframe_incompatible(request, lib_fixture, series_first):
-    """concat (multi-symbol join) cannot join a Series to a DataFrame (E_DESCRIPTOR_MISMATCH)."""
+    """concat (multi-symbol join) cannot join a Series to a DataFrame. The kind of object is a normalization
+    concern, so this is reported as one, the same way append and update report it."""
     lib = request.getfixturevalue(lib_fixture)
     first = _series([0, 1]) if series_first else _one_col_frame([0, 1])
     second = _one_col_frame([2, 3], "2025-01-03") if series_first else _series([2, 3], "2025-01-03")
     lib.write("s0", first)
     lib.write("s1", second)
-    with pytest.raises(SchemaException):
+    with pytest.raises(SchemaException) as e:
         concat(lib.read_batch(["s0", "s1"], lazy=True)).collect()
+    assert "Cannot concat: a Series cannot be combined with a DataFrame" in str(e.value)

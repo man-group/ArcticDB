@@ -8,6 +8,8 @@
 
 ::: arcticdb.version_store.library.SymbolDescription
 
+::: arcticdb.version_store.library.InputFormat
+
 ::: arcticdb.version_store.library.SymbolVersion
 
 ::: arcticdb.version_store.library.StagedDataFinalizeMethod
