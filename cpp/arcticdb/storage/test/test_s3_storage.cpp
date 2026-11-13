@@ -339,6 +339,12 @@ TEST_F(S3StorageFixture, test_async_read_missing_key_in_exception) {
         ASSERT_EQ(keys.size(), 1);
         ASSERT_EQ(variant_key_id(keys.at(0)), StreamId{"snap-not-present"});
     }
+    auto throttled = S3ClientTestWrapper::get_failure_trigger(
+            "symbol", StorageOperation::READ, Aws::S3::S3Errors::THROTTLING, false
+    );
+    ASSERT_THROW(
+            store.async_api()->async_read(get_test_key(throttled), ReadKeyOpts{}).get(), UnexpectedS3ErrorException
+    );
 }
 
 TEST_P(S3AndNfsStorageFixture, test_read_missing_key_in_exception) {
