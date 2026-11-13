@@ -1,4 +1,6 @@
+import contextlib
 import http.client
+import selectors
 import socket
 import ssl
 import threading
@@ -12,6 +14,7 @@ from arcticdb.storage_fixtures.s3 import (
     MotoS3StorageFixtureFactory,
     MotoGcpS3StorageFixtureFactory,
 )
+import werkzeug.serving
 from werkzeug.serving import make_server
 
 from tests.util.mark import SKIP_CONDA_MARK
@@ -83,24 +86,55 @@ def test_mock_server_keeps_connections_alive(s3_storage_factory: MotoS3StorageFi
     assert len(set(local_addresses)) == 1, local_addresses
 
 
-def test_mock_server_disables_nagle():
-    # A response goes out in two sends, headers then body. With Nagle on, a kept-alive connection holds the body back
-    # until the client ACKs the headers, which Linux delays by 40ms, so every request would take 40ms
-    def report_nodelay(environ, start_response):
-        nodelay = environ["werkzeug.socket"].getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
-        start_response("200 OK", [("Content-Type", "text/plain")])
-        return [b"on" if nodelay else b"off"]
-
-    server = make_server("127.0.0.1", 0, report_nodelay, threaded=True, request_handler=KeepAliveRequestHandler)
+@contextlib.contextmanager
+def _serve_with_keep_alive_handler(app):
+    server = make_server("127.0.0.1", 0, app, threaded=True, request_handler=KeepAliveRequestHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     conn = http.client.HTTPConnection("127.0.0.1", server.server_port)
     try:
-        conn.request("GET", "/")
-        assert conn.getresponse().read() == b"on"
+        yield conn
     finally:
         conn.close()
         server.shutdown()
         server.server_close()
+
+
+def _hello_app(environ, start_response):
+    start_response("200 OK", [("Content-Type", "text/plain")])
+    return [b"hello"]
+
+
+def test_mock_server_disables_nagle():
+    # A response goes out in two sends, headers then body. With Nagle on, a kept-alive connection holds the body back
+    # until the client ACKs the headers, which Linux delays by 40ms, so every request would take 40ms
+    def nodelay_app(environ, start_response):
+        nodelay = environ["werkzeug.socket"].getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [b"on" if nodelay else b"off"]
+
+    with _serve_with_keep_alive_handler(nodelay_app) as conn:
+        conn.request("GET", "/")
+        assert conn.getresponse().read() == b"on"
+
+
+def test_mock_server_does_not_wait_for_more_request_data(monkeypatch):
+    # After each response werkzeug waits up to 10ms for more request data to discard. On a kept-alive connection the
+    # next request is only read after that wait, so every request would take 10ms longer
+    timed_out_selects = []
+
+    class RecordingSelector(selectors.DefaultSelector):
+        def select(self, timeout=None):
+            events = super().select(timeout)
+            if not events:
+                timed_out_selects.append(timeout)
+            return events
+
+    monkeypatch.setattr(werkzeug.serving.selectors, "DefaultSelector", RecordingSelector)
+    with _serve_with_keep_alive_handler(_hello_app) as conn:
+        for _ in range(3):
+            conn.request("GET", "/")
+            assert conn.getresponse().read() == b"hello"
+    assert timed_out_selects == []
 
 
 @SKIP_CONDA_MARK
