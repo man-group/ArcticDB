@@ -313,6 +313,16 @@ TEST(CorruptionSafety, S3_FieldThatFitsAccepted) {
     });
 }
 
+// A stored block's is_shape flag can hold any byte; validate must reject one that is neither 0 nor 1.
+TEST(CorruptionSafety, BlockIsShapeByteOtherThanZeroOrOneRejected) {
+    EncodedFieldCollection coll;
+    auto& field = passthrough_field(coll, 8);
+    auto* value_block = const_cast<EncodedBlock*>(&field.values(0));
+    const uint8_t garbage = 0xFE;
+    std::memcpy(&value_block->is_shape_, &garbage, sizeof(garbage));
+    EXPECT_THROW(field.validate(), ArcticException);
+}
+
 // ---- S4: sparse map (BitMagic) body ----
 
 TEST(CorruptionSafety, S4_SparseMapSizeBelowDelimitersRejected) {
