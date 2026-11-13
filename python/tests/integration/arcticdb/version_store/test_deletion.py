@@ -987,3 +987,21 @@ def test_delete_read_from_timestamp(basic_store):
     lib.write(sym, 4)
     assert lib.read(sym, as_of=deletion_time.after).data == 2
     assert lib.batch_read([sym], as_ofs=[deletion_time.after])[sym].data == 2
+
+
+@pytest.mark.parametrize("operation", ["prune", "delete_version"])
+def test_delete_with_missing_index_key_s3_async(s3_version_store_v1, sym, operation):
+    lib = s3_version_store_v1
+    lib.write(sym, pd.DataFrame({"a": [1]}))
+    lib.write(sym, pd.DataFrame({"a": [2]}))
+    lib_tool = lib.library_tool()
+    index_key = next(k for k in lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, sym) if k.version_id == 0)
+    lib_tool.remove(index_key)
+    with config_context("S3.Async", 1):
+        if operation == "prune":
+            lib.write(sym, pd.DataFrame({"a": [3]}), prune_previous_version=True)
+            expected = 3
+        else:
+            lib.delete_version(sym, 0)
+            expected = 2
+    assert lib.read(sym).data["a"].iloc[0] == expected

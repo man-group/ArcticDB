@@ -245,7 +245,8 @@ folly::Future<KeySegmentPair> do_async_read_impl(
                             return KeySegmentPair(std::move(vk), std::move(segment));
                         } else {
                             auto unencoded_key = decoder(std::move(vk));
-                            raise_s3_exception(result.get_error(), fmt::format("{}", unencoded_key));
+                            raise_if_unexpected_error(result.get_error(), fmt::format("{}", unencoded_key));
+                            throw KeyNotFoundException(unencoded_key);
                         }
                     }
             );

@@ -330,6 +330,17 @@ TEST_F(S3StorageFixture, test_read) {
     );
 }
 
+TEST_F(S3StorageFixture, test_async_read_missing_key_in_exception) {
+    try {
+        store.async_api()->async_read(get_test_key("snap-not-present", KeyType::SNAPSHOT_REF), ReadKeyOpts{}).get();
+        FAIL();
+    } catch (KeyNotFoundException& e) {
+        auto keys = e.keys();
+        ASSERT_EQ(keys.size(), 1);
+        ASSERT_EQ(variant_key_id(keys.at(0)), StreamId{"snap-not-present"});
+    }
+}
+
 TEST_P(S3AndNfsStorageFixture, test_read_missing_key_in_exception) {
     auto s = get_storage();
     auto& store = *s;
