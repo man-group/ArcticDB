@@ -85,17 +85,16 @@ void expand_dense_buffer_and_promote_type(
     auto dst = reinterpret_cast<DestType*>(expanded_ptr);
     size_t dense_pos = 0;
     for (auto en = bv.first(), en_end = bv.end(); en != en_end; ++en, ++dense_pos) {
-        const auto row = *en;
-        if (ARCTICDB_UNLIKELY(row >= expanded_count || dense_pos >= dense_count)) {
+        if (ARCTICDB_UNLIKELY(*en >= expanded_count || dense_pos >= dense_count)) {
             codec::raise<ErrorCode::E_DECODE_ERROR>(
                     "Corrupt segment: sparse map entry {} (row {}) is outside {} dense values or {} rows",
                     dense_pos,
-                    row,
+                    *en,
                     dense_count,
                     expanded_count
             );
         }
-        dst[row] = static_cast<DestType>(src[dense_pos]);
+        dst[*en] = static_cast<DestType>(src[dense_pos]);
     }
 }
 

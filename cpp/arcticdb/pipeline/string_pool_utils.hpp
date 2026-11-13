@@ -39,17 +39,18 @@ inline auto get_string_from_pool(entity::position_t offset_val, const StringPool
     return string_pool.get_const_view(offset_val);
 }
 
-/// @brief Get the i-th string from a buffer
-/// @param string_pos The index of the string to be returned
-/// @return If the string at @p string_pos is actual string inside @p string_pool return a
-///  string view, otherwise return an (integer) placeholder representing not a string.
 inline void check_string_pool_present(bool has_string_pool) {
     codec::check<ErrorCode::E_DECODE_ERROR>(
             has_string_pool, "Corrupt segment: string column references a missing string pool"
     );
 }
 
-// string_pool is null when the segment has no string pool, which is only valid if no row references a pooled string.
+/// @brief Get the i-th string from a buffer
+/// @param string_pos The index of the string to be returned
+/// @return If the string at @p string_pos is actual string inside @p string_pool return a
+///  string view, otherwise return an (integer) placeholder representing not a string.
+/// @p string_pool is null when the segment has no string pool, which is only valid if no row references a pooled
+///  string.
 inline std::variant<std::string_view, entity::position_t> get_string_from_buffer(
         size_t string_pos, const ChunkedBuffer& src, const StringPool* string_pool
 ) {

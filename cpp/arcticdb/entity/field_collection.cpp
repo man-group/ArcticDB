@@ -32,13 +32,9 @@ std::string_view FieldCollection::add_field(const TypeDescriptor& type, std::str
 }
 
 void FieldCollection::regenerate_offsets() {
-    if (!offsets_.empty() || shapes_.empty())
+    if (!offsets_.empty())
         return;
 
-    offsets_.ensure_bytes(shapes_.bytes());
-    auto shape_ptr = reinterpret_cast<shape_t*>(shapes_.data());
-    auto offset_ptr = reinterpret_cast<shape_t*>(offsets_.data());
-    auto end = shape_ptr + shapes_.bytes() / sizeof(shape_t);
     // Field sizes and name lengths may come from a stored descriptor. Fields are reached two ways: at offsets built
     // from the stored sizes, and by the field iterator, which steps by each field's own name length. Check that every
     // field either way reaches lies within the buffer before anything reads it. The last stored size only marks the end
@@ -66,6 +62,20 @@ void FieldCollection::regenerate_offsets() {
         );
         return field_size;
     };
+    // Mirrors FieldCollectionIterator::increment, which never steps less than sizeof(Field). This runs even with no
+    // stored sizes, since the iterator walks the buffer regardless.
+    static_assert(sizeof(Field) <= field_header + Field::NameSize);
+    size_t pos = 0;
+    while (pos < total)
+        pos += check_field_at(pos);
+
+    if (shapes_.empty())
+        return;
+
+    offsets_.ensure_bytes(shapes_.bytes());
+    auto shape_ptr = reinterpret_cast<shape_t*>(shapes_.data());
+    auto offset_ptr = reinterpret_cast<shape_t*>(offsets_.data());
+    auto end = shape_ptr + shapes_.bytes() / sizeof(shape_t);
     size_t offset = 0;
     while (shape_ptr != end) {
         check_field_at(offset);
@@ -75,11 +85,6 @@ void FieldCollection::regenerate_offsets() {
         ++shape_ptr;
         ++offset_ptr;
     }
-    // Mirrors FieldCollectionIterator::increment, which never steps less than sizeof(Field).
-    static_assert(sizeof(Field) <= field_header + Field::NameSize);
-    size_t pos = 0;
-    while (pos < total)
-        pos += check_field_at(pos);
     offsets_.commit();
 }
 

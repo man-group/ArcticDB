@@ -8,6 +8,10 @@
 
 #pragma once
 
+#include <arcticdb/entity/types.hpp>
+
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 
 namespace arcticdb {

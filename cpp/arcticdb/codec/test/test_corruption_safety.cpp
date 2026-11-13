@@ -674,7 +674,8 @@ struct FieldOverride {
 };
 
 FieldCollection stored_field_collection(
-        std::optional<FieldOverride> stored_size = std::nullopt, std::optional<FieldOverride> name_size = std::nullopt
+        std::optional<FieldOverride> stored_size = std::nullopt, std::optional<FieldOverride> name_size = std::nullopt,
+        bool with_stored_sizes = true
 ) {
     FieldCollection fields;
     size_t field_index = 0;
@@ -687,9 +688,11 @@ FieldCollection stored_field_collection(
             std::memcpy(data, &stored_name_size, sizeof(stored_name_size));
         }
         fields.advance_data(size);
-        const bool corrupt = stored_size && stored_size->field_index == field_index;
-        *fields.allocate_shapes(sizeof(shape_t)) = corrupt ? stored_size->value : static_cast<shape_t>(size);
-        fields.advance_shapes(sizeof(shape_t));
+        if (with_stored_sizes) {
+            const bool corrupt = stored_size && stored_size->field_index == field_index;
+            *fields.allocate_shapes(sizeof(shape_t)) = corrupt ? stored_size->value : static_cast<shape_t>(size);
+            fields.advance_shapes(sizeof(shape_t));
+        }
         ++field_index;
     }
     return fields;
@@ -715,6 +718,11 @@ TEST(CorruptionSafety, DescriptorFieldNamePastBufferRejected) {
 // would walk it off the buffer.
 TEST(CorruptionSafety, DescriptorFieldNameSizeBreakingIterationRejected) {
     auto fields = stored_field_collection(std::nullopt, FieldOverride{0, 0});
+    expect_corrupt([&] { fields.regenerate_offsets(); });
+}
+
+TEST(CorruptionSafety, DescriptorWithoutStoredSizesStillChecksIteration) {
+    auto fields = stored_field_collection(std::nullopt, FieldOverride{0, 0}, false);
     expect_corrupt([&] { fields.regenerate_offsets(); });
 }
 
