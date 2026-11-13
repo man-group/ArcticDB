@@ -74,7 +74,7 @@ def test_compat_old_data_passes_block_hash_verification(old_venv_and_arctic_uri,
         {
             "ints": np.arange(6, dtype=np.int64),
             "floats": [0.5, np.nan, 2.5, 3.5, np.nan, 5.5],
-            "strings": ["a", None, "ccc", "a", "dd", None],
+            "strings": ["a", "b", "ccc", "a", "dd", "e"],  # no None: the frames reach the old client as CSV
             "bools": [True, False, True, True, False, False],
         },
         index=index,
@@ -82,14 +82,18 @@ def test_compat_old_data_passes_block_hash_verification(old_venv_and_arctic_uri,
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         compat.old_lib.write("sym", df.iloc[:3])
         compat.old_lib.execute(["lib.append('sym', df)"], {"df": df.iloc[3:]})
-        compat.old_lib.write("series", df["floats"])
+        # Frames reach the old client as CSV, which can't carry a Series, so it is built there
+        compat.old_lib.execute(["lib.write('series', df['floats'])"], {"df": df})
+        compat.old_lib.execute(["lib.write('missing_strings', pd.DataFrame({'s': ['a', None, 'c', None]}))"])
 
         with compat.current_version() as curr, config_context("Codec.VerifyBlockHash", 1):
             assert_frame_equal(curr.lib.read("sym").data, df)
             assert_frame_equal(
                 curr.lib.read("sym", columns=["strings"], date_range=(index[1], index[4])).data, df[["strings"]][1:5]
             )
-            pd.testing.assert_series_equal(curr.lib.read("series").data, df["floats"])
+            # The CSV hand-over drops the index freq
+            pd.testing.assert_series_equal(curr.lib.read("series").data, df["floats"], check_freq=False)
+            assert_frame_equal(curr.lib.read("missing_strings").data, pd.DataFrame({"s": ["a", None, "c", None]}))
 
 
 def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_name):
