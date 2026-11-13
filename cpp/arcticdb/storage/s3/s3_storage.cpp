@@ -189,7 +189,7 @@ void S3Storage::create_s3_client(const S3Settings& conf, const Aws::Auth::AWSCre
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Load sts profile credentials provider");
         Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage
                                                // object construct; reload to get latest
-        auto client_config = get_s3_config_and_set_env_var(conf);
+        auto client_config = get_s3_config(conf);
         auto sts_client_factory = [conf, this](const Aws::Auth::AWSCredentials& creds) { // Get default allocation tag
             auto sts_config = get_proxy_config(conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP);
             auto allocation_tag = Aws::STS::STSClient::GetAllocationTag();
@@ -215,7 +215,7 @@ void S3Storage::create_s3_client(const S3Settings& conf, const Aws::Auth::AWSCre
     } else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN &&
                creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
-        auto client_config = get_s3_config_and_set_env_var(conf);
+        auto client_config = get_s3_config(conf);
         if (!conf.aws_profile().empty()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS profile {}", conf.aws_profile());
             Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first
@@ -235,7 +235,7 @@ void S3Storage::create_s3_client(const S3Settings& conf, const Aws::Auth::AWSCre
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
         s3_client_ = std::make_unique<S3ClientImpl>(
                 creds,
-                get_s3_config_and_set_env_var(conf),
+                get_s3_config(conf),
                 Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                 conf.use_virtual_addressing()
         );

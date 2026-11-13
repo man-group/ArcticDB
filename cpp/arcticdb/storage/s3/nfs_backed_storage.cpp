@@ -135,7 +135,7 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath& library_path, OpenMode mod
     } else {
         s3_client_ = std::make_unique<s3::S3ClientImpl>(
                 s3::get_aws_credentials(conf),
-                s3::get_s3_config_and_set_env_var(conf),
+                s3::get_s3_config(conf),
                 Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                 false
         );
