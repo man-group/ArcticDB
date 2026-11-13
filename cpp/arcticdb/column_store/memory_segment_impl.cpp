@@ -433,12 +433,8 @@ void SegmentInMemoryImpl::create_columns(
             block_config = block_config_per_column.value()[i];
         }
         auto type = descriptor_->fields(i).type();
-        // A stored type with unknown size bits (e.g. from a corrupt descriptor) would make get_type_size shift by -1
-        const auto size_bits = slice_bit_size(type.data_type());
         util::check(
-                type.data_type() != DataType::UNKNOWN && size_bits != SizeBits::UNKNOWN_SIZE_BITS &&
-                        size_bits < SizeBits::COUNT,
-                "Can't create column in create_columns with unknown data type"
+                type.data_type() != DataType::UNKNOWN, "Can't create column in create_columns with unknown data type"
         );
         if (allocation_type == AllocationType::DETACHABLE &&
             is_fixed_string_type(descriptor_->fields(i).type().data_type())) {

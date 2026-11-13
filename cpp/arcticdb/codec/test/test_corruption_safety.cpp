@@ -8,6 +8,7 @@
 
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/codec/segment.hpp>
+#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/codec/encoded_field_collection.hpp>
 #include <arcticdb/codec/input_bounds.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
@@ -61,7 +62,9 @@ std::vector<uint8_t> serialize_segment(Segment&& seg) {
     return vec;
 }
 
-Segment make_numeric_segment(EncodingVersion version) {
+Segment make_numeric_segment(
+        EncodingVersion version, const arcticdb::proto::encoding::VariantCodec& codec = codec::default_lz4_codec()
+) {
     const auto stream_desc =
             stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT64, "vals")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
@@ -69,8 +72,8 @@ Segment make_numeric_segment(EncodingVersion version) {
         in_mem_seg.set_scalar<uint64_t>(0, i);
         in_mem_seg.end_row();
     }
-    return version == EncodingVersion::V1 ? encode_v1(std::move(in_mem_seg), codec::default_lz4_codec())
-                                          : encode_v2(std::move(in_mem_seg), codec::default_lz4_codec());
+    return version == EncodingVersion::V1 ? encode_v1(std::move(in_mem_seg), codec)
+                                          : encode_v2(std::move(in_mem_seg), codec);
 }
 
 Segment make_numeric_segment_v2() { return make_numeric_segment(EncodingVersion::V2); }
@@ -750,11 +753,28 @@ TEST(CorruptionSafety, FixedWidthStringWithoutPoolRejected) {
     expect_corrupt([&] { (void)get_string_from_buffer(1, offsets, nullptr); });
 }
 
-// A corrupt descriptor can store a value type with no size bits, which every type-size computation would mishandle.
+namespace {
+void replace_once(std::vector<uint8_t>& bytes, const std::vector<uint8_t>& from, const std::vector<uint8_t>& to) {
+    const auto found = std::ranges::search(bytes, from);
+    ASSERT_FALSE(found.empty()) << "pattern not found";
+    ASSERT_TRUE(std::ranges::search(found.end(), bytes.end(), from.begin(), from.end()).empty())
+            << "pattern not unique";
+    std::ranges::copy(to, found.begin());
+}
+} // namespace
+
+// A corrupt descriptor can store a field type whose size bits match no SizeBits value. Clear the size bits of the
+// UINT64 field "vals" in each encoding's stored descriptor.
 TEST(CorruptionSafety, FieldTypeWithoutSizeBitsRejected) {
-    const auto uint_without_size = combine_data_type(ValueType::UINT, SizeBits::UNKNOWN_SIZE_BITS);
-    const auto desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(uint_without_size, "vals")});
-    EXPECT_THROW(SegmentInMemory{desc.clone()}, ArcticException);
+    // V1 keeps the descriptor in the protobuf header: type_desc {value_type: UINT (1), size_bits: S64 (4)}, name "vals"
+    auto v1 = serialize_segment(make_numeric_segment(EncodingVersion::V1));
+    replace_once(v1, {0x08, 0x01, 0x10, 0x04, 0x12, 0x04, 'v', 'a', 'l', 's'}, {0x08, 0x01, 0x10, 0x00});
+    expect_corrupt([&] { (void)Segment::from_bytes(v1.data(), v1.size()); });
+
+    // V2 stores Field {name size 4, data type UINT64 (0x0c), Dim0, "vals"}, left as is by the passthrough codec
+    auto v2 = serialize_segment(make_numeric_segment(EncodingVersion::V2, codec::default_passthrough_codec()));
+    replace_once(v2, {0x04, 0x00, 0x00, 0x00, 0x0c, 0x00, 'v', 'a', 'l', 's'}, {0x04, 0x00, 0x00, 0x00, 0x08});
+    expect_corrupt([&] { (void)Segment::from_bytes(v2.data(), v2.size()); });
 }
 
 } // namespace arcticdb
