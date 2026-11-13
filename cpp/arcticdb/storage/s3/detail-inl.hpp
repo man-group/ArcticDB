@@ -220,7 +220,7 @@ KeySegmentPair do_read_impl(
 template<class KeyBucketizer, class KeyDecoder>
 folly::Future<KeySegmentPair> do_async_read_impl(
         VariantKey&& variant_key, const std::string& root_folder, const std::string& bucket_name,
-        const S3ClientInterface& s3_client, KeyBucketizer&& bucketizer, KeyDecoder&& key_decoder, ReadKeyOpts
+        const S3ClientInterface& s3_client, KeyBucketizer&& bucketizer, KeyDecoder&& key_decoder, ReadKeyOpts opts
 ) {
     auto key_type = variant_key_type(variant_key);
     auto key_type_dir = key_type_folder(root_folder, key_type);
@@ -230,6 +230,8 @@ folly::Future<KeySegmentPair> do_async_read_impl(
                     [vk = std::move(variant_key),
                      decoder = std::forward<KeyDecoder>(key_decoder),
                      key_type,
+                     s3_object_name,
+                     opts,
                      start = std::chrono::steady_clock::now()](auto&& result) mutable -> KeySegmentPair {
                         auto query_stat_operation_time = query_stats::add_task_count_and_time(
                                 query_stats::TaskType::S3_GetObjectAsync, key_type, start
@@ -245,7 +247,16 @@ folly::Future<KeySegmentPair> do_async_read_impl(
                             return KeySegmentPair(std::move(vk), std::move(segment));
                         } else {
                             auto unencoded_key = decoder(std::move(vk));
-                            raise_s3_exception(result.get_error(), fmt::format("{}", unencoded_key));
+                            auto& error = result.get_error();
+                            raise_if_unexpected_error(error, s3_object_name);
+                            log::storage().log(
+                                    opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+                                    "Failed to find segment for key '{}' {}: {}",
+                                    variant_key_view(unencoded_key),
+                                    error.GetExceptionName().c_str(),
+                                    error.GetMessage().c_str()
+                            );
+                            throw KeyNotFoundException(unencoded_key);
                         }
                     }
             );
