@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import sys
 
 import pytest
+import numpy as np
 import pandas as pd
 
 from arcticdb_ext.storage import KeyType
@@ -22,7 +23,8 @@ from arcticdb.exceptions import (
     ArcticInvalidApiUsageException,
 )
 from arcticdb.arctic import Arctic
-from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
+from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat
+from arcticdb.util.test import assert_frame_equal
 from arcticdb.encoding_version import EncodingVersion
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticdb.storage_fixtures.api import (
@@ -242,6 +244,75 @@ def test_modify_options_cols_per_segment(lmdb_storage, lib_name):
 
     proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
     assert proto_options.column_group_size == 200
+
+
+def _cps_change_df(start, num_rows, base, num_cols=6):
+    return pd.DataFrame(
+        {f"c{i}": np.arange(num_rows, dtype=np.float64) + base + i for i in range(num_cols)},
+        index=pd.date_range(start, periods=num_rows),
+    )
+
+
+def _check_reads_after_cps_change(lib, sym, expected):
+    assert_frame_equal(lib.read(sym).data, expected, check_freq=False)
+    for columns in [[c] for c in expected.columns] + [["c1", "c4"], ["c0", "c3", "c5"]]:
+        assert_frame_equal(lib.read(sym, columns=columns).data, expected[columns], check_freq=False)
+        arrow = lib.read(sym, columns=columns, output_format=OutputFormat.PYARROW).data
+        for c in columns:
+            np.testing.assert_array_equal(arrow.column(c).to_numpy(), expected[c].to_numpy())
+    date_range = (expected.index[5], expected.index[-5])
+    assert_frame_equal(
+        lib.read(sym, columns=["c2"], date_range=date_range).data,
+        expected.loc[date_range[0] : date_range[1], ["c2"]],
+        check_freq=False,
+    )
+    assert_frame_equal(lib.head(sym, 15, columns=["c3"]).data, expected[["c3"]].head(15), check_freq=False)
+    assert_frame_equal(lib.tail(sym, 15, columns=["c3"]).data, expected[["c3"]].tail(15), check_freq=False)
+
+
+CPS_CHANGES = [(1, 4), (4, 1), (2, 3), (3, 2), (127, 4), (4, 127)]
+
+
+@pytest.mark.parametrize("dynamic_schema", [False, True])
+@pytest.mark.parametrize("first_cps, second_cps", CPS_CHANGES)
+def test_modify_options_cols_per_segment_then_append_read_columns(
+    lmdb_storage, lib_name, first_cps, second_cps, dynamic_schema
+):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(
+        lib_name,
+        LibraryOptions(rows_per_segment=10, columns_per_segment=first_cps, dynamic_schema=dynamic_schema),
+    )
+    sym = "sym"
+    first = _cps_change_df("2024-01-01", 20, 0)
+    second = _cps_change_df("2024-02-01", 15, 100)
+    lib.write(sym, first)
+    ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, second_cps)
+    lib = ac[lib_name]
+    lib.append(sym, second)
+    _check_reads_after_cps_change(lib, sym, pd.concat([first, second]))
+
+
+@pytest.mark.parametrize("dynamic_schema", [False, True])
+@pytest.mark.parametrize("first_cps, second_cps", CPS_CHANGES)
+def test_modify_options_cols_per_segment_then_update_read_columns(
+    lmdb_storage, lib_name, first_cps, second_cps, dynamic_schema
+):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(
+        lib_name,
+        LibraryOptions(rows_per_segment=10, columns_per_segment=first_cps, dynamic_schema=dynamic_schema),
+    )
+    sym = "sym"
+    original = _cps_change_df("2024-01-01", 40, 0)
+    lib.write(sym, original)
+    ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, second_cps)
+    lib = ac[lib_name]
+    update = _cps_change_df("2024-01-12", 13, 1000)
+    lib.update(sym, update)
+    expected = original.copy()
+    expected.loc[update.index] = update
+    _check_reads_after_cps_change(lib, sym, expected)
 
 
 def test_modify_options_recursive_normalizers(lmdb_storage, lib_name):
