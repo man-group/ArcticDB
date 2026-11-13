@@ -215,22 +215,32 @@ inline size_t string_pool_block_bytes() {
 /// Pools whose pages average at least this many bytes (long strings) gain too little from re-cutting to pay for it
 inline constexpr size_t string_pool_large_page_bytes = size_t{32} * 1024;
 
+inline size_t string_pool_recut_blocks(const ChunkedBuffer& pool, size_t block_bytes) {
+    return (pool.bytes() + block_bytes - 1) / block_bytes;
+}
+
 /// Whether the pool is encoded one block per page rather than re-cut into blocks of block_bytes
 inline bool string_pool_keeps_pages(const ChunkedBuffer& pool, size_t block_bytes) {
     const auto pages = pool.num_blocks();
     if (block_bytes == 0 || pages <= 1 || pool.bytes() >= string_pool_large_page_bytes * pages)
         return true;
     // More blocks than pages would outgrow the output buffer, which is sized from the pages
-    return (pool.bytes() + block_bytes - 1) / block_bytes >= pages;
+    return string_pool_recut_blocks(pool, block_bytes) >= pages;
 }
 
 inline size_t string_pool_block_count(const ChunkedBuffer& pool, size_t block_bytes) {
-    return string_pool_keeps_pages(pool, block_bytes) ? pool.num_blocks()
-                                                      : (pool.bytes() + block_bytes - 1) / block_bytes;
+    return string_pool_keeps_pages(pool, block_bytes) ? pool.num_blocks() : string_pool_recut_blocks(pool, block_bytes);
 }
 
 /// The pool's bytes [offset, offset + size): read in place when they lie inside one page, else gathered into scratch
 inline const uint8_t* string_pool_bytes_at(const ChunkedBuffer& pool, size_t offset, size_t size, Buffer& scratch) {
+    util::check(
+            offset + size <= pool.bytes(),
+            "String pool block [{}, {}) is past the pool's {} bytes",
+            offset,
+            offset + size,
+            pool.bytes()
+    );
     const auto spans = pool.byte_blocks_at(offset, size);
     if (spans.size() == 1)
         return spans[0].first;

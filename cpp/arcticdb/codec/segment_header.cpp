@@ -60,6 +60,7 @@ size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg, size
     }
 
     if (in_mem_seg.has_string_pool()) {
+        // The values blocks plus the one V2 shapes block
         const auto string_pool_size =
                 calc_field_bytes(string_pool_block_count(in_mem_seg.const_string_pool().data(), block_bytes) + 1) +
                 sizeof(uint64_t); // String pool has a custom shapes buffer
