@@ -928,6 +928,8 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
     swallow the next request, so it is shown a socket at EOF and an empty stream instead.
     """
 
+    # Headers and body go out in separate sends, and with Nagle on the body then waits for the client's delayed ACK
+    disable_nagle_algorithm = True
     _eof_socket = None
     _in_wsgi = False
 

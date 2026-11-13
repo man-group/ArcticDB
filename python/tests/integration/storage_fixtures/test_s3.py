@@ -1,12 +1,18 @@
 import http.client
+import socket
 import ssl
-import time
+import threading
 from urllib.parse import urlsplit
 
 import botocore.exceptions
 import pytest
 import requests
-from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, MotoGcpS3StorageFixtureFactory
+from arcticdb.storage_fixtures.s3 import (
+    KeepAliveRequestHandler,
+    MotoS3StorageFixtureFactory,
+    MotoGcpS3StorageFixtureFactory,
+)
+from werkzeug.serving import make_server
 
 from tests.util.mark import SKIP_CONDA_MARK
 
@@ -77,21 +83,24 @@ def test_mock_server_keeps_connections_alive(s3_storage_factory: MotoS3StorageFi
     assert len(set(local_addresses)) == 1, local_addresses
 
 
-def test_mock_server_answers_next_request_on_connection_promptly(s3_storage_factory: MotoS3StorageFixtureFactory):
-    # werkzeug waits 10ms for more request data after every response, which would delay each request on a kept-alive
-    # connection by that much
-    conn = _connect(s3_storage_factory.endpoint)
-    round_trips = []
+def test_mock_server_disables_nagle():
+    # A response goes out in two sends, headers then body. With Nagle on, a kept-alive connection holds the body back
+    # until the client ACKs the headers, which Linux delays by 40ms, so every request would take 40ms
+    def report_nodelay(environ, start_response):
+        nodelay = environ["werkzeug.socket"].getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [b"on" if nodelay else b"off"]
+
+    server = make_server("127.0.0.1", 0, report_nodelay, threaded=True, request_handler=KeepAliveRequestHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    conn = http.client.HTTPConnection("127.0.0.1", server.server_port)
     try:
-        for _ in range(20):
-            start = time.perf_counter()
-            conn.request("GET", "/whoami")
-            assert conn.getresponse().read() == b"Moto AWS S3"
-            round_trips.append(time.perf_counter() - start)
+        conn.request("GET", "/")
+        assert conn.getresponse().read() == b"on"
     finally:
         conn.close()
-    # The first request opens the connection, so it is not delayed by a previous response
-    assert min(round_trips[1:]) < 0.005, round_trips
+        server.shutdown()
+        server.server_close()
 
 
 @SKIP_CONDA_MARK
