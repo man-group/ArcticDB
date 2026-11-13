@@ -26,6 +26,8 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <optional>
+#include <string_view>
 #include <vector>
 
 // Regression tests for crashes on corrupted storage objects. Each test hand-crafts corrupt
@@ -647,6 +649,74 @@ TEST(CorruptionSafety, SparseRowPastDestinationRejectedPythonBool) {
 
 TEST(CorruptionSafety, SparseRowPastDestinationRejectedArrowTimestamp) {
     expect_sparse_row_past_destination_rejected(ArrowTimestampHandler{}, DataType::NANOSECONDS_UTC64, sizeof(int64_t));
+}
+
+TEST(CorruptionSafety, SparseRowPastDestinationRejectedArrowString) {
+    expect_sparse_row_past_destination_rejected(ArrowStringHandler{}, DataType::UTF_DYNAMIC64, sizeof(int64_t));
+}
+
+TEST(CorruptionSafety, SparseRowPastDestinationRejectedArrowBool) {
+    expect_sparse_row_past_destination_rejected(ArrowBoolHandler{}, DataType::BOOL8, sizeof(uint8_t));
+}
+
+// ---- Descriptor field collections: stored field sizes and name lengths ----
+
+namespace {
+// Fields "first" and "second" as decode_ndarray leaves a stored descriptor before regenerate_offsets, with the stored
+// size of one field, or the name length of the second, optionally overwritten.
+FieldCollection stored_field_collection(
+        size_t corrupt_size_of = 0, std::optional<shape_t> field_bytes = std::nullopt,
+        std::optional<uint32_t> second_name_size = std::nullopt
+) {
+    FieldCollection fields;
+    size_t field_index = 0;
+    for (const std::string_view name : {"first", "second"}) {
+        const auto size = Field::calc_size(name);
+        auto* data = fields.allocate_data(size);
+        Field::emplace(make_scalar_type(DataType::INT64), name, data);
+        if (field_index == 1 && second_name_size)
+            std::memcpy(data, &*second_name_size, sizeof(*second_name_size));
+        fields.advance_data(size);
+        const bool corrupt = field_bytes && corrupt_size_of == field_index;
+        *fields.allocate_shapes(sizeof(shape_t)) = corrupt ? *field_bytes : static_cast<shape_t>(size);
+        fields.advance_shapes(sizeof(shape_t));
+        ++field_index;
+    }
+    return fields;
+}
+} // namespace
+
+TEST(CorruptionSafety, DescriptorFieldStartPastBufferRejected) {
+    auto fields = stored_field_collection(0, 1'000'000);
+    expect_corrupt([&] { fields.regenerate_offsets(); });
+}
+
+TEST(CorruptionSafety, DescriptorFieldNegativeSizeRejected) {
+    auto fields = stored_field_collection(0, -1'000);
+    expect_corrupt([&] { fields.regenerate_offsets(); });
+}
+
+TEST(CorruptionSafety, DescriptorFieldNamePastBufferRejected) {
+    auto fields = stored_field_collection(0, std::nullopt, 1'000'000);
+    expect_corrupt([&] { fields.regenerate_offsets(); });
+}
+
+// The last stored size only marks the end of the buffer; nothing reads with it, so it does not reject a readable
+// descriptor.
+TEST(CorruptionSafety, DescriptorLastFieldSizeIsNotUsedToRead) {
+    auto fields = stored_field_collection(1, 1'000'000);
+    fields.regenerate_offsets();
+    ASSERT_EQ(fields.size(), 2u);
+    EXPECT_EQ(fields[0].name(), "first");
+    EXPECT_EQ(fields[1].name(), "second");
+}
+
+TEST(CorruptionSafety, ValidDescriptorFieldCollectionStillReads) {
+    auto fields = stored_field_collection();
+    fields.regenerate_offsets();
+    ASSERT_EQ(fields.size(), 2u);
+    EXPECT_EQ(fields[0].name(), "first");
+    EXPECT_EQ(fields[1].name(), "second");
 }
 
 TEST(CorruptionSafety, V2HeaderNegativeFieldOffsetRejected) {
