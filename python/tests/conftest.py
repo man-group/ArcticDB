@@ -678,6 +678,19 @@ def route_env_to_extension(monkeypatch):
                 putenv_s(name, os.environ.get(name, ""))
 
         monkeypatch.undo = undo_and_resync
+    else:
+        # Elsewhere the extension shares the process environment
+        def putenv_s(name, value):
+            if value:
+                os.putenv(name, value)
+            else:
+                os.unsetenv(name)
+
+    # Opening an S3 library with neither of these set to when_supported makes configure_s3_checksum_validation set both
+    # to when_required in the extension's environment, where os.environ cannot see them. Resync both, so a test that
+    # sets only one does not inherit the other from an earlier test.
+    for name in ("AWS_RESPONSE_CHECKSUM_VALIDATION", "AWS_REQUEST_CHECKSUM_CALCULATION"):
+        putenv_s(name, os.environ.get(name, ""))
     yield
 
 
