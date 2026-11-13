@@ -67,22 +67,10 @@ struct PositionsAfterTruncation {
 };
 
 PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& mapping) {
-    // If truncation is required, we need to calculate the starting index in the data we are writing after truncation.
-    // `truncate_.start_` and `truncate_.end_` are in terms of the full segment, so we need to adjust them to indices in
-    // the segment slice we are reading. For example, if we are reading rows 20-29 (mapping.offset_bytes_ = 20 *
-    // dest_size_) and truncate_.start_ = 22, we need to start writing from index 2 in our data (22 - 20 = 2).
-    std::optional<size_t> first_idx_after_truncation = std::nullopt;
-    if (mapping.truncate_.start_.has_value()) {
-        first_idx_after_truncation = mapping.truncate_.start_.value() - mapping.offset_bytes_ / mapping.dest_size_;
-    }
-    std::optional<size_t> end_idx_after_truncation = std::nullopt;
-    if (mapping.truncate_.end_.has_value()) {
-        end_idx_after_truncation = mapping.truncate_.end_.value() - mapping.offset_bytes_ / mapping.dest_size_;
-    }
-    // The extra buffer position needs to correspond to the byte offset of the first index after truncation with respect
-    // to the full segment.
-    auto extra_buffer_position = mapping.offset_bytes_ + first_idx_after_truncation.value_or(0) * mapping.dest_size_;
-    return {first_idx_after_truncation, end_idx_after_truncation, extra_buffer_position};
+    const auto truncation = segment_truncation(mapping);
+    // The extra buffer is keyed by the byte offset, in the full frame, of the first row kept after truncation
+    auto extra_buffer_position = mapping.offset_bytes_ + truncation.start_.value_or(0) * mapping.dest_size_;
+    return {truncation.start_, truncation.end_, extra_buffer_position};
 }
 
 template<typename OffsetType>
@@ -187,8 +175,8 @@ void encode_variable_length(
     }
     dest_bitset.resize(mapping.num_rows_);
 
-    handle_truncation(dest_bitset, segment_truncation(mapping));
-    handle_truncation(dest_column, mapping.truncate_);
+    handle_truncation(dest_bitset, mapping);
+    handle_truncation(dest_column, mapping);
 
     create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
 
@@ -336,7 +324,7 @@ void encode_dictionary(
     }
     dest_bitset.resize(mapping.num_rows_);
 
-    handle_truncation(dest_bitset, segment_truncation(mapping));
+    handle_truncation(dest_bitset, mapping);
     handle_truncation(dest_column, mapping);
 
     create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
