@@ -117,6 +117,23 @@ TEST_F(FileStorageApi, KeyDeletion) {
     ASSERT_THROW(storage().remove(entity::VariantKey{key}, {}), storage::KeyNotFoundException);
 }
 
+TEST_F(FileStorageApi, MultiKeyDeletion) {
+    auto nonexistent1 = storage::get_test_key("nonexistent1", entity::KeyType::VERSION);
+    auto nonexistent2 = storage::get_test_key("nonexistent2", entity::KeyType::VERSION);
+    std::vector<entity::VariantKey> to_remove{nonexistent1, nonexistent2};
+    for (size_t i = 0; i < 3; ++i) {
+        const std::string stream_id = fmt::format("symbol{}", i);
+        auto key = storage::get_test_key(stream_id, entity::KeyType::VERSION);
+        to_remove.emplace_back(key);
+        storage().write(storage::KeySegmentPair(entity::VariantKey{key}, storage::get_test_segment()));
+        ASSERT_TRUE(exists_in_store(storage(), stream_id, entity::KeyType::VERSION));
+    }
+
+    ASSERT_THROW(storage().remove(to_remove, {}), storage::KeyNotFoundException);
+    for (const entity::VariantKey& key : to_remove)
+        ASSERT_FALSE(storage().key_exists(key));
+}
+
 // An early bug in file path generation led to files being overwritten. Write a few different segments
 // to four files and then try to reread them and match them to original data.
 TEST_F(FileStorageApi, KeysDoNotCollide) {

@@ -496,25 +496,16 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
 
 void FileBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
     const bool success = remove_impl(*posix_, storage_dir_, variant_key);
-    if (!success) {
-        if (!opts.ignores_missing_key_)
-            throw KeyNotFoundException(variant_key);
-        else
-            log::storage().warn("Key intended for deletion does not exist: {}", variant_key_view(variant_key));
-    }
+    if (!success && !opts.ignores_missing_key_)
+        throw KeyNotFoundException(variant_key);
 }
 
-// TODO: Need unit test for multi-key removal and exception handling.
 void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
     std::vector<VariantKey> failed_deletes;
     for (const VariantKey& variant_key : variant_keys) {
         const bool success = remove_impl(*posix_, storage_dir_, variant_key);
-        if (!success) {
-            if (!opts.ignores_missing_key_)
-                failed_deletes.emplace_back(variant_key);
-            else
-                log::storage().warn("Key intended for deletion does not exist: {}", variant_key_view(variant_key));
-        }
+        if (!success && !opts.ignores_missing_key_)
+            failed_deletes.emplace_back(variant_key);
     }
     if (!failed_deletes.empty())
         throw KeyNotFoundException(std::move(failed_deletes));
