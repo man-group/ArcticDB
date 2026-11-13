@@ -45,12 +45,12 @@ namespace arcticdb {
 namespace {
 // Asserts the call raises the decode-corruption error from these checks, not some unrelated exception.
 template<typename F>
-void expect_corrupt(F&& f) {
+void expect_corrupt(F&& f, std::string_view message = "Corrupt segment") {
     try {
         std::forward<F>(f)();
         ADD_FAILURE() << "expected a corrupt-segment exception";
     } catch (const ArcticException& e) {
-        EXPECT_NE(std::string(e.what()).find("Corrupt segment"), std::string::npos) << e.what();
+        EXPECT_NE(std::string_view(e.what()).find(message), std::string_view::npos) << e.what();
     }
 }
 
@@ -762,24 +762,63 @@ void replace_once(std::vector<uint8_t>& bytes, const std::vector<uint8_t>& from,
             << "pattern not unique";
     std::ranges::copy(to, found.begin());
 }
+
+// A corrupt descriptor can store a field type whose size bits match no SizeBits value. The patterns below are a
+// UINT64 field's stored type followed by its name; clearing the size bits changes one byte.
+std::vector<uint8_t> v1_uint64_field(std::string_view name) {
+    // Protobuf FieldDescriptor {type_desc {value_type: UINT (1), size_bits: S64 (4)}, name}
+    std::vector<uint8_t> bytes{0x08, 0x01, 0x10, 0x04, 0x12, static_cast<uint8_t>(name.size())};
+    bytes.insert(bytes.end(), name.begin(), name.end());
+    return bytes;
+}
+
+std::vector<uint8_t> v2_uint64_field(std::string_view name) {
+    // Field {uint32 name size, data type UINT64 (0x0c), Dim0, name}
+    std::vector<uint8_t> bytes{static_cast<uint8_t>(name.size()), 0x00, 0x00, 0x00, 0x0c, 0x00};
+    bytes.insert(bytes.end(), name.begin(), name.end());
+    return bytes;
+}
+
+constexpr std::string_view invalid_size_bits = "with invalid size bits";
 } // namespace
 
-// A corrupt descriptor can store a field type whose size bits match no SizeBits value. Clear the size bits of the
-// UINT64 field "vals" in each encoding's stored descriptor.
 TEST(CorruptionSafety, FieldTypeWithoutSizeBitsRejected) {
-    // V1 keeps the descriptor in the protobuf header: type_desc {value_type: UINT (1), size_bits: S64 (4)}, name "vals"
     auto v1 = serialize_segment(make_numeric_segment(EncodingVersion::V1));
-    ASSERT_NO_FATAL_FAILURE(
-            replace_once(v1, {0x08, 0x01, 0x10, 0x04, 0x12, 0x04, 'v', 'a', 'l', 's'}, {0x08, 0x01, 0x10, 0x00})
-    );
-    expect_corrupt([&] { (void)Segment::from_bytes(v1.data(), v1.size()); });
+    ASSERT_NO_FATAL_FAILURE(replace_once(v1, v1_uint64_field("vals"), {0x08, 0x01, 0x10, 0x00}));
+    expect_corrupt([&] { (void)Segment::from_bytes(v1.data(), v1.size()); }, invalid_size_bits);
 
-    // V2 stores Field {name size 4, data type UINT64 (0x0c), Dim0, "vals"}, left as is by the passthrough codec
+    // The passthrough codec leaves V2's descriptor fields unencoded
     auto v2 = serialize_segment(make_numeric_segment(EncodingVersion::V2, codec::default_passthrough_codec()));
-    ASSERT_NO_FATAL_FAILURE(
-            replace_once(v2, {0x04, 0x00, 0x00, 0x00, 0x0c, 0x00, 'v', 'a', 'l', 's'}, {0x04, 0x00, 0x00, 0x00, 0x08})
-    );
-    expect_corrupt([&] { (void)Segment::from_bytes(v2.data(), v2.size()); });
+    ASSERT_NO_FATAL_FAILURE(replace_once(v2, v2_uint64_field("vals"), {0x04, 0x00, 0x00, 0x00, 0x08}));
+    expect_corrupt([&] { (void)Segment::from_bytes(v2.data(), v2.size()); }, invalid_size_bits);
+}
+
+// An index key's timeseries descriptor holds the frame's fields, which reads use to allocate the output columns.
+TEST(CorruptionSafety, FrameFieldTypeWithoutSizeBitsRejected) {
+    for (auto version : {EncodingVersion::V1, EncodingVersion::V2}) {
+        const auto frame_desc =
+                stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT64, "frame_vals")});
+        SegmentInMemory seg{
+                stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT64, "vals")})
+        };
+        seg.set_scalar<uint64_t>(0, 1);
+        seg.end_row();
+        TimeseriesDescriptor tsd;
+        tsd.set_total_rows(1);
+        tsd.set_stream_descriptor(frame_desc);
+        seg.set_timeseries_descriptor(tsd);
+        const auto codec_opts = codec::default_passthrough_codec();
+        auto bytes = serialize_segment(
+                version == EncodingVersion::V1 ? encode_v1(std::move(seg), codec_opts)
+                                               : encode_v2(std::move(seg), codec_opts)
+        );
+        if (version == EncodingVersion::V1)
+            ASSERT_NO_FATAL_FAILURE(replace_once(bytes, v1_uint64_field("frame_vals"), {0x08, 0x01, 0x10, 0x00}));
+        else
+            ASSERT_NO_FATAL_FAILURE(replace_once(bytes, v2_uint64_field("frame_vals"), {0x0a, 0x00, 0x00, 0x00, 0x08}));
+        auto segment = Segment::from_bytes(bytes.data(), bytes.size());
+        expect_corrupt([&] { (void)decode_timeseries_descriptor(segment); }, invalid_size_bits);
+    }
 }
 
 } // namespace arcticdb

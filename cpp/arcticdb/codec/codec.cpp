@@ -196,6 +196,7 @@ std::shared_ptr<FieldCollection> decode_index_fields(
         ARCTICDB_TRACE(log::codec(), "Decoded index descriptor to position {}", data - begin);
     }
     fields->regenerate_offsets();
+    check_stored_field_types(*fields);
     return fields;
 }
 
@@ -256,6 +257,7 @@ TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(
     auto frame_desc = std::make_shared<FrameDescriptorImpl>(frame_descriptor_from_proto(tsd));
     const auto& desc = tsd.stream_descriptor();
     auto old_fields = std::make_shared<FieldCollection>(fields_from_proto(tsd.stream_descriptor()));
+    check_stored_field_types(*old_fields);
     StreamId stream_id = desc.id_case() == desc.kNumId ? StreamId(desc.num_id()) : StreamId(desc.str_id());
     return {frame_desc, segment_desc, frame_meta, old_fields, stream_id};
 }

@@ -162,22 +162,6 @@ struct DeserializedSegmentData {
 };
 
 namespace {
-// Type-size computations need size bits S8 to S64. DataType::UNKNOWN is exempt here and rejected where columns are
-// created, as before.
-void check_stored_field_types(const FieldCollection& fields) {
-    for (const auto& field : fields) {
-        const auto data_type = field.type().data_type();
-        const auto size_bits = slice_bit_size(data_type);
-        codec::check<ErrorCode::E_DECODE_ERROR>(
-                data_type == DataType::UNKNOWN ||
-                        (size_bits != SizeBits::UNKNOWN_SIZE_BITS && size_bits < SizeBits::COUNT),
-                "Corrupt segment: field '{}' has data type {} with invalid size bits",
-                field.name(),
-                static_cast<int>(data_type)
-        );
-    }
-}
-
 DeserializedSegmentData decode_header_and_fields(const uint8_t*& src, size_t readable_size, bool copy_data) {
     util::check(src != nullptr, "Got null data ptr from segment");
     codec::check<ErrorCode::E_DECODE_ERROR>(
