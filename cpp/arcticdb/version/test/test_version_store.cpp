@@ -22,6 +22,7 @@
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/util/key_utils.hpp>
+#include <arcticdb/storage/test/in_memory_store.hpp>
 
 #include <chrono>
 #include <thread>
@@ -1306,4 +1307,23 @@ TEST(DeleteTreesResponsiblyStats, DataKeysConsideredCountsBeforeExclusion) {
     EXPECT_EQ(stats.index_keys_deleted, 1u);
     EXPECT_EQ(stats.data_keys_considered, 2u);
     EXPECT_EQ(stats.data_keys_deleted, 0u);
+}
+
+TEST(IterateSnapshots, RethrowsKeyNotFoundWithoutKeys) {
+    using namespace arcticdb;
+    auto store = std::make_shared<InMemoryStore>();
+    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"snap"}, SegmentInMemory{});
+    ASSERT_THROW(
+            iterate_snapshots(
+                    store, [](VariantKey&) { throw storage::KeyNotFoundException(std::string("Key Not Found Error")); }
+            ),
+            storage::KeyNotFoundException
+    );
+}
+
+TEST(IterateSnapshots, IgnoresKeyNotFoundForVisitedSnapshot) {
+    using namespace arcticdb;
+    auto store = std::make_shared<InMemoryStore>();
+    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"snap"}, SegmentInMemory{});
+    ASSERT_NO_THROW(iterate_snapshots(store, [](VariantKey& vk) { throw storage::KeyNotFoundException(vk); }));
 }

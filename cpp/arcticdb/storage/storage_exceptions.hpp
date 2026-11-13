@@ -56,7 +56,8 @@ class NoDataFoundException : public ArcticCategorizedException<ErrorCategory::MI
 class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
   public:
     explicit KeyNotFoundException(const std::string& message) :
-        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {}
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message),
+        keys_(std::make_shared<std::vector<VariantKey>>()) {}
 
     explicit KeyNotFoundException(std::vector<VariantKey>&& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),

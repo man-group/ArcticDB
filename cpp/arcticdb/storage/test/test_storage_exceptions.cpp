@@ -507,3 +507,8 @@ TEST(MongoMockStorageTest, drop_collection) {
     store->fast_delete(); // calls drop_collection
     ASSERT_EQ(list_in_store(*store), std::set<std::string>{});
 }
+
+TEST(KeyNotFoundException, keys_is_empty_when_built_from_message) {
+    KeyNotFoundException e(std::string("Key Not Found Error"));
+    ASSERT_TRUE(e.keys().empty());
+}

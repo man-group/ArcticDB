@@ -114,6 +114,9 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
         try {
             visitor(vk);
         } catch (storage::KeyNotFoundException& e) {
+            if (e.keys().empty()) {
+                throw;
+            }
             std::for_each(e.keys().begin(), e.keys().end(), [&vk, &e](const VariantKey& key) {
                 if (key != vk)
                     throw storage::KeyNotFoundException(std::move(e.keys()));
