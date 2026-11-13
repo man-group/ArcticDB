@@ -14,6 +14,10 @@
 
 namespace arcticdb::storage::file_backed {
 
+/**
+ * Abstract away the low level OS I/O functions for testing purposes. Implementations can
+ * inject faults and the implementation should copy in prescribed ways.
+ */
 class PosixInterface {
   public:
     virtual ~PosixInterface();

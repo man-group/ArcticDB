@@ -86,11 +86,10 @@ fs::path get_key_subpath(const VariantKey& key) {
 bool is_tmp_file_name(std::string_view file_name) noexcept { return file_name.starts_with(TMP_FILE_PREFIX); }
 bool is_silly_rename(std::string_view file_name) noexcept { return file_name.starts_with(SILLY_RENAME_FILE_PREFIX); }
 
-// TODO: pseudodir is not a real term.
-bool is_pseudodir(std::string_view file_name) noexcept { return file_name == "." || file_name == ".."; }
+bool is_dot_dir(std::string_view file_name) noexcept { return file_name == "." || file_name == ".."; }
 
 bool skip_during_listing(std::string_view file_name) noexcept {
-    return is_tmp_file_name(file_name) || is_silly_rename(file_name) || is_pseudodir(file_name);
+    return is_tmp_file_name(file_name) || is_silly_rename(file_name) || is_dot_dir(file_name);
 }
 
 void refresh_directory(const fs::path& dir) {
@@ -469,7 +468,9 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     }
 }
 void FileBackedStorage::do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) {
-    throw std::runtime_error("do_write_if_none() not implemented");
+    storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(
+            "Atomic operations not yet supported on file backed storage"
+    );
 }
 
 void FileBackedStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
@@ -515,7 +516,7 @@ bool FileBackedStorage::do_key_exists(const VariantKey& key) {
     return exists(*posix_, storage_dir_, get_key_subpath(key));
 }
 
-bool FileBackedStorage::do_fast_delete() { throw std::runtime_error("do_fast_delete not implemented"); }
+bool FileBackedStorage::do_fast_delete() { return false; }
 
 bool FileBackedStorage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
@@ -591,7 +592,7 @@ size_t FileBackedStorage::get_num_temporary_files() const {
         struct dirent* dir_entry = nullptr;
         while ((dir_entry = posix_->readdir(dirp))) {
             std::string_view file_name(dir_entry->d_name);
-            if (is_pseudodir(file_name))
+            if (is_dot_dir(file_name))
                 continue;
             else if (is_tmp_file_name(file_name))
                 ++num_temporary_files;
