@@ -12,7 +12,6 @@
 #include <concepts>
 #include <functional>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/lambda_inlining.hpp>
 #include <arcticdb/util/offset_string.hpp>
 
@@ -31,12 +30,6 @@ inline bool column_references_pooled_string(const Column& column) {
             return true;
     }
     return false;
-}
-
-// An all-None/NaN string column legitimately has no string pool; a missing pool is corruption only when the column
-// references a real string.
-inline void check_string_pool_for_column(const StringPool* string_pool, const Column& column) {
-    check_string_pool_present(string_pool != nullptr || !column_references_pooled_string(column));
 }
 
 template<typename input_tdt, typename functor>

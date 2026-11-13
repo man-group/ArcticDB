@@ -16,6 +16,8 @@
 
 namespace arcticdb {
 
+class Column;
+
 namespace pipelines {
 struct SliceAndKey;
 struct PipelineContextRow;
@@ -54,6 +56,10 @@ inline std::variant<std::string_view, entity::position_t> get_string_from_buffer
     check_string_pool_present(string_pool != nullptr);
     return get_string_from_pool(offset_val, *string_pool);
 }
+
+// An all-None/NaN string column legitimately has no string pool; a missing pool is corruption only when the column
+// references a real string.
+void check_string_pool_for_column(const StringPool* string_pool, const Column& column);
 
 size_t first_context_row(const pipelines::SliceAndKey& slice_and_key, size_t first_row_in_frame);
 

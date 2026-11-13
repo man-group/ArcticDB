@@ -129,7 +129,7 @@ class StringBlock {
 
 class OffsetString;
 
-// A segment with no string pool is valid only if none of its string columns references a pooled string.
+// Raises a decode error when a string column needs a string pool the segment does not have.
 inline void check_string_pool_present(bool has_string_pool) {
     codec::check<ErrorCode::E_DECODE_ERROR>(
             has_string_pool, "Corrupt segment: string column references a missing string pool"

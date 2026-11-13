@@ -13,6 +13,7 @@
 #include <arcticdb/util/lambda_inlining.hpp>
 #include <arcticdb/util/string_utils.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/stream/index.hpp>
