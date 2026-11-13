@@ -49,30 +49,6 @@ cpp/arcticdb/
 └── log/            # Logging
 ```
 
-## Module Layering
-
-Today every module under `cpp/arcticdb/` can reach every other through `#include`s, so a header
-change can recompile almost everything. The direction we are moving towards is:
-
-```
-log < util < entity < codec < column_store < [stream + pipeline] < storage < async
-    < processing < version < toolbox < python
-```
-
-`arrow` sits beside `column_store`/`pipeline` and depends only downward. A module should include
-only modules to its left. This is a direction, not a rule the code follows yet.
-
-`build_tooling/check_cpp_layering.py` enforces a ratchet in the `Linting checks` job of `build.yml`.
-It collects the module-to-module edges from the includes of production files (test directories and
-benchmarks are ignored) and compares them with `build_tooling/cpp_layering_allowlist.txt`:
-
-- A new edge fails the check, with the `file:line` of each include that creates it. Move the code
-  to a lower module instead, or, if the dependency is really intended, add the edge.
-- An allowlisted edge that no longer exists also fails. When a change removes the last include
-  between two modules, delete that line in the same PR, so the allowlist only shrinks.
-
-`python build_tooling/check_cpp_layering.py --update` regenerates the allowlist from the code.
-
 ## Quick Reference
 
 ### Building C++
