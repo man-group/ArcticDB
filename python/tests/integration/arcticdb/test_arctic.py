@@ -1665,7 +1665,7 @@ def _set_checksum_env_vars(monkeypatch, response_checksum, request_checksum):
 
 
 def _checksum_env_vars_seen_by_child_process():
-    # A child process inherits the process environment, which os.environ does not reflect changes from C++ to
+    # os.environ does not see a setenv from C++, but a child process inherits it
     code = f"import json, os; print(json.dumps([os.environ.get(n) for n in {list(_CHECKSUM_ENV_VARS)}]))"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     return tuple(json.loads(result.stdout))
@@ -1677,7 +1677,7 @@ def test_s3_library_leaves_checksum_env_vars_unchanged(
     s3_storage, lib_name, monkeypatch, route_env_to_extension, response_checksum, request_checksum
 ):
     _set_checksum_env_vars(monkeypatch, response_checksum, request_checksum)
-    with _corrupting_get_responses(s3_storage):
+    with _accepting_checksum_mode(s3_storage):
         create_library(s3_storage.arctic_uri, lib_name)
     assert _checksum_env_vars_seen_by_child_process() == (response_checksum, request_checksum)
 
@@ -1698,12 +1698,12 @@ def test_s3_checksum_env_var_matrix(
     # moto rejects response checksum requests by default
     if response_on:
         with pytest.raises(StorageException):
-            create_library(s3_storage.arctic_uri, f"{lib_name}_rejected")
+            create_library(s3_storage.arctic_uri, f"{lib_name}_probe")
     else:
-        create_library(s3_storage.arctic_uri, f"{lib_name}_rejected")
+        create_library(s3_storage.arctic_uri, f"{lib_name}_probe")
 
     # The md5 DeleteObjects opt-in only works when the SDK is not calculating request checksums
-    with _corrupting_get_responses(s3_storage):
+    with _accepting_checksum_mode(s3_storage):
         create_library(s3_storage.arctic_uri, lib_name)
         lib = Arctic(s3_storage.arctic_uri)[lib_name]
         for i in range(3):
@@ -1724,6 +1724,17 @@ def test_s3_checksum_env_var_matrix(
 
 
 @contextlib.contextmanager
+def _accepting_checksum_mode(s3_storage):
+    endpoint = s3_storage.factory.endpoint
+    verify = s3_storage.factory.client_cert_file or False
+    requests.post(endpoint + "/reject_checksum_mode", b"0", verify=verify).raise_for_status()
+    try:
+        yield
+    finally:
+        requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+
+
+@contextlib.contextmanager
 def _corrupting_get_responses(s3_storage):
     endpoint = s3_storage.factory.endpoint
     verify = s3_storage.factory.client_cert_file or False
@@ -1731,12 +1742,11 @@ def _corrupting_get_responses(s3_storage):
     def corrupt(count):
         requests.post(endpoint + "/corrupt_get_responses", str(count).encode(), verify=verify).raise_for_status()
 
-    requests.post(endpoint + "/reject_checksum_mode", b"0", verify=verify).raise_for_status()
-    try:
-        yield corrupt
-    finally:
-        corrupt(0)
-        requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+    with _accepting_checksum_mode(s3_storage):
+        try:
+            yield corrupt
+        finally:
+            corrupt(0)
 
 
 def _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries):

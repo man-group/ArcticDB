@@ -22,6 +22,7 @@
 #include <arcticdb/log/log.hpp>
 
 #include <aws/core/Aws.h>
+#include <aws/core/config/ConfigAndCredentialsCacheManager.h>
 #include <aws/core/utils/memory/stl/AWSStringStream.h>
 #ifndef WIN32
 #include <aws/core/http/HttpClientFactory.h>
@@ -243,12 +244,20 @@ void set_env(const char* name, const std::optional<std::string>& value) {
 struct ChecksumEnvVarFixture : ::testing::Test {
     std::optional<std::string> saved_response_checksum = get_env(response_checksum_env_var);
     std::optional<std::string> saved_request_checksum = get_env(request_checksum_env_var);
+    std::optional<std::string> saved_config_file = get_env("AWS_CONFIG_FILE");
 
-    ChecksumEnvVarFixture() { arcticdb::storage::s3::S3ApiInstance::instance(); }
+    ChecksumEnvVarFixture() {
+        arcticdb::storage::s3::S3ApiInstance::instance();
+        // So that checksum settings in the developer's AWS profile do not apply
+        set_env("AWS_CONFIG_FILE", "nonexistent-aws-config");
+        Aws::Config::ReloadCachedConfigFile();
+    }
 
     ~ChecksumEnvVarFixture() override {
         set_env(response_checksum_env_var, saved_response_checksum);
         set_env(request_checksum_env_var, saved_request_checksum);
+        set_env("AWS_CONFIG_FILE", saved_config_file);
+        Aws::Config::ReloadCachedConfigFile();
     }
 };
 
@@ -269,15 +278,15 @@ TEST_F(ChecksumEnvVarFixture, checksum_config_follows_env_vars_without_changing_
             // Both are off unless either is when_supported. Then the SDK resolves each by itself, so unset or
             // invalid means when_supported.
             const bool opted_in = response == "when_supported" || request == "when_supported";
+            const bool response_on = opted_in && response != "when_required";
+            const bool request_on = opted_in && request != "when_required";
             ASSERT_EQ(
                     cfg.checksumConfig.responseChecksumValidation,
-                    opted_in && response != "when_required" ? ResponseChecksumValidation::WHEN_SUPPORTED
-                                                            : ResponseChecksumValidation::WHEN_REQUIRED
+                    response_on ? ResponseChecksumValidation::WHEN_SUPPORTED : ResponseChecksumValidation::WHEN_REQUIRED
             );
             ASSERT_EQ(
                     cfg.checksumConfig.requestChecksumCalculation,
-                    opted_in && request != "when_required" ? RequestChecksumCalculation::WHEN_SUPPORTED
-                                                           : RequestChecksumCalculation::WHEN_REQUIRED
+                    request_on ? RequestChecksumCalculation::WHEN_SUPPORTED : RequestChecksumCalculation::WHEN_REQUIRED
             );
             ASSERT_EQ(get_env(response_checksum_env_var), response);
             ASSERT_EQ(get_env(request_checksum_env_var), request);

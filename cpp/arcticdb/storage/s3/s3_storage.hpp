@@ -250,8 +250,8 @@ inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpo
 // Since aws-sdk-cpp >= 1.11.486, it has turned on checksum integrity check `x-amz-checksum-mode: enabled`
 // This feature is not supported in many s3 implementations. SDK with this feature ON will reject responses from
 // s3 implementations that do not provide checksum, which leads to storage exception in arcticdb
-// So turn both checksum settings off on the client unless the user opts in via either env var. This is set on the
-// client config, after the SDK has resolved it from the env vars and AWS profile, so the process env is not changed.
+// So default both to when_required unless the user opts in via either env var. Set on the client config rather than
+// the process env, overriding what the SDK resolved from the env vars and AWS profile.
 inline void configure_s3_checksum_validation(Aws::Client::ClientConfiguration& client_configuration) {
     const char* response_checksum = std::getenv("AWS_RESPONSE_CHECKSUM_VALIDATION");
     const char* request_checksum = std::getenv("AWS_REQUEST_CHECKSUM_CALCULATION");
