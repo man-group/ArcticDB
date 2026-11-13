@@ -931,7 +931,8 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
     # Headers and body go out in separate sends, and with Nagle on the body then waits for the client's delayed ACK,
     # which is 40ms on Linux
     disable_nagle_algorithm = True
-    # Free the thread of an idle connection, after curl's own 118s idle limit so a reused connection never races it
+    # Free the thread of an idle connection. This also bounds each blocking read or write. Longer than clients' idle
+    # limits (libcurl's CURLOPT_MAXAGE_CONN default is 118s; Windows uses WinHTTP), so a reuse rarely races the close
     timeout = 300
     _eof_socket = None
     _in_wsgi = False

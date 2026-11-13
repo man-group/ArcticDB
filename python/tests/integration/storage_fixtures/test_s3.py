@@ -89,7 +89,8 @@ def test_mock_server_keeps_connections_alive(s3_storage_factory: MotoS3StorageFi
 def _serve_with_keep_alive_handler(app):
     server = make_server("127.0.0.1", 0, app, threaded=True, request_handler=KeepAliveRequestHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    conn = http.client.HTTPConnection("127.0.0.1", server.server_port)
+    # A swallowed request would otherwise hang until the server times the connection out
+    conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
     try:
         yield conn
     finally:
