@@ -28,7 +28,7 @@ import requests
 from typing import Optional, Any, Dict, Type
 
 import werkzeug
-from werkzeug.serving import WSGIRequestHandler
+from werkzeug.serving import DechunkedInput, WSGIRequestHandler
 from werkzeug.wsgi import LimitedStream
 import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
@@ -916,16 +916,18 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
 
     werkzeug closes because http.server does not skip a request body the application left unread, so do that here.
     After each response werkzeug also reads whatever is waiting on the socket, which on a kept-alive connection would
-    swallow the next request, so it is shown a socket that never has data instead.
+    swallow the next request, so it is shown a socket at EOF and an empty stream instead.
     """
 
-    _never_readable = None
+    _at_eof = None
 
     def make_environ(self):
         environ = super().make_environ()
         environ["werkzeug.socket"] = self._connection
-        if not environ.get("wsgi.input_terminated"):
-            environ["wsgi.input"] = LimitedStream(environ["wsgi.input"], int(environ.get("CONTENT_LENGTH") or 0))
+        if environ.get("wsgi.input_terminated"):
+            environ["wsgi.input"] = DechunkedInput(self._rfile)
+        else:
+            environ["wsgi.input"] = LimitedStream(self._rfile, int(environ.get("CONTENT_LENGTH") or 0))
         self._request_body = environ["wsgi.input"]
         return environ
 
@@ -935,15 +937,17 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
         super().send_header(keyword, value)
 
     def run_wsgi(self):
-        if KeepAliveRequestHandler._never_readable is None:
-            KeepAliveRequestHandler._never_readable = socket.socketpair()
+        if KeepAliveRequestHandler._at_eof is None:
+            at_eof, peer = socket.socketpair()
+            peer.close()
+            KeepAliveRequestHandler._at_eof = at_eof
         self._request_body = None
-        self._connection = self.connection
-        self.connection = KeepAliveRequestHandler._never_readable[0]
+        self._connection, self._rfile = self.connection, self.rfile
+        self.connection, self.rfile = KeepAliveRequestHandler._at_eof, BytesIO()
         try:
             super().run_wsgi()
         finally:
-            self.connection = self._connection
+            self.connection, self.rfile = self._connection, self._rfile
         if self.close_connection or self._request_body is None:
             return
         try:

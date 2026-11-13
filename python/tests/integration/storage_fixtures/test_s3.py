@@ -1,5 +1,6 @@
 import http.client
 import ssl
+import time
 from urllib.parse import urlsplit
 
 import botocore.exceptions
@@ -37,17 +38,20 @@ def test_rate_limit(s3_storage_factory: MotoS3StorageFixtureFactory):  # Don't n
     requests.head(s3.endpoint, verify=s3.client_cert_file).raise_for_status()
 
 
+def _connect(endpoint_url):
+    endpoint = urlsplit(endpoint_url)
+    if endpoint.scheme == "https":
+        return http.client.HTTPSConnection(endpoint.hostname, endpoint.port, context=ssl._create_unverified_context())
+    return http.client.HTTPConnection(endpoint.hostname, endpoint.port)
+
+
 def test_mock_server_keeps_connections_alive(s3_storage_factory: MotoS3StorageFixtureFactory):
     # A connection per request leaves a TIME_WAIT entry per request, which exhausts loopback ports on Windows CI
-    endpoint = urlsplit(s3_storage_factory.endpoint)
-    if endpoint.scheme == "https":
-        conn = http.client.HTTPSConnection(endpoint.hostname, endpoint.port, context=ssl._create_unverified_context())
-    else:
-        conn = http.client.HTTPConnection(endpoint.hostname, endpoint.port)
+    conn = _connect(s3_storage_factory.endpoint)
     local_addresses = []
 
-    def send(method, path, body=None, headers={}):
-        conn.request(method, path, body, headers)
+    def send(method, path, body=None, headers={}, **kwargs):
+        conn.request(method, path, body, headers, **kwargs)
         local_addresses.append(conn.sock.getsockname())
         response = conn.getresponse()
         return response.status, response.read()
@@ -58,9 +62,31 @@ def test_mock_server_keeps_connections_alive(s3_storage_factory: MotoS3StorageFi
         status, _ = send("PUT", "/bucket/key", b"x" * 100_000, {"x-amz-checksum-mode": "enabled"})
         assert status == 411
         assert send("GET", "/whoami") == (200, b"Moto AWS S3")
+        status, _ = send(
+            "PUT", "/bucket/key", iter([b"x" * 50_000] * 2), {"x-amz-checksum-mode": "enabled"}, encode_chunked=True
+        )
+        assert status == 411
+        assert send("GET", "/whoami") == (200, b"Moto AWS S3")
     finally:
         conn.close()
     assert len(set(local_addresses)) == 1, local_addresses
+
+
+def test_mock_server_answers_next_request_on_connection_promptly(s3_storage_factory: MotoS3StorageFixtureFactory):
+    # werkzeug waits 10ms for more request data after every response, which would delay each request on a kept-alive
+    # connection by that much
+    conn = _connect(s3_storage_factory.endpoint)
+    round_trips = []
+    try:
+        for _ in range(20):
+            start = time.perf_counter()
+            conn.request("GET", "/whoami")
+            assert conn.getresponse().read() == b"Moto AWS S3"
+            round_trips.append(time.perf_counter() - start)
+    finally:
+        conn.close()
+    # The first request opens the connection, so it is not delayed by a previous response
+    assert min(round_trips[1:]) < 0.005, round_trips
 
 
 @SKIP_CONDA_MARK

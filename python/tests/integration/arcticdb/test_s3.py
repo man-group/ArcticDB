@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import re
 import time
-from multiprocessing import Queue, Process
+import multiprocessing
 
 import pytest
 import pandas as pd
@@ -91,7 +91,8 @@ def test_nfs_backed_s3_storage(lib_name, nfs_clean_bucket):
         assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
 
 
-def read_repeatedly(version_store, queue: Queue):
+def read_repeatedly(version_store, queue, started):
+    started.wait()
     while True:
         try:
             version_store.list_versions("tst")
@@ -101,7 +102,8 @@ def read_repeatedly(version_store, queue: Queue):
         time.sleep(0.1)
 
 
-def write_repeatedly(version_store):
+def write_repeatedly(version_store, started):
+    started.wait()
     while True:
         for i in range(10):
             version_store.snapshot(f"snap-{i}")
@@ -116,13 +118,18 @@ def test_racing_list_and_delete_nfs(nfs_backed_s3_storage, lib_name):
     lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
     lib.write("tst", [1, 2, 3])
 
-    exceptions_in_reader = Queue()
-    reader = Process(target=read_repeatedly, args=(lib, exceptions_in_reader))
-    writer = Process(target=write_repeatedly, args=(lib,))
+    # Forked children would share the parent's pooled keep-alive connections and interleave requests on them
+    ctx = multiprocessing.get_context("spawn")
+    exceptions_in_reader = ctx.Queue()
+    # Spawned children take a while to start, so only start the clock once both are running
+    started = ctx.Barrier(3)
+    reader = ctx.Process(target=read_repeatedly, args=(lib, exceptions_in_reader, started))
+    writer = ctx.Process(target=write_repeatedly, args=(lib, started))
 
     try:
         reader.start()
         writer.start()
+        started.wait(timeout=120)
 
         # Run test for 2 seconds - this was enough for this regression test to reliably fail
         # 10 times in a row.
