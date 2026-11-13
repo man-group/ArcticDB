@@ -134,10 +134,10 @@ bool exists(PosixInterface& posix, const fs::path& dir, const fs::path& subpath,
     return false;
 }
 
-class Directory {
-  public:
+class FdHolder {
+  protected:
     // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
-    Directory(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
+    FdHolder(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
         posix_(posix) {
         fd_ = posix.open(pathname.c_str(), flags, mode);
         // TODO: Use a retry wrapper
@@ -152,7 +152,7 @@ class Directory {
         }
     }
 
-    Directory(PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
+    FdHolder(PosixInterface& posix, const FdHolder& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
         posix_(posix) {
         fd_ = posix.openat(dir_fd.fd_, pathname.c_str(), flags, mode);
         // TODO Note that there is no retry here on ENOENT. It's awkward to refresh the ancestor directories, since we'd
@@ -163,13 +163,14 @@ class Directory {
             );
     }
 
-    ~Directory() {
+    ~FdHolder() {
         if (fd_ >= 0)
             close_swallow_errors();
     }
 
-    ARCTICDB_NO_MOVE_OR_COPY(Directory);
+    ARCTICDB_NO_MOVE_OR_COPY(FdHolder);
 
+  public:
     int fd() const noexcept { return fd_; }
 
     void close() {
@@ -177,7 +178,7 @@ class Directory {
         int true_fd = fd_;
         fd_ = -1;
         if (posix_.close(true_fd) != 0)
-            raise_io_error(errno, "Failed to close directory");
+            raise_io_error(errno, "Failed to close file descriptor");
     }
 
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
@@ -200,8 +201,23 @@ class Directory {
         }
 
         if (res < 0)
-            throw std::system_error(errno, std::generic_category(), "fsync failed");
+            raise_io_error(errno, "fsync failed");
     }
+
+  protected:
+    PosixInterface& posix_;
+    int fd_;
+};
+
+class Directory : public FdHolder {
+  public:
+    Directory(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
+        FdHolder(posix, storage_dir, pathname, flags, mode) {}
+
+    Directory(PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
+        FdHolder(posix, dir_fd, pathname, flags, mode) {}
+
+    ARCTICDB_NO_MOVE_OR_COPY(Directory);
 
     void mkdir(const fs::path& pathname, mode_t mode) const {
         int res = posix_.mkdirat(fd_, pathname.c_str(), mode);
@@ -216,63 +232,17 @@ class Directory {
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
     // errors.
     void unlinkat_swallow_errors(const fs::path& pathname) const { ::unlinkat(fd_, pathname.c_str(), 0); }
-
-  private:
-    PosixInterface& posix_;
-    int fd_;
 };
 
-class File {
+class File : public FdHolder {
   public:
-    // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
     File(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
-        posix_(posix) {
-        fd_ = posix.open(pathname.c_str(), flags, mode);
-        // TODO: Use a retry wrapper
-        if (fd_ < 0) {
-            if (errno == ENOENT) {
-                refresh_ancestors(posix, storage_dir, pathname);
-                fd_ = posix.open(pathname.c_str(), flags, mode);
-            }
-        }
-        if (fd_ < 0) {
-            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to open {}", pathname.c_str()));
-        }
-    }
+        FdHolder(posix, storage_dir, pathname, flags, mode) {}
 
     File(PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
-        posix_(posix) {
-        fd_ = posix.openat(dir_fd.fd(), pathname.c_str(), flags, mode);
-        // TODO Note that there is no retry here on ENOENT. It's awkward to refresh the ancestor directories, since we'd
-        // have to close the fd and reopen it. Technically doable from within here. Do it later.
-        if (fd_ < 0)
-            throw std::system_error(
-                    errno, std::generic_category(), fmt::format("Failed to openat {}", pathname.c_str())
-            );
-    }
-
-    ~File() {
-        if (fd_ >= 0)
-            close_swallow_errors();
-    }
+        FdHolder(posix, dir_fd, pathname, flags, mode) {}
 
     ARCTICDB_NO_MOVE_OR_COPY(File);
-
-    void close() {
-        assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
-        int true_fd = fd_;
-        fd_ = -1;
-        if (posix_.close(true_fd) != 0)
-            raise_io_error(errno, fmt::format("Failed to close file"));
-    }
-
-    // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
-    // errors.
-    void close_swallow_errors() {
-        assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
-        (void)posix_.close(fd_);
-        fd_ = -1;
-    }
 
     void write_all(PosixInterface& posix, std::span<const std::uint8_t> buffer) {
         const size_t buffer_size = buffer.size();
@@ -310,25 +280,6 @@ class File {
 
         return buffer;
     }
-
-    void sync() const {
-        // TODO: Can this error? Yes... EINTR at the least should be retried. Then there's the usual ones
-        // which write can return.
-        int res = posix_.fsync(fd_);
-        if (res < 0) {
-            if (errno == EINTR) {
-                // Try one more time? TODO: Quick retries should be wrapped in a retry() that takes a lambda.
-                res = posix_.fsync(fd_);
-            }
-        }
-
-        if (res < 0)
-            raise_io_error(errno, "fsync failed");
-    }
-
-  private:
-    PosixInterface& posix_;
-    int fd_;
 };
 
 // TODO: Delete me
