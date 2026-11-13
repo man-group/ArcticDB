@@ -103,7 +103,7 @@ bool operator==(const FieldCollection& left, const FieldCollection& right) {
 }
 
 // Type-size computations need size bits S8 to S64. DataType::UNKNOWN is exempt here and rejected where columns are
-// created, as before.
+// created.
 void check_stored_field_types(const FieldCollection& fields) {
     for (const auto& field : fields) {
         const auto data_type = field.type().data_type();

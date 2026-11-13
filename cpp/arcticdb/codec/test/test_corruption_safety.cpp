@@ -62,6 +62,12 @@ std::vector<uint8_t> serialize_segment(Segment&& seg) {
     return vec;
 }
 
+Segment encode_segment(
+        EncodingVersion version, SegmentInMemory&& seg, const arcticdb::proto::encoding::VariantCodec& codec
+) {
+    return version == EncodingVersion::V1 ? encode_v1(std::move(seg), codec) : encode_v2(std::move(seg), codec);
+}
+
 Segment make_numeric_segment(
         EncodingVersion version, const arcticdb::proto::encoding::VariantCodec& codec = codec::default_lz4_codec()
 ) {
@@ -72,8 +78,7 @@ Segment make_numeric_segment(
         in_mem_seg.set_scalar<uint64_t>(0, i);
         in_mem_seg.end_row();
     }
-    return version == EncodingVersion::V1 ? encode_v1(std::move(in_mem_seg), codec)
-                                          : encode_v2(std::move(in_mem_seg), codec);
+    return encode_segment(version, std::move(in_mem_seg), codec);
 }
 
 Segment make_numeric_segment_v2() { return make_numeric_segment(EncodingVersion::V2); }
@@ -763,41 +768,43 @@ void replace_once(std::vector<uint8_t>& bytes, const std::vector<uint8_t>& from,
     std::ranges::copy(to, found.begin());
 }
 
-// A corrupt descriptor can store a field type whose size bits match no SizeBits value. The patterns below are a
-// UINT64 field's stored type followed by its name; clearing the size bits changes one byte.
-std::vector<uint8_t> v1_uint64_field(std::string_view name) {
-    // Protobuf FieldDescriptor {type_desc {value_type: UINT (1), size_bits: S64 (4)}, name}
-    std::vector<uint8_t> bytes{0x08, 0x01, 0x10, 0x04, 0x12, static_cast<uint8_t>(name.size())};
-    bytes.insert(bytes.end(), name.begin(), name.end());
-    return bytes;
-}
-
-std::vector<uint8_t> v2_uint64_field(std::string_view name) {
-    // Field {uint32 name size, data type UINT64 (0x0c), Dim0, name}
-    std::vector<uint8_t> bytes{static_cast<uint8_t>(name.size()), 0x00, 0x00, 0x00, 0x0c, 0x00};
-    bytes.insert(bytes.end(), name.begin(), name.end());
-    return bytes;
+// A corrupt descriptor can store a field type whose size bits match no SizeBits value. Clears the size bits of the
+// stored UINT64 field `name`, a one-byte change; the field's name makes the match unique.
+void clear_uint64_size_bits(std::vector<uint8_t>& bytes, EncodingVersion version, std::string_view name) {
+    const auto name_size = static_cast<uint8_t>(name.size());
+    std::vector<uint8_t> stored;
+    std::vector<uint8_t> corrupted;
+    if (version == EncodingVersion::V1) {
+        // Protobuf FieldDescriptor {type_desc {value_type: UINT (1), size_bits: S64 (4)}, name}
+        stored = {0x08, 0x01, 0x10, 0x04, 0x12, name_size};
+        corrupted = {0x08, 0x01, 0x10, 0x00};
+    } else {
+        // Field {uint32 name size, data type UINT64 (0x0c), Dim0, name}; UINT with no size bits is 0x08
+        stored = {name_size, 0x00, 0x00, 0x00, 0x0c, 0x00};
+        corrupted = {name_size, 0x00, 0x00, 0x00, 0x08};
+    }
+    stored.insert(stored.end(), name.begin(), name.end());
+    replace_once(bytes, stored, corrupted);
 }
 
 constexpr std::string_view invalid_size_bits = "with invalid size bits";
 } // namespace
 
 TEST(CorruptionSafety, FieldTypeWithoutSizeBitsRejected) {
-    auto v1 = serialize_segment(make_numeric_segment(EncodingVersion::V1));
-    ASSERT_NO_FATAL_FAILURE(replace_once(v1, v1_uint64_field("vals"), {0x08, 0x01, 0x10, 0x00}));
-    expect_corrupt([&] { (void)Segment::from_bytes(v1.data(), v1.size()); }, invalid_size_bits);
-
-    // The passthrough codec leaves V2's descriptor fields unencoded
-    auto v2 = serialize_segment(make_numeric_segment(EncodingVersion::V2, codec::default_passthrough_codec()));
-    ASSERT_NO_FATAL_FAILURE(replace_once(v2, v2_uint64_field("vals"), {0x04, 0x00, 0x00, 0x00, 0x08}));
-    expect_corrupt([&] { (void)Segment::from_bytes(v2.data(), v2.size()); }, invalid_size_bits);
+    for (auto version : {EncodingVersion::V1, EncodingVersion::V2}) {
+        SCOPED_TRACE(static_cast<int>(version));
+        // The passthrough codec leaves V2's descriptor fields unencoded
+        auto bytes = serialize_segment(make_numeric_segment(version, codec::default_passthrough_codec()));
+        ASSERT_NO_FATAL_FAILURE(clear_uint64_size_bits(bytes, version, "vals"));
+        expect_corrupt([&] { (void)Segment::from_bytes(bytes.data(), bytes.size()); }, invalid_size_bits);
+    }
 }
 
-// An index key's timeseries descriptor holds the frame's fields, which reads use to allocate the output columns.
+// An index key's timeseries descriptor holds the frame's fields, which reads use to allocate the output columns. The
+// frame field is named differently from the segment's own field so that only the timeseries descriptor is corrupted.
 TEST(CorruptionSafety, FrameFieldTypeWithoutSizeBitsRejected) {
     for (auto version : {EncodingVersion::V1, EncodingVersion::V2}) {
-        const auto frame_desc =
-                stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT64, "frame_vals")});
+        SCOPED_TRACE(static_cast<int>(version));
         SegmentInMemory seg{
                 stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT64, "vals")})
         };
@@ -805,19 +812,15 @@ TEST(CorruptionSafety, FrameFieldTypeWithoutSizeBitsRejected) {
         seg.end_row();
         TimeseriesDescriptor tsd;
         tsd.set_total_rows(1);
-        tsd.set_stream_descriptor(frame_desc);
-        seg.set_timeseries_descriptor(tsd);
-        const auto codec_opts = codec::default_passthrough_codec();
-        auto bytes = serialize_segment(
-                version == EncodingVersion::V1 ? encode_v1(std::move(seg), codec_opts)
-                                               : encode_v2(std::move(seg), codec_opts)
+        tsd.set_stream_descriptor(
+                stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT64, "frame_vals")})
         );
-        if (version == EncodingVersion::V1)
-            ASSERT_NO_FATAL_FAILURE(replace_once(bytes, v1_uint64_field("frame_vals"), {0x08, 0x01, 0x10, 0x00}));
-        else
-            ASSERT_NO_FATAL_FAILURE(replace_once(bytes, v2_uint64_field("frame_vals"), {0x0a, 0x00, 0x00, 0x00, 0x08}));
+        seg.set_timeseries_descriptor(tsd);
+        auto bytes = serialize_segment(encode_segment(version, std::move(seg), codec::default_passthrough_codec()));
+        ASSERT_NO_FATAL_FAILURE(clear_uint64_size_bits(bytes, version, "frame_vals"));
         auto segment = Segment::from_bytes(bytes.data(), bytes.size());
         expect_corrupt([&] { (void)decode_timeseries_descriptor(segment); }, invalid_size_bits);
+        expect_corrupt([&] { (void)decode_segment(segment); }, invalid_size_bits);
     }
 }
 
