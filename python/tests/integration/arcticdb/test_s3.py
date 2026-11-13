@@ -122,7 +122,7 @@ def test_racing_list_and_delete_nfs(nfs_backed_s3_storage, lib_name):
     ctx = multiprocessing.get_context("spawn")
     exceptions_in_reader = ctx.Queue()
     # Spawned children take a while to start, so only start the clock once both are running
-    started = ctx.Barrier(3)
+    started = ctx.Barrier(3)  # reader, writer and this process
     reader = ctx.Process(target=read_repeatedly, args=(lib, exceptions_in_reader, started))
     writer = ctx.Process(target=write_repeatedly, args=(lib, started))
 

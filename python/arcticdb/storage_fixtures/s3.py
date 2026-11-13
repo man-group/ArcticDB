@@ -29,6 +29,7 @@ from typing import Optional, Any, Dict, Type
 
 import werkzeug
 from werkzeug.serving import DechunkedInput, WSGIRequestHandler
+from werkzeug.exceptions import ClientDisconnected
 from werkzeug.wsgi import LimitedStream
 import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
@@ -909,6 +910,14 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
         return super().__call__(environ, start_response)
 
 
+class _DiscardingWriter:
+    def write(self, data):
+        return len(data)
+
+    def flush(self):
+        pass
+
+
 class KeepAliveRequestHandler(WSGIRequestHandler):
     """werkzeug's dev server closes the connection after every response, so every S3 request opens a new connection
     and leaves a TIME_WAIT entry behind. Across a test run that exhausts the loopback ports on Windows, and connects
@@ -919,9 +928,11 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
     swallow the next request, so it is shown a socket at EOF and an empty stream instead.
     """
 
-    _at_eof = None
+    _eof_socket = None
+    _in_wsgi = False
 
     def make_environ(self):
+        # Runs while run_wsgi has swapped the socket and stream out, so give the app the real ones
         environ = super().make_environ()
         environ["werkzeug.socket"] = self._connection
         if environ.get("wsgi.input_terminated"):
@@ -932,28 +943,39 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
         return environ
 
     def send_header(self, keyword, value):
-        if keyword.lower() == "connection" and value.lower() == "close" and self.request_version == "HTTP/1.1":
+        # Only drop the header werkzeug forces on app responses: http.server's own error responses still close
+        forced_close = keyword.lower() == "connection" and value.lower() == "close"
+        if self._in_wsgi and forced_close and self.request_version == "HTTP/1.1":
             return
         super().send_header(keyword, value)
 
+    def end_headers(self):
+        super().end_headers()
+        # HostDispatcherApplication's own responses have a body even for HEAD, which the client would read as the
+        # start of the next response
+        if self._in_wsgi and self.command == "HEAD":
+            self.wfile = _DiscardingWriter()
+
     def run_wsgi(self):
-        if KeepAliveRequestHandler._at_eof is None:
-            at_eof, peer = socket.socketpair()
+        if KeepAliveRequestHandler._eof_socket is None:
+            eof_socket, peer = socket.socketpair()
             peer.close()
-            KeepAliveRequestHandler._at_eof = at_eof
+            KeepAliveRequestHandler._eof_socket = eof_socket
         self._request_body = None
-        self._connection, self._rfile = self.connection, self.rfile
-        self.connection, self.rfile = KeepAliveRequestHandler._at_eof, BytesIO()
+        self._connection, self._rfile, self._wfile = self.connection, self.rfile, self.wfile
+        self.connection, self.rfile = KeepAliveRequestHandler._eof_socket, BytesIO()
+        self._in_wsgi = True
         try:
             super().run_wsgi()
         finally:
-            self.connection, self.rfile = self._connection, self._rfile
+            self._in_wsgi = False
+            self.connection, self.rfile, self.wfile = self._connection, self._rfile, self._wfile
         if self.close_connection or self._request_body is None:
             return
         try:
             while self._request_body.read(1 << 16):
                 pass
-        except (OSError, ValueError):
+        except (OSError, ValueError, ClientDisconnected):
             self.close_connection = True
 
 

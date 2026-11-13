@@ -50,8 +50,8 @@ def test_mock_server_keeps_connections_alive(s3_storage_factory: MotoS3StorageFi
     conn = _connect(s3_storage_factory.endpoint)
     local_addresses = []
 
-    def send(method, path, body=None, headers={}, **kwargs):
-        conn.request(method, path, body, headers, **kwargs)
+    def send(method, path, body=None, headers=None, **kwargs):
+        conn.request(method, path, body, headers or {}, **kwargs)
         local_addresses.append(conn.sock.getsockname())
         response = conn.getresponse()
         return response.status, response.read()
@@ -62,10 +62,15 @@ def test_mock_server_keeps_connections_alive(s3_storage_factory: MotoS3StorageFi
         status, _ = send("PUT", "/bucket/key", b"x" * 100_000, {"x-amz-checksum-mode": "enabled"})
         assert status == 411
         assert send("GET", "/whoami") == (200, b"Moto AWS S3")
+        # The same with a chunked body
         status, _ = send(
             "PUT", "/bucket/key", iter([b"x" * 50_000] * 2), {"x-amz-checksum-mode": "enabled"}, encode_chunked=True
         )
         assert status == 411
+        assert send("GET", "/whoami") == (200, b"Moto AWS S3")
+        # The mock's own responses have a body even for HEAD, which must not be sent ahead of the next response
+        assert send("HEAD", "/whoami") == (200, b"")
+        assert send("HEAD", "/bucket/key", headers={"x-amz-checksum-mode": "enabled"}) == (411, b"")
         assert send("GET", "/whoami") == (200, b"Moto AWS S3")
     finally:
         conn.close()
