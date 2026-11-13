@@ -27,6 +27,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <optional>
@@ -268,7 +269,7 @@ std::vector<uint8_t> value_and_sparse_map_input(
     serializer.serialize(bitmap, serialized);
     sparse_map_bytes = static_cast<uint32_t>(serialized.size() + util::combined_bit_magic_delimiters_size());
     std::vector<uint8_t> input(prefix.size() + value_bytes + sparse_map_bytes, 0);
-    std::memcpy(input.data(), prefix.data(), prefix.size());
+    std::ranges::copy(prefix, input.begin());
     uint8_t* pos = input.data() + prefix.size() + value_bytes;
     util::write_magic<util::BitMagicStart>(pos);
     std::memcpy(pos, serialized.data(), serialized.size());
