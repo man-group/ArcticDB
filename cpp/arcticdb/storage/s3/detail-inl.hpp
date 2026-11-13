@@ -135,6 +135,23 @@ inline void raise_if_unexpected_error(const Aws::S3::S3Error& err, const std::st
     }
 }
 
+[[noreturn]] inline void raise_read_error(
+        const Aws::S3::S3Error& error, const std::string& s3_object_name, const VariantKey& unencoded_key,
+        ReadKeyOpts opts
+) {
+    raise_if_unexpected_error(error, s3_object_name);
+
+    log::storage().log(
+            opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+            "Failed to find segment for key '{}' {}: {}",
+            variant_key_view(unencoded_key),
+            error.GetExceptionName().c_str(),
+            error.GetMessage().c_str()
+    );
+
+    throw KeyNotFoundException(unencoded_key);
+}
+
 template<class KeyBucketizer>
 void do_write_impl(
         KeySegmentPair& key_seg, const std::string& root_folder, const std::string& bucket_name,
@@ -201,18 +218,7 @@ KeySegmentPair do_read_impl(
         );
         return {VariantKey{unencoded_key}, std::move(segment)};
     } else {
-        auto& error = get_object_result.get_error();
-        raise_if_unexpected_error(error, s3_object_name);
-
-        log::storage().log(
-                opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
-                "Failed to find segment for key '{}' {}: {}",
-                variant_key_view(unencoded_key),
-                error.GetExceptionName().c_str(),
-                error.GetMessage().c_str()
-        );
-
-        throw KeyNotFoundException(unencoded_key);
+        raise_read_error(get_object_result.get_error(), s3_object_name, unencoded_key, opts);
     }
     return KeySegmentPair{};
 }
@@ -246,17 +252,7 @@ folly::Future<KeySegmentPair> do_async_read_impl(
                             );
                             return KeySegmentPair(std::move(vk), std::move(segment));
                         } else {
-                            auto unencoded_key = decoder(std::move(vk));
-                            auto& error = result.get_error();
-                            raise_if_unexpected_error(error, s3_object_name);
-                            log::storage().log(
-                                    opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
-                                    "Failed to find segment for key '{}' {}: {}",
-                                    variant_key_view(unencoded_key),
-                                    error.GetExceptionName().c_str(),
-                                    error.GetMessage().c_str()
-                            );
-                            throw KeyNotFoundException(unencoded_key);
+                            raise_read_error(result.get_error(), s3_object_name, decoder(std::move(vk)), opts);
                         }
                     }
             );
