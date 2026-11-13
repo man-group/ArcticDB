@@ -199,7 +199,8 @@ Measured on warm LMDB reads (Linux, release build):
 The cost is about one extra pass over the decoded bytes, so it grows with the size of the blocks decoded, not with
 the number of rows returned.
 
-Unlike most options it takes effect immediately, including for `Library` instances that already exist.
+Unlike most options it is read at every segment decode, so it applies to every segment decoded after it is set,
+including by `Library` instances that already exist. Set it before reading, not while reads are running.
 
 Default: 0 (off).
 

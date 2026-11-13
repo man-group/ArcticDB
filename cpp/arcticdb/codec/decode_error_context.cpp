@@ -40,8 +40,4 @@ std::string describe_key_for_decode_error(const entity::VariantKey& key, bool is
     );
 }
 
-bool is_decode_error(const folly::exception_wrapper& error) {
-    return error.is_compatible_with<DataIntegrityException>() || error.is_compatible_with<CodecException>();
-}
-
 } // namespace arcticdb

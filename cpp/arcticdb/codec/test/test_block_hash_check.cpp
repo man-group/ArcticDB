@@ -159,37 +159,26 @@ TEST_P(BlockHashCheckTest, IntactSegmentsDecodeWithVerificationOnForEveryCodec) 
     }
 }
 
+TEST_P(BlockHashCheckTest, SettingIsReadAtEachSegmentDecode) {
+    ScopedConfig restore = ScopedConfig::unset_int(verify_option);
+    auto corrupted_segment = [] {
+        auto segment = encode_test_segment(GetParam());
+        flip_payload_literal(segment);
+        return segment;
+    };
+    EXPECT_NO_THROW(decode_with_key(corrupted_segment()));
+    ConfigsMap::instance()->set_int(verify_option, 1);
+    EXPECT_THROW(decode_with_key(corrupted_segment()), DataIntegrityException);
+    ConfigsMap::instance()->set_int(verify_option, 0);
+    EXPECT_NO_THROW(decode_with_key(corrupted_segment()));
+    {
+        ScopedConfig on(verify_option, 1);
+        EXPECT_THROW(decode_with_key(corrupted_segment()), DataIntegrityException);
+    }
+    EXPECT_NO_THROW(decode_with_key(corrupted_segment()));
+}
+
 INSTANTIATE_TEST_SUITE_P(
         EncodingVersions, BlockHashCheckTest, testing::Values(EncodingVersion::V1, EncodingVersion::V2),
         [](const auto& info) { return info.param == EncodingVersion::V1 ? "V1" : "V2"; }
 );
-
-TEST(BlockHashCheckOption, EveryConfigsMapChangeTakesEffect) {
-    auto& configs = *ConfigsMap::instance();
-    ScopedConfig restore = ScopedConfig::unset_int(verify_option);
-    ASSERT_FALSE(codec::block_hash_verification_enabled());
-
-    configs.set_int(verify_option, 1);
-    EXPECT_TRUE(codec::block_hash_verification_enabled());
-    configs.unset_int(verify_option);
-    EXPECT_FALSE(codec::block_hash_verification_enabled());
-
-    configs.set_all_int({{"codec.verifyblockhash", 1}});
-    EXPECT_TRUE(codec::block_hash_verification_enabled());
-    configs.set_int("CODEC.VERIFYBLOCKHASH", 0);
-    EXPECT_FALSE(codec::block_hash_verification_enabled());
-
-    {
-        ScopedConfig on(verify_option, 1);
-        EXPECT_TRUE(codec::block_hash_verification_enabled());
-    }
-    EXPECT_FALSE(codec::block_hash_verification_enabled());
-}
-
-TEST(BlockHashCheckOption, WatchedIntStartsFromTheCurrentValue) {
-    ScopedConfig set("Test.WatchedIntStartsFromCurrentValue", 5);
-    const auto& watched = ConfigsMap::instance()->watch_int("Test.WatchedIntStartsFromCurrentValue", 0);
-    EXPECT_EQ(watched.load(), 5);
-    ConfigsMap::instance()->unset_int("Test.WatchedIntStartsFromCurrentValue");
-    EXPECT_EQ(watched.load(), 0);
-}

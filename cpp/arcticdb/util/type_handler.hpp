@@ -12,6 +12,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
+#include <arcticdb/codec/decode_options.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <folly/Poly.h>
 #include <memory>
@@ -38,7 +39,7 @@ struct ITypeHandler {
         void handle_type(
                 const uint8_t*& source, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
                 const ColumnMapping& mapping, const DecodePathData& shared_data, std::any& handler_data,
-                EncodingVersion encoding_version, const std::shared_ptr<StringPool>& string_pool,
+                const DecodeOptions& decode_options, const std::shared_ptr<StringPool>& string_pool,
                 const ReadOptions& read_options
         ) {
             folly::poly_call<0>(
@@ -49,7 +50,7 @@ struct ITypeHandler {
                     mapping,
                     shared_data,
                     handler_data,
-                    encoding_version,
+                    decode_options,
                     string_pool,
                     read_options
             );

@@ -25,7 +25,6 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/codec/block_hash_check.hpp>
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers_common.hpp>
@@ -87,8 +86,6 @@ void register_configs_map_api(py::module& m) {
     EXPOSE_TYPE(string, std::string)
     EXPOSE_TYPE(double, double)
 #undef EXPOSE_TYPE
-    // Starts watching Codec.VerifyBlockHash at import, so the first read of ConfigsMap isn't on a decode thread
-    (void)codec::block_hash_verification_enabled();
 }
 
 #ifdef WIN32

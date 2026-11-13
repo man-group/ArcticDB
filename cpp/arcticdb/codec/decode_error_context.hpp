@@ -67,15 +67,6 @@ decltype(auto) with_key_decode_context(const entity::VariantKey& key, Decode&& d
     }
 }
 
-/// Whether `error` is a decode error (DataIntegrityException or CodecException).
-bool is_decode_error(const folly::exception_wrapper& error);
-
-/// Rethrows `error` if it is a decode error, so that it keeps its type and the key context it already carries.
-inline void rethrow_if_decode_error(const folly::exception_wrapper& error) {
-    if (is_decode_error(error))
-        error.throw_exception();
-}
-
 /// For handlers that report a failed read as missing data: a DataIntegrityException means the data is damaged, not
 /// missing, so it is rethrown unchanged. (Codec errors keep their old conversion, which existing callers rely on.)
 inline void rethrow_if_data_integrity_error(const folly::exception_wrapper& error) {

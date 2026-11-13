@@ -13,6 +13,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/codec/segment_header.hpp>
+#include <arcticdb/codec/decode_options.hpp>
 
 namespace arcticdb {
 
@@ -41,7 +42,8 @@ SizeResult max_compressed_size_dispatch(
 );
 
 EncodedFieldCollection decode_encoded_fields(
-        const SegmentHeader& hdr, const uint8_t* data, const uint8_t* begin ARCTICDB_UNUSED
+        const SegmentHeader& hdr, const uint8_t* data, const uint8_t* begin ARCTICDB_UNUSED,
+        const DecodeOptions& options
 );
 
 SegmentInMemory decode_segment(Segment& segment, AllocationType allocation_type = AllocationType::DYNAMIC);
@@ -53,7 +55,7 @@ void decode_into_memory_segment(
 template<class DataSink>
 std::size_t decode_field(
         const entity::TypeDescriptor& td, const EncodedFieldImpl& field, const uint8_t* input, DataSink& data_sink,
-        std::optional<util::BitMagic>& bv, arcticdb::EncodingVersion encoding_version
+        std::optional<util::BitMagic>& bv, const DecodeOptions& options
 );
 
 std::optional<google::protobuf::Any> decode_metadata_from_segment(const Segment& segment);

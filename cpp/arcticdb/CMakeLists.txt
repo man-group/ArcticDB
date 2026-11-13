@@ -228,6 +228,7 @@ set(arcticdb_srcs
         codec/block_hash_check.hpp
         codec/codec.hpp
         codec/decode_error_context.hpp
+        codec/decode_options.hpp
         codec/encode_common.hpp
         codec/codec-inl.hpp
         codec/core.hpp

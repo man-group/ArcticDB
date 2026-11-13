@@ -94,7 +94,8 @@ FieldCollection decode_descriptor_fields(
     if (hdr.has_descriptor_field()) {
         std::optional<util::BitMagic> bv;
         util::check(hdr.descriptor_field().has_ndarray(), "Expected descriptor field to be ndarray");
-        (void)decode_ndarray(FieldCollection::type(), hdr.descriptor_field(), data, fields, bv, hdr.encoding_version());
+        (void
+        )decode_ndarray(FieldCollection::type(), hdr.descriptor_field(), data, fields, bv, decode_options_for(hdr));
 
         ARCTICDB_TRACE(log::codec(), "Decoded descriptor to position {}", data - begin);
     }
@@ -136,7 +137,7 @@ EncodedFieldCollection deserialize_body_fields(const SegmentHeader& hdr, const u
     util::check(hdr.has_column_fields(), "Expected column fields in v2 encoding");
     util::check_magic<EncodedMagic>(encoded_fields_ptr);
 
-    return EncodedFieldCollection{decode_encoded_fields(hdr, encoded_fields_ptr, data)};
+    return EncodedFieldCollection{decode_encoded_fields(hdr, encoded_fields_ptr, data, decode_options_for(hdr))};
 }
 
 struct DeserializedSegmentData {

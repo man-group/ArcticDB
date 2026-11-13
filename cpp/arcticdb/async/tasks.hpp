@@ -451,8 +451,11 @@ struct DecodeSegmentTask : BaseTask {
                 return decode_segment(*key_segment.segment_ptr());
             });
             return {std::move(key_segment).variant_key(), std::move(decoded_segment)};
+        } catch (const DataIntegrityException&) { // already names the key, and keeps its type
+            throw;
+        } catch (const CodecException&) {
+            throw;
         } catch (const std::exception& e) {
-            rethrow_if_decode_error(folly::exception_wrapper{std::current_exception()});
             codec::raise<ErrorCode::E_DECODE_ERROR>(
                     "DecodeSegmentTask failed for key {}: {}", variant_key_view(key_segment.variant_key()), e.what()
             );
