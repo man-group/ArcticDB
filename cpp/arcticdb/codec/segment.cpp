@@ -162,8 +162,8 @@ struct DeserializedSegmentData {
 };
 
 namespace {
-// Every DataType has size bits S8 to S64, and type-size computations depend on it. UNKNOWN is left to the checks
-// where columns are created, as before.
+// Type-size computations need size bits S8 to S64. DataType::UNKNOWN is exempt here and rejected where columns are
+// created, as before.
 void check_stored_field_types(const FieldCollection& fields) {
     for (const auto& field : fields) {
         const auto data_type = field.type().data_type();

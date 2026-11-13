@@ -754,6 +754,7 @@ TEST(CorruptionSafety, FixedWidthStringWithoutPoolRejected) {
 }
 
 namespace {
+// Overwrites the start of the one occurrence of `from` with `to`; the rest of `from` only makes the match unique.
 void replace_once(std::vector<uint8_t>& bytes, const std::vector<uint8_t>& from, const std::vector<uint8_t>& to) {
     const auto found = std::ranges::search(bytes, from);
     ASSERT_FALSE(found.empty()) << "pattern not found";
@@ -768,12 +769,16 @@ void replace_once(std::vector<uint8_t>& bytes, const std::vector<uint8_t>& from,
 TEST(CorruptionSafety, FieldTypeWithoutSizeBitsRejected) {
     // V1 keeps the descriptor in the protobuf header: type_desc {value_type: UINT (1), size_bits: S64 (4)}, name "vals"
     auto v1 = serialize_segment(make_numeric_segment(EncodingVersion::V1));
-    replace_once(v1, {0x08, 0x01, 0x10, 0x04, 0x12, 0x04, 'v', 'a', 'l', 's'}, {0x08, 0x01, 0x10, 0x00});
+    ASSERT_NO_FATAL_FAILURE(
+            replace_once(v1, {0x08, 0x01, 0x10, 0x04, 0x12, 0x04, 'v', 'a', 'l', 's'}, {0x08, 0x01, 0x10, 0x00})
+    );
     expect_corrupt([&] { (void)Segment::from_bytes(v1.data(), v1.size()); });
 
     // V2 stores Field {name size 4, data type UINT64 (0x0c), Dim0, "vals"}, left as is by the passthrough codec
     auto v2 = serialize_segment(make_numeric_segment(EncodingVersion::V2, codec::default_passthrough_codec()));
-    replace_once(v2, {0x04, 0x00, 0x00, 0x00, 0x0c, 0x00, 'v', 'a', 'l', 's'}, {0x04, 0x00, 0x00, 0x00, 0x08});
+    ASSERT_NO_FATAL_FAILURE(
+            replace_once(v2, {0x04, 0x00, 0x00, 0x00, 0x0c, 0x00, 'v', 'a', 'l', 's'}, {0x04, 0x00, 0x00, 0x00, 0x08})
+    );
     expect_corrupt([&] { (void)Segment::from_bytes(v2.data(), v2.size()); });
 }
 
