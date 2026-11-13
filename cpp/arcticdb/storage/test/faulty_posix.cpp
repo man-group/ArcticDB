@@ -40,15 +40,10 @@ ResultType FaultyPosix::propagate_fault_if_exists(SyscallId syscall_id, ResultTy
 }
 
 int FaultyPosix::open(const char* pathname, int flags, mode_t mode) {
-    std::unique_lock lock(data_mutex_);
-    if (std::queue<std::optional<PosixError>>& fault_sequence = faults_[SyscallId::OPEN]; !fault_sequence.empty()) {
-        const std::optional<PosixError> maybe_error = fault_sequence.front();
-        if (maybe_error) {
-            errno = *maybe_error;
-            fault_sequence.pop();
-            return -1;
-        }
-    }
+    int fault_res = propagate_fault_if_exists(SyscallId::OPEN, 0);
+    if (fault_res != 0)
+        return fault_res;
+
     int res = ::open(pathname, flags, mode);
     if (res >= 0)
         open_file_descriptors_.insert(res);
@@ -57,15 +52,9 @@ int FaultyPosix::open(const char* pathname, int flags, mode_t mode) {
 }
 
 int FaultyPosix::openat(int dirfd, const char* pathname, int flags, mode_t mode) {
-    std::unique_lock lock(data_mutex_);
-    if (std::queue<std::optional<PosixError>>& fault_sequence = faults_[SyscallId::OPEN]; !fault_sequence.empty()) {
-        const std::optional<PosixError> maybe_error = fault_sequence.front();
-        if (maybe_error) {
-            errno = *maybe_error;
-            fault_sequence.pop();
-            return -1;
-        }
-    }
+    int fault_res = propagate_fault_if_exists(SyscallId::OPEN, 0);
+    if (fault_res != 0)
+        return fault_res;
     int res = ::openat(dirfd, pathname, flags, mode);
     if (res >= 0)
         open_file_descriptors_.insert(res);
