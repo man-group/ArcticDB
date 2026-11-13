@@ -103,10 +103,6 @@ Example:
   String 2: "foo"   (offset 10, length 3)
 ```
 
-Strings are written into 4 KB pages, and a string over 4 KB gets an irregular page of its own; offsets are positions in
-the pages' concatenation. The encoder writes the pool in 256 KiB blocks, not one per page (CODEC.md, "String Pool
-Blocks"), and a decoded pool is one contiguous chunk.
-
 ### Key Methods
 
 `StringPool` class provides:

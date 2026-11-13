@@ -206,11 +206,73 @@ inline size_t string_pool_block_bytes() {
     return static_cast<size_t>(std::clamp(configured, min_block_bytes, max_block_bytes));
 }
 
+/// Pools whose pages average at least this many bytes (long strings) gain too little from re-cutting to pay for it
+inline constexpr size_t string_pool_large_page_bytes = size_t{32} * 1024;
+
 inline size_t string_pool_encoded_value_blocks(const ChunkedBuffer& pool, size_t block_bytes) {
-    if (block_bytes == 0 || pool.num_blocks() <= 1)
+    if (block_bytes == 0 || pool.num_blocks() <= 1 || pool.bytes() >= string_pool_large_page_bytes * pool.num_blocks())
         return pool.num_blocks();
     // More blocks than pages would outgrow the output buffer, which is sized from the pages
     return std::min(pool.num_blocks(), (pool.bytes() + block_bytes - 1) / block_bytes);
+}
+
+/// Encodes the pool re-cut into num_blocks blocks of block_bytes (the last one shorter), one block at a time. A block
+/// inside a single page is encoded from the page; any other is gathered into one reused block-sized scratch buffer.
+template<typename EncodingPolicyType, typename EncodedFieldType>
+void encode_string_pool_blocks(
+        const ChunkedBuffer& pool, size_t block_bytes, size_t num_blocks,
+        const arcticdb::proto::encoding::VariantCodec& codec_opts, EncodedFieldType& encoded_field, Buffer& out_buffer,
+        std::ptrdiff_t& pos
+) {
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, ByteArrayTDT, EncodingPolicyType::version>;
+    const auto total_bytes = pool.bytes();
+    std::vector<shape_t> shapes(num_blocks);
+    for (size_t i = 0; i < num_blocks; ++i)
+        shapes[i] = static_cast<shape_t>(std::min(block_bytes, total_bytes - i * block_bytes));
+
+    if constexpr (EncodingPolicyType::version == EncodingVersion::V2) {
+        using ShapesEncoder = TypedBlockEncoderImpl<TypedBlockData, ShapesBlockTDT, EncodingPolicyType::version>;
+        const TypedBlockData<ShapesBlockTDT> shapes_block{
+                shapes.data(), nullptr, num_blocks * sizeof(shape_t), num_blocks, nullptr
+        };
+        ShapesEncoder::encode_shapes(codec::default_shapes_codec(), shapes_block, encoded_field, out_buffer, pos);
+    }
+
+    Buffer scratch(std::min(block_bytes, total_bytes));
+    const auto& pages = pool.blocks();
+    size_t page = 0;
+    size_t page_offset = 0;
+    const auto skip_exhausted_pages = [&] {
+        while (page_offset == pages[page]->physical_bytes()) {
+            ++page;
+            page_offset = 0;
+            util::check(page < pages.size(), "String pool pages hold fewer than {} bytes", total_bytes);
+        }
+    };
+    for (size_t i = 0; i < num_blocks; ++i) {
+        const auto size = static_cast<size_t>(shapes[i]);
+        skip_exhausted_pages();
+        const uint8_t* data = nullptr;
+        if (pages[page]->physical_bytes() - page_offset >= size) {
+            data = pages[page]->data() + page_offset;
+            page_offset += size;
+        } else {
+            size_t copied = 0;
+            while (copied < size) {
+                skip_exhausted_pages();
+                const auto n = std::min(size - copied, pages[page]->physical_bytes() - page_offset);
+                memcpy(scratch.data() + copied, pages[page]->data() + page_offset, n);
+                copied += n;
+                page_offset += n;
+            }
+            data = scratch.data();
+        }
+        const TypedBlockData<ByteArrayTDT> block{data, &shapes[i], size, 1u, nullptr};
+        if constexpr (EncodingPolicyType::version == EncodingVersion::V1)
+            Encoder::encode(codec_opts, block, encoded_field, out_buffer, pos);
+        else
+            Encoder::encode_values(codec_opts, block, encoded_field, out_buffer, pos);
+    }
 }
 
 /// Test-only: called at the start of the string pool encode.
@@ -233,25 +295,12 @@ void encode_string_pool(
             auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
             EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
         } else {
-            const auto total_bytes = pool.bytes();
-            Buffer contiguous(total_bytes);
-            size_t offset = 0;
-            for (const auto* block : pool.blocks()) {
-                memcpy(contiguous.data() + offset, block->data(), block->physical_bytes());
-                offset += block->physical_bytes();
-            }
-            util::check(offset == total_bytes, "String pool pages hold {} bytes, expected {}", offset, total_bytes);
-            ChunkedBuffer coalesced;
-            Buffer shapes(num_blocks * sizeof(shape_t));
-            auto* shape = shapes.ptr_cast<shape_t>(0, num_blocks * sizeof(shape_t));
-            for (size_t start = 0; start < total_bytes; start += block_bytes) {
-                const auto size = std::min(block_bytes, total_bytes - start);
-                coalesced.add_external_block(contiguous.data() + start, size);
-                *shape++ = static_cast<shape_t>(size);
-            }
-            ColumnData col{&coalesced, &shapes, string_pool_descriptor().type(), nullptr};
-            auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
-            EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
+            auto& encoded_field = segment_header.mutable_string_pool_field(
+                    EncodingPolicyType::version == EncodingVersion::V1 ? 2 * num_blocks : num_blocks + 1
+            );
+            encode_string_pool_blocks<EncodingPolicyType>(
+                    pool, block_bytes, num_blocks, codec_opts, encoded_field, out_buffer, pos
+            );
         }
         ARCTICDB_TRACE(log::codec(), "Encoded string pool to position {}", pos);
     }
