@@ -25,6 +25,7 @@
 #include <arcticdb/storage/test/in_memory_store.hpp>
 
 #include <chrono>
+#include <set>
 #include <thread>
 
 struct VersionStoreTest : arcticdb::TestStore {
@@ -1324,6 +1325,16 @@ TEST(IterateSnapshots, RethrowsKeyNotFoundWithoutKeys) {
 TEST(IterateSnapshots, IgnoresKeyNotFoundForVisitedSnapshot) {
     using namespace arcticdb;
     auto store = std::make_shared<InMemoryStore>();
-    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"snap"}, SegmentInMemory{});
-    ASSERT_NO_THROW(iterate_snapshots(store, [](VariantKey& vk) { throw storage::KeyNotFoundException(vk); }));
+    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"deleted_snap"}, SegmentInMemory{});
+    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"live_snap"}, SegmentInMemory{});
+
+    std::set<StreamId> visited;
+    iterate_snapshots(store, [&visited](VariantKey& vk) {
+        visited.insert(variant_key_id(vk));
+        if (variant_key_id(vk) == StreamId{"deleted_snap"}) {
+            throw storage::KeyNotFoundException(vk);
+        }
+    });
+
+    ASSERT_EQ(visited, (std::set<StreamId>{StreamId{"deleted_snap"}, StreamId{"live_snap"}}));
 }

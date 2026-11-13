@@ -114,10 +114,13 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
         try {
             visitor(vk);
         } catch (storage::KeyNotFoundException& e) {
-            if (e.keys().empty() || std::ranges::any_of(e.keys(), [&vk](const VariantKey& key) { return key != vk; })) {
+            const bool only_this_snapshot_missing =
+                    !e.keys().empty() &&
+                    std::ranges::all_of(e.keys(), [&vk](const VariantKey& key) { return key == vk; });
+            if (!only_this_snapshot_missing) {
                 throw;
             }
-            ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().");
+            ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().", vk);
         }
     }
 }
