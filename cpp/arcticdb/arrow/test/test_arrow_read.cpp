@@ -55,50 +55,45 @@ SegmentInMemory get_detachable_segment(
     return segment;
 }
 
+namespace {
+const auto kDynamicStringType = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
+
+// Converts a UTF_DYNAMIC64 source segment into dest's block starting at frame row first_row, as an Arrow read does
+void convert_string_segment(
+        const Column& source, Column& dest, std::string_view col_name, size_t first_row,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options, ColumnTruncation truncate = {}
+) {
+    const auto dest_size = data_type_size(dest.type());
+    const auto num_rows = source.row_count();
+    auto field_wrapper = FieldWrapper(dest.type(), col_name);
+    auto mapping = ColumnMapping(
+            source.type(),
+            dest.type(),
+            field_wrapper.field(),
+            dest_size,
+            num_rows,
+            first_row,
+            dest_size * first_row,
+            dest_size * num_rows,
+            0
+    );
+    mapping.set_truncate(truncate);
+    auto handler_data = std::any{};
+    ArrowStringHandler().convert_type(source, dest, mapping, DecodePathData{}, handler_data, string_pool, read_options);
+}
+
+} // namespace
+
 // Populates a column with strings as if using OutputFormat::ARROW. Assumes column is already allocated.
 void fill_chunked_string_column(
         Column& column, std::string_view col_name, size_t num_rows, size_t chunk_size,
         std::shared_ptr<StringPool> string_pool, const std::vector<std::string>& values, const ReadOptions& read_options
 ) {
-    auto num_chunks = num_rows / chunk_size + (num_rows % chunk_size != 0);
-
-    std::vector<position_t> string_pool_offsets;
-    for (auto& str : values) {
-        string_pool_offsets.push_back(string_pool->get(str).offset());
-    }
-
-    // Use arrow string handler to populate the column in arrow format chunk by chunk
-    auto handler = ArrowStringHandler();
-    auto source_type_desc = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
-    auto dest_type_desc = handler.output_type_and_block_config(source_type_desc, col_name, read_options).first;
-    for (auto chunk = 0u; chunk < num_chunks; ++chunk) {
-        auto row_count = std::min(chunk_size, num_rows - chunk * chunk_size);
-        // To use the `handler.convert_type` we prepare the source data for each chunk in `source_column`.
-        // We fill the column with pointers to the string pool.
-        auto source_column = Column(source_type_desc, row_count, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
-        for (auto row_in_chunk = 0u; row_in_chunk < row_count; ++row_in_chunk) {
-            auto global_row = chunk * chunk_size + row_in_chunk;
-            source_column.push_back(string_pool_offsets[global_row]);
-        }
-
-        auto dest_size = data_type_size(dest_type_desc);
-        auto handler_data = std::any{};
-        auto field_wrapper = FieldWrapper(dest_type_desc, col_name);
-        auto column_mapping = ColumnMapping(
-                source_type_desc,
-                dest_type_desc,
-                field_wrapper.field(),
-                dest_size,
-                row_count,
-                chunk * chunk_size,
-                dest_size * chunk * chunk_size,
-                dest_size * row_count,
-                0
-        );
-
-        handler.convert_type(
-                source_column, column, column_mapping, DecodePathData{}, handler_data, string_pool, read_options
-        );
+    for (size_t first_row = 0; first_row < num_rows; first_row += chunk_size) {
+        auto source = Column(kDynamicStringType, 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+        for (auto row = first_row; row < std::min(first_row + chunk_size, num_rows); ++row)
+            source.push_back(string_pool->get(values[row]).offset());
+        convert_string_segment(source, column, col_name, first_row, string_pool, read_options);
     }
 }
 
@@ -274,6 +269,73 @@ TEST_P(ArrowStringColumnRead, Basic) {
         auto value = arrow_arrays[chunk][pos];
         EXPECT_TRUE(value.has_value());
         EXPECT_EQ(std::get<sparrow::nullable<std::string_view>>(value).get(), column_values[row]);
+    }
+}
+
+namespace {
+// Row `row` of a test string column; every third row is missing when sparse
+std::optional<std::string> test_string(size_t row, bool sparse) {
+    if (sparse && row % 3 == 1)
+        return std::nullopt;
+    return fmt::format("s{}", row % 211);
+}
+
+Column test_string_source_column(StringPool& pool, size_t num_rows, bool sparse) {
+    auto column = Column(
+            kDynamicStringType, 0, AllocationType::DYNAMIC, sparse ? Sparsity::PERMITTED : Sparsity::NOT_PERMITTED
+    );
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (auto value = test_string(row, sparse))
+            column.set_scalar(static_cast<ssize_t>(row), pool.get(*value).offset());
+    }
+    column.set_row_data(static_cast<ssize_t>(num_rows) - 1);
+    return column;
+}
+
+} // namespace
+
+TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
+    // The read ends kRowsRead rows into the second segment. The truncation is in frame rows, but the second segment's
+    // validity bitmap must cover only kRowsRead rows.
+    constexpr size_t kFirstSegmentRows = 40'000;
+    constexpr size_t kSecondSegmentRows = 30'000;
+    // Not a multiple of 8, so a bitmap sized in frame rows has a different byte count from one sized in segment rows
+    constexpr size_t kRowsRead = 10'003;
+    const auto read_ends_in_second_segment = ColumnTruncation{std::nullopt, kFirstSegmentRows + kRowsRead};
+    auto read_options = ReadOptions();
+    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
+    auto [dest_type, block_config] =
+            ArrowStringHandler().output_type_and_block_config(kDynamicStringType, "col", read_options);
+    for (bool sparse : {false, true}) {
+        SCOPED_TRACE(fmt::format("sparse {}", sparse));
+        auto pool = std::make_shared<StringPool>();
+        auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
+        allocate_chunked_column(dest, kFirstSegmentRows + kSecondSegmentRows, kFirstSegmentRows);
+        auto first = test_string_source_column(*pool, kFirstSegmentRows, false);
+        auto second = test_string_source_column(*pool, kSecondSegmentRows, sparse);
+        convert_string_segment(first, dest, "col", 0, pool, read_options);
+        convert_string_segment(second, dest, "col", kFirstSegmentRows, pool, read_options, read_ends_in_second_segment);
+
+        const auto bitmap_offset = kFirstSegmentRows * data_type_size(dest_type);
+        if (sparse) {
+            ASSERT_TRUE(dest.has_extra_buffer(bitmap_offset, ExtraBufferType::BITMAP));
+            EXPECT_EQ(
+                    dest.get_extra_buffer(bitmap_offset, ExtraBufferType::BITMAP).bytes(),
+                    bitset_packed_size_bytes(kRowsRead)
+            );
+        } else {
+            EXPECT_FALSE(dest.has_extra_buffer(bitmap_offset, ExtraBufferType::BITMAP));
+        }
+        auto arrays = arrow_arrays_from_column(dest, "col");
+        ASSERT_EQ(arrays.size(), 2);
+        ASSERT_EQ(arrays[1].size(), kRowsRead);
+        for (size_t row = 0; row < kRowsRead; ++row) {
+            const auto expected = test_string(row, sparse);
+            const auto value = arrays[1][row];
+            ASSERT_EQ(value.has_value(), expected.has_value()) << "row " << row;
+            if (expected)
+                ASSERT_EQ(std::get<sparrow::nullable<std::string_view>>(value).get(), *expected) << "row " << row;
+        }
     }
 }
 
