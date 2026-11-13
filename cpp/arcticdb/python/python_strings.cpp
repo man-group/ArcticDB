@@ -109,8 +109,9 @@ static void write_strings_to_destination(
 
 // A corrupt string pool can hold bytes that are invalid for the column's string type (e.g. invalid UTF-8); the
 // constructor then returns null with a Python error set. Raise a decode error instead of using null.
+namespace {
 template<typename StringCreator>
-static PyObject* create_string_or_raise(std::string_view sv, bool has_type_conversion) {
+PyObject* create_string_or_raise(std::string_view sv, bool has_type_conversion) {
     auto obj = StringCreator::create(sv, has_type_conversion);
     if (ARCTICDB_UNLIKELY(obj == nullptr)) {
         PyErr_Clear();
@@ -118,6 +119,7 @@ static PyObject* create_string_or_raise(std::string_view sv, bool has_type_conve
     }
     return obj;
 }
+} // namespace
 
 template<typename StringCreator>
 static auto assign_python_strings(
