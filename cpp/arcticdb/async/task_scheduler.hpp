@@ -51,19 +51,28 @@ struct TaskSchedulerPtrWrapper {
 // process has ArcticDB threads for the rest of its life. Therefore this never moves from true to false.
 inline std::atomic<bool> io_pool_thread_started{false};
 
+inline thread_local bool on_io_pool_thread = false;
+
+// True on the IO pool's threads, which must not block on IO pool work
+inline bool is_io_pool_thread() { return on_io_pool_thread; }
+
 class InstrumentedNamedFactory : public folly::ThreadFactory {
   public:
-    explicit InstrumentedNamedFactory(folly::StringPiece prefix, std::atomic<bool>* started_flag = nullptr) :
+    explicit InstrumentedNamedFactory(
+            folly::StringPiece prefix, std::atomic<bool>* started_flag = nullptr, bool io_pool = false
+    ) :
         named_factory_(prefix),
-        started_flag_(started_flag) {}
+        started_flag_(started_flag),
+        io_pool_(io_pool) {}
 
     std::thread newThread(folly::Func&& func) override {
         std::lock_guard lock{mutex_};
         if (started_flag_) {
             started_flag_->store(true, std::memory_order_relaxed);
         }
-        return named_factory_.newThread([func = std::move(func)]() mutable {
+        return named_factory_.newThread([func = std::move(func), io_pool = io_pool_]() mutable {
             ARCTICDB_SAMPLE_THREAD();
+            on_io_pool_thread = io_pool;
             func();
         });
     }
@@ -74,6 +83,7 @@ class InstrumentedNamedFactory : public folly::ThreadFactory {
     std::mutex mutex_;
     folly::NamedThreadFactory named_factory_;
     std::atomic<bool>* started_flag_;
+    bool io_pool_;
 };
 
 inline std::string format_task_stats_line(
@@ -244,7 +254,9 @@ class TaskScheduler {
         cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : get_default_cpu_count()),
         io_thread_count_(io_thread_count ? *io_thread_count : get_default_io_count(cpu_thread_count_)),
         cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")),
-        io_exec_(io_thread_count_, std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started)) {
+        io_exec_(
+                io_thread_count_, std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started, true)
+        ) {
         util::check(
                 cpu_thread_count_ > 0 && io_thread_count_ > 0,
                 "Zero IO or CPU threads: {} {}",
@@ -348,7 +360,8 @@ class TaskScheduler {
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "CPU exec num threads: {}", cpu_exec_.numActiveThreads());
         set_active_threads(0);
         set_max_threads(0);
-        io_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started));
+        io_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started, true)
+        );
         cpu_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("CPUPool"));
         io_exec_.setNumThreads(io_thread_count_);
         cpu_exec_.setNumThreads(cpu_thread_count_);

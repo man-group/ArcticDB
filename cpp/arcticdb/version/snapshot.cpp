@@ -11,7 +11,14 @@
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/python/python_utils.hpp>
 
+#include <folly/ScopeGuard.h>
+#include <folly/Try.h>
+
 #include <algorithm>
+#include <atomic>
+#include <mutex>
+#include <numeric>
+#include <string_view>
 
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
@@ -86,9 +93,7 @@ void tombstone_snapshot(
     store->write_compressed(std::move(key_segment_pair)).get();
 }
 
-void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor) {
-    ARCTICDB_SAMPLE(IterateSnapshots, 0)
-
+std::vector<VariantKey> list_snapshot_keys(const std::shared_ptr<Store>& store) {
     std::vector<VariantKey> snap_variant_keys;
     std::unordered_set<SnapshotId> seen;
 
@@ -109,16 +114,245 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
             snap_variant_keys.emplace_back(key);
         }
     });
+    return snap_variant_keys;
+}
 
+namespace {
+
+// True if the exception only reports that snapshot_key is missing, i.e. the snapshot was deleted since listing
+bool only_snapshot_is_missing(storage::KeyNotFoundException& e, const VariantKey& snapshot_key) {
+    return !e.keys().empty() &&
+           std::ranges::all_of(e.keys(), [&snapshot_key](const VariantKey& key) { return key == snapshot_key; });
+}
+
+// Matches key rows' stream ids against stream_ids without copying string ids out of the segment's string pool
+class StreamIdFilter {
+  public:
+    explicit StreamIdFilter(std::unordered_set<StreamId> stream_ids) : stream_ids_(std::move(stream_ids)) {
+        for (const auto& stream_id : stream_ids_) {
+            if (const auto* string_id = std::get_if<StringId>(&stream_id)) {
+                string_ids_.emplace(*string_id);
+            }
+        }
+    }
+
+    StreamIdFilter(const StreamIdFilter&) = delete;
+    StreamIdFilter& operator=(const StreamIdFilter&) = delete;
+
+    // The rows of seg whose stream id is one of stream_ids
+    std::vector<ssize_t> matching_rows(const SegmentInMemory& seg) const {
+        // An empty segment may have no columns, which has_legacy_key_row_layout needs
+        if (seg.row_count() == 0 || stream_ids_.empty()) {
+            return {};
+        }
+        return has_legacy_key_row_layout(seg) ? matching_rows_in_layout<pipelines::index::LegacyFields>(seg)
+                                              : matching_rows_in_layout<pipelines::index::Fields>(seg);
+    }
+
+  private:
+    template<typename FieldType>
+    std::vector<ssize_t> matching_rows_in_layout(const SegmentInMemory& seg) const {
+        const auto col = static_cast<position_t>(FieldType::stream_id);
+        const auto& column = seg.column(col);
+        const auto data_type = seg.descriptor()[col].type().data_type();
+        std::vector<ssize_t> rows;
+        if (column.is_sparse() || is_fixed_string_type(data_type)) {
+            for (size_t row = 0; row < seg.row_count(); ++row) {
+                if (stream_ids_.contains(stream_id_from_segment<FieldType>(seg, static_cast<ssize_t>(row)))) {
+                    rows.push_back(static_cast<ssize_t>(row));
+                }
+            }
+        } else if (is_sequence_type(data_type)) {
+            // One pass over the offsets, rather than a lookup per row
+            const auto offsets = column.clone_scalars_to_vector<entity::position_t>();
+            for (size_t row = 0; row < offsets.size(); ++row) {
+                if (is_a_string(offsets[row]) && string_ids_.contains(seg.string_at_offset(offsets[row]))) {
+                    rows.push_back(static_cast<ssize_t>(row));
+                }
+            }
+        } else {
+            const auto ids = column.clone_scalars_to_vector<timestamp>();
+            for (size_t row = 0; row < ids.size(); ++row) {
+                // As stream_id_from_segment reads it
+                if (stream_ids_.contains(StreamId{ids[row]})) {
+                    rows.push_back(static_cast<ssize_t>(row));
+                }
+            }
+        }
+        return rows;
+    }
+
+    std::unordered_set<StreamId> stream_ids_;
+    // Views of stream_ids_' strings
+    std::unordered_set<std::string_view> string_ids_;
+};
+
+// Keys are built outside the merge lock, this many at a time
+constexpr size_t merge_batch_size = 4096;
+
+void add_to_master_map(MasterSnapshotMap& map, const VariantKey& snapshot_key, AtomKey&& key) {
+    auto& keys_of_symbol = map[key.id()];
+    keys_of_symbol[std::move(key)].insert(variant_key_id(snapshot_key));
+}
+
+} // namespace
+
+void read_snapshots(
+        const std::shared_ptr<Store>& store, const std::vector<VariantKey>& snapshot_keys,
+        SnapshotSegmentCallback on_snapshot
+) {
+    // Set once on_snapshot asks to stop, or on an error, so no more reads are issued
+    std::atomic<bool> stop{false};
+    const auto process = [&on_snapshot, &snapshot_keys, &stop](size_t idx, const auto& read_segment) {
+        const auto& snapshot_key = snapshot_keys[idx];
+        SCOPE_FAIL { stop.store(true); };
+        std::optional<SegmentInMemory> segment;
+        try {
+            segment = read_segment();
+        } catch (storage::KeyNotFoundException& e) {
+            if (!only_snapshot_is_missing(e, snapshot_key)) {
+                throw;
+            }
+            ARCTICDB_DEBUG(log::version(), "Ignored snapshot {} deleted since listing", snapshot_key);
+            return folly::Unit{};
+        }
+        if (!on_snapshot(idx, snapshot_key, std::move(*segment))) {
+            stop.store(true);
+        }
+        return folly::Unit{};
+    };
+    std::vector<folly::Try<folly::Unit>> tries;
+    tries.reserve(snapshot_keys.size());
+    if (!async::is_io_pool_thread()) {
+        std::vector<size_t> indexes(snapshot_keys.size());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+        auto futures = folly::window(
+                std::move(indexes),
+                [&store, &snapshot_keys, &process, &stop](size_t idx) {
+                    if (stop.load()) {
+                        return folly::makeFuture();
+                    }
+                    return store->read(snapshot_keys[idx])
+                            .thenTryInline([&process, idx](folly::Try<std::pair<VariantKey, SegmentInMemory>>&& read) {
+                                return process(idx, [&read]() { return std::move(read).value().second; });
+                            });
+                },
+                window_size
+        );
+        tries = folly::collectAll(futures).get();
+    } else {
+        // Blocking on the IO pool from one of its threads could deadlock
+        for (size_t idx = 0; idx < snapshot_keys.size() && !stop.load(); ++idx) {
+            tries.emplace_back(folly::makeTryWith([&store, &snapshot_keys, &process, idx]() {
+                return process(idx, [&store, &snapshot_keys, idx]() {
+                    return store->read_sync(snapshot_keys[idx]).second;
+                });
+            }));
+        }
+    }
+    for (auto& attempt : tries) {
+        attempt.throwUnlessValue();
+    }
+}
+
+namespace {
+
+/**
+ * Reads each snapshot and calls merge(snapshot_key, index_key) with each of its index keys, only those of stream_ids if
+ * given. It scans every row, as it collects many symbols, and reads the legacy key row layout as read_key_row does.
+ * Keys are built in parallel, in batches to bound memory; merge runs under a lock, possibly on an IO thread, so it must
+ * not block.
+ */
+template<typename Merge>
+void merge_snapshots(
+        const std::shared_ptr<Store>& store, const std::vector<VariantKey>& snapshot_keys,
+        const std::optional<std::unordered_set<StreamId>>& stream_ids, const Merge& merge
+) {
+    std::optional<StreamIdFilter> filter;
+    if (stream_ids) {
+        filter.emplace(*stream_ids);
+    }
+    std::mutex merge_mutex;
+    read_snapshots(
+            store,
+            snapshot_keys,
+            [&filter, &merge, &merge_mutex](size_t, const VariantKey& snapshot_key, SegmentInMemory&& segment) {
+                std::optional<std::vector<ssize_t>> rows;
+                if (filter) {
+                    rows = filter->matching_rows(segment);
+                }
+                std::vector<AtomKey> batch;
+                batch.reserve(std::min(merge_batch_size, rows ? rows->size() : segment.row_count()));
+                const auto merge_batch = [&batch, &merge, &merge_mutex, &snapshot_key]() {
+                    if (batch.empty()) {
+                        return;
+                    }
+                    std::lock_guard lock(merge_mutex);
+                    for (auto& key : batch) {
+                        merge(snapshot_key, std::move(key));
+                    }
+                    batch.clear();
+                };
+                const auto add_row = [&batch, &segment, &merge_batch](ssize_t row) {
+                    batch.push_back(read_key_row(segment, row));
+                    if (batch.size() == merge_batch_size) {
+                        merge_batch();
+                    }
+                };
+                if (rows) {
+                    for (const auto row : *rows) {
+                        add_row(row);
+                    }
+                } else {
+                    for (size_t row = 0; row < segment.row_count(); ++row) {
+                        add_row(static_cast<ssize_t>(row));
+                    }
+                }
+                merge_batch();
+                return true;
+            }
+    );
+}
+
+/**
+ * The row of stream_id, and of version_id if given, in the snapshot segment. A ref key segment is binary searched, as
+ * write_snapshot_entry sorts it by stream id, unless it has the legacy key row layout.
+ */
+std::optional<ssize_t> row_of_stream_in_snapshot_segment(
+        SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id, const std::optional<VersionId> version_id
+) {
+    if (seg.row_count() == 0) {
+        return std::nullopt;
+    }
+    if (using_ref_key && !has_legacy_key_row_layout(seg)) {
+        return row_id_for_stream_in_snapshot_segment(seg, true, stream_id, version_id);
+    }
+    const StreamIdFilter filter(std::unordered_set<StreamId>{stream_id});
+    for (const auto row : filter.matching_rows(seg)) {
+        if (!version_id || read_key_row(seg, row).version_id() == *version_id) {
+            return row;
+        }
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor) {
+    ARCTICDB_SAMPLE(IterateSnapshots, 0)
+
+    auto snap_variant_keys = list_snapshot_keys(store);
     for (auto& vk : snap_variant_keys) {
         try {
             visitor(vk);
         } catch (storage::KeyNotFoundException& e) {
-            std::for_each(e.keys().begin(), e.keys().end(), [&vk, &e](const VariantKey& key) {
-                if (key != vk)
-                    throw storage::KeyNotFoundException(std::move(e.keys()));
-            });
-            ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().");
+            // The snapshot was deleted after we listed it: skip it. Any other missing key, or none named, is a real
+            // error.
+            if (!only_snapshot_is_missing(e, vk)) {
+                throw;
+            }
+            ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().", vk);
         }
     }
 }
@@ -160,87 +394,61 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         const std::shared_ptr<Store>& store, const StreamId& stream_id
 ) {
     ARCTICDB_SAMPLE(GetIndexKeysInSnapshot, 0)
-
-    std::unordered_set<entity::AtomKey> index_keys_in_snapshots{};
-
-    iterate_snapshots(store, [&index_keys_in_snapshots, &store, &stream_id](const VariantKey& vk) {
-        ARCTICDB_DEBUG(log::snapshot(), "Reading snapshot {}", vk);
-        bool snapshot_using_ref = variant_key_type(vk) == KeyType::SNAPSHOT_REF;
-        SegmentInMemory snapshot_segment = store->read_sync(vk).second;
-        if (snapshot_segment.row_count() == 0) {
-            // Snapshot has no rows, just skip this.
-            ARCTICDB_DEBUG(
-                    log::version(),
-                    "Snapshot: {} does not have index keys (searching for symbol: {}), skipping.",
-                    variant_key_id(vk),
-                    stream_id
-            );
-            return;
-        }
-        auto opt_idx_for_stream_id =
-                row_id_for_stream_in_snapshot_segment(snapshot_segment, snapshot_using_ref, stream_id);
-        if (opt_idx_for_stream_id) {
-            ARCTICDB_DEBUG(log::snapshot(), "Found index key for {} at {}", stream_id, *opt_idx_for_stream_id);
-            auto stream_idx = *opt_idx_for_stream_id;
-            index_keys_in_snapshots.emplace(read_key_row(snapshot_segment, static_cast<ssize_t>(stream_idx)));
-        } else {
-            ARCTICDB_DEBUG(log::snapshot(), "Failed to find index key for {}", stream_id);
-        }
-    });
-
+    std::unordered_set<entity::AtomKey> index_keys_in_snapshots;
+    std::mutex keys_mutex;
+    read_snapshots(
+            store,
+            list_snapshot_keys(store),
+            [&stream_id,
+             &index_keys_in_snapshots,
+             &keys_mutex](size_t, const VariantKey& snapshot_key, SegmentInMemory&& segment) {
+                const auto row = row_of_stream_in_snapshot_segment(
+                        segment, variant_key_type(snapshot_key) == KeyType::SNAPSHOT_REF, stream_id, std::nullopt
+                );
+                if (row) {
+                    auto key = read_key_row(segment, *row);
+                    std::lock_guard lock(keys_mutex);
+                    index_keys_in_snapshots.insert(std::move(key));
+                }
+                return true;
+            }
+    );
     return index_keys_in_snapshots;
 }
 
 std::optional<AtomKey> index_key_for_stream_and_version_in_snapshot_segment(
         SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id, VersionId version_id
 ) {
-    if (auto opt_row_idx = row_id_for_stream_in_snapshot_segment(seg, using_ref_key, stream_id, version_id)) {
-        return read_key_row(seg, *opt_row_idx);
-    } else {
-        return std::nullopt;
+    if (auto row = row_of_stream_in_snapshot_segment(seg, using_ref_key, stream_id, version_id)) {
+        return read_key_row(seg, *row);
     }
+    return std::nullopt;
 }
 
 std::optional<AtomKey> find_index_key_in_snapshots(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, VersionId version_id
 ) {
-    std::vector<VariantKey> snapshot_keys;
-    iterate_snapshots(store, [&snapshot_keys](auto&& snapshot_key) {
-        snapshot_keys.emplace_back(std::move(snapshot_key));
-    });
     std::optional<AtomKey> res;
-    std::atomic<bool> found{false};
-    const auto window_size = async::TaskScheduler::instance()->io_thread_count();
-    auto futures = folly::window(
-            std::move(snapshot_keys),
-            [store, &stream_id, version_id, &res, &found](const VariantKey& snapshot_key) {
-                if (found.load()) {
-                    return folly::makeFuture();
-                } else {
-                    return store->read(snapshot_key)
-                            .thenValueInline([&stream_id, version_id, &res, &found](auto&& key_seg) {
-                                auto snapshot_key = std::move(key_seg.first);
-                                auto snapshot_segment = std::move(key_seg.second);
-                                auto opt_res = index_key_for_stream_and_version_in_snapshot_segment(
-                                        snapshot_segment,
-                                        variant_key_type(snapshot_key) == KeyType::SNAPSHOT_REF,
-                                        stream_id,
-                                        version_id
-                                );
-                                if (opt_res.has_value()) {
-                                    bool f{false};
-                                    if (found.compare_exchange_strong(f, true)) {
-                                        res = std::move(opt_res);
-                                    }
-                                }
-                                return folly::Unit{};
-                            });
+    std::mutex res_mutex;
+    read_snapshots(
+            store,
+            list_snapshot_keys(store),
+            [&stream_id, version_id, &res, &res_mutex](
+                    size_t, const VariantKey& snapshot_key, SegmentInMemory&& segment
+            ) {
+                auto opt_res = index_key_for_stream_and_version_in_snapshot_segment(
+                        segment, variant_key_type(snapshot_key) == KeyType::SNAPSHOT_REF, stream_id, version_id
+                );
+                if (!opt_res) {
+                    return true;
                 }
-            },
-            window_size
+                std::lock_guard lock(res_mutex);
+                if (!res) {
+                    res = std::move(opt_res);
+                }
+                return false;
+            }
     );
-    // Need collectAll in case snapshot keys were deleted since the listing operation
-    folly::collectAll(futures).get();
     return res;
 }
 
@@ -367,45 +575,29 @@ std::vector<AtomKey> get_versions_from_segment(
 
 SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store, const std::optional<StreamId>& stream_id) {
     ARCTICDB_SAMPLE(GetVersionsFromSnapshot, 0)
+    const auto snapshot_keys = list_snapshot_keys(store);
     SnapshotMap snapshot_map;
-    std::vector<VariantKey> snapshot_keys;
-    iterate_snapshots(store, [&snapshot_map, &snapshot_keys](auto&& snapshot_key) {
+    for (const auto& snapshot_key : snapshot_keys) {
         snapshot_map.emplace(variant_key_id(snapshot_key), std::vector<AtomKey>{});
-        snapshot_keys.emplace_back(std::move(snapshot_key));
+    }
+    std::optional<std::unordered_set<StreamId>> stream_ids;
+    if (stream_id) {
+        stream_ids.emplace(std::unordered_set<StreamId>{*stream_id});
+    }
+    merge_snapshots(store, snapshot_keys, stream_ids, [&snapshot_map](const VariantKey& snapshot_key, AtomKey&& key) {
+        snapshot_map[variant_key_id(snapshot_key)].push_back(std::move(key));
     });
-    const auto window_size = async::TaskScheduler::instance()->io_thread_count();
-    auto futures = folly::window(
-            std::move(snapshot_keys),
-            [store, &snapshot_map, &stream_id](const VariantKey& snapshot_key) {
-                return store->read(snapshot_key).thenValueInline([&snapshot_map, &stream_id](auto&& key_seg) {
-                    const auto& snapshot_key = key_seg.first;
-                    const auto& snapshot_segment = key_seg.second;
-                    SnapshotId snapshot_id{fmt::format("{}", variant_key_id(snapshot_key))};
-                    snapshot_map[snapshot_id] = get_versions_from_segment(snapshot_segment, stream_id);
-                    return folly::Unit{};
-                });
-            },
-            window_size
-    );
-    // Need collectAll in case snapshot keys were deleted since the listing operation
-    folly::collectAll(futures).get();
     return snapshot_map;
 }
 
 MasterSnapshotMapWithStats get_master_snapshots_map_with_stats(
         std::shared_ptr<Store> store, const std::optional<std::unordered_set<StreamId>>& stream_ids
 ) {
+    const auto snapshot_keys = list_snapshot_keys(store);
     MasterSnapshotMapWithStats out;
-    iterate_snapshots(store, [&out, &store, &stream_ids](const VariantKey& sk) {
-        ++out.total_snapshots;
-        auto snapshot_id = variant_key_id(sk);
-        auto snapshot_segment = store->read_sync(sk).second;
-        for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-            auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
-            if (!stream_ids || stream_ids->contains(stream_index.id())) {
-                out.map[stream_index.id()][stream_index].insert(snapshot_id);
-            }
-        }
+    out.total_snapshots = snapshot_keys.size();
+    merge_snapshots(store, snapshot_keys, stream_ids, [&out](const VariantKey& snapshot_key, AtomKey&& key) {
+        add_to_master_map(out.map, snapshot_key, std::move(key));
     });
     return out;
 }
@@ -415,21 +607,42 @@ MasterSnapshotMap get_master_snapshots_map(
 ) {
     return get_master_snapshots_map_with_stats(std::move(store), stream_ids).map;
 }
-
 MasterSnapshotMapAndKeys get_master_snapshots_map_and_keys_in_given_snapshot(
         std::shared_ptr<Store> store, const SnapshotVariantKey& given_snapshot
 ) {
     MasterSnapshotMapAndKeys out;
-    iterate_snapshots(store, [&given_snapshot, &out, &store](const VariantKey& sk) {
-        auto snapshot_id = variant_key_id(sk);
-        auto snapshot_segment = store->read_sync(sk).second;
-        for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-            auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
-            out.map[stream_index.id()][stream_index].insert(snapshot_id);
-            if (given_snapshot == sk) {
-                out.index_keys_in_given_snapshot.push_back(stream_index);
+    merge_snapshots(
+            store,
+            list_snapshot_keys(store),
+            std::nullopt,
+            [&out, &given_snapshot](const VariantKey& snapshot_key, AtomKey&& key) {
+                if (given_snapshot == snapshot_key) {
+                    out.index_keys_in_given_snapshot.push_back(key);
+                }
+                add_to_master_map(out.map, snapshot_key, std::move(key));
             }
-        }
+    );
+    return out;
+}
+
+SnapshottedIndexKeys get_snapshotted_index_keys(
+        const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& stream_ids,
+        const std::optional<SnapshotId>& snapshot_to_ignore
+) {
+    ARCTICDB_SAMPLE(GetSnapshottedIndexKeys, 0)
+    SnapshottedIndexKeys out;
+    if (stream_ids.empty()) {
+        return out;
+    }
+    auto snapshot_keys = list_snapshot_keys(store);
+    if (snapshot_to_ignore) {
+        std::erase_if(snapshot_keys, [&snapshot_to_ignore](const VariantKey& snapshot_key) {
+            return variant_key_id(snapshot_key) == *snapshot_to_ignore;
+        });
+    }
+    merge_snapshots(store, snapshot_keys, stream_ids, [&out](const VariantKey&, AtomKey&& key) {
+        auto& keys_of_symbol = out[key.id()];
+        keys_of_symbol.insert(std::move(key));
     });
     return out;
 }

@@ -55,11 +55,37 @@ struct DeleteTreesStats {
     size_t column_stats_keys_deleted = 0;
     size_t data_keys_considered = 0;
     size_t data_keys_deleted = 0;
+    // Snapshotted index keys read to protect their data, and those the lineage window showed needn't be
+    size_t protected_index_keys_read = 0;
+    size_t protected_index_keys_skipped = 0;
 };
 
-// The stats are used by the enterprise repo for logging
+/**
+ * Data created by version v can only be in a snapshotted index at version s if v <= s <= U, where U is the lowest cut
+ * version above v: a version that was undeleted before the delete, and whose data was read and does not hold the data.
+ * Versions build on the latest undeleted version, so a version above U builds on U or on a later version.
+ * @return For each protected version, whether it is in the window of any candidate version.
+ */
+std::vector<bool> protected_versions_to_read(
+        std::vector<VersionId> candidate_versions, std::vector<VersionId> cut_versions,
+        const std::vector<VersionId>& protected_versions
+);
+
+/**
+ * Deletes the index keys and the data keys only they reference.
+ * @param keys_in_other_snapshots The snapshotted index keys of the symbols being deleted, leaving out any snapshot
+ * being deleted. Their data is not deleted, nor, when check.snapshots is set, are the keys.
+ */
 folly::Future<DeleteTreesStats> delete_trees_responsibly(
-        std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map,
+        const std::shared_ptr<Store>& store, std::shared_ptr<VersionMap>& version_map,
+        const std::vector<IndexTypeKey>& orig_keys_to_delete, const SnapshottedIndexKeys& keys_in_other_snapshots,
+        const PreDeleteChecks& check = default_pre_delete_checks, const bool dry_run = false
+);
+
+// The stats are used by the enterprise repo for logging. Kept for the enterprise repo, which passes a
+// MasterSnapshotMap.
+folly::Future<DeleteTreesStats> delete_trees_responsibly(
+        const std::shared_ptr<Store>& store, std::shared_ptr<VersionMap>& version_map,
         const std::vector<IndexTypeKey>& orig_keys_to_delete, const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
         const PreDeleteChecks& check = default_pre_delete_checks, const bool dry_run = false
@@ -190,8 +216,8 @@ class LocalVersionedEngine : public VersionedEngine {
         for (const auto& key : idx_to_be_deleted) {
             stream_ids.insert(key.id());
         }
-        auto snapshot_map = get_master_snapshots_map(store(), stream_ids);
-        delete_trees_responsibly(store(), version_map(), idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
+        auto snapshotted_keys = get_snapshotted_index_keys(store(), stream_ids);
+        delete_trees_responsibly(store(), version_map(), idx_to_be_deleted, snapshotted_keys, checks).get();
     };
 
     std::set<StreamId> list_streams_internal(

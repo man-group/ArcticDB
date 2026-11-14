@@ -252,7 +252,7 @@ def test_batch_delete_versions_with_tombstones(basic_store, single_threaded_conf
 
 @pytest.mark.storage
 def test_batch_delete_symbols(basic_store, single_threaded_config):
-    """Test delete_batch with whole symbol deletion exercises recurse_index_keys .get() with multiple symbols.
+    """Test delete_batch with whole symbol deletion exercises recurse_index_keys_per_key .get() with multiple symbols.
 
     With single_threaded_config=True (1 IO + 1 CPU thread), this would deadlock if .get() blocked a
     pool thread that the queued IO tasks depend on.
@@ -275,7 +275,7 @@ def test_batch_write_with_pruning(basic_store, single_threaded_config):
 
     write_index_key_to_version_map_async routes delete_unreferenced_pruned_indexes onto the CPU
     executor via .via(&cpu_executor()). Inside that callback, delete_trees_responsibly calls
-    recurse_index_keys which uses .get() to block on IO futures. With single_threaded_config=True
+    recurse_index_keys_per_key which uses .get() to block on IO futures. With single_threaded_config=True
     (1 IO + 1 CPU thread), this would deadlock if IO and CPU tasks competed for the same thread.
     """
     lib = basic_store
@@ -300,7 +300,7 @@ def test_delete_snapshot_single_threaded(basic_store, single_threaded_config):
     """Test delete_snapshot exercises delete_trees_responsibly with full PreDeleteChecks (all=true).
 
     This hits both .get() calls: the check_reload path (load_type != NOT_LOADED because
-    version_visible=true) and the recurse_index_keys path.
+    version_visible=true) and the recurse_index_keys_per_key path.
     """
     lib = basic_store
 
@@ -324,7 +324,7 @@ def test_delete_tree_via_prune_previous(basic_store, single_threaded_config):
     """Test that sequential writes with prune_previous_version=True don't deadlock.
 
     Each write triggers delete_unreferenced_pruned_indexes on the CPU executor, which calls
-    delete_trees_responsibly -> recurse_index_keys -> .get(). Running many of these sequentially
+    delete_trees_responsibly -> recurse_index_keys_per_key -> .get(). Running many of these sequentially
     with a single-threaded pool config stresses the thread handoff.
     """
     lib = basic_store

@@ -161,7 +161,7 @@ ankerl::unordered_dense::set<AtomKey> recurse_segment(
 /* Given a [multi-]index key, returns a set containing the top level [multi-]index key itself, and all the
  * multi-index, index, and data keys referenced by this [multi-]index key.
  * If the version_id argument is provided, the returned set will only contain keys matching that version_id.
- * Note that this differs from recurse_index_keys, which does not include the passed in keys in the returned set. */
+ * Note that this differs from recurse_index_keys_per_key, which does not include the passed in keys in its results. */
 inline ankerl::unordered_dense::set<AtomKey> recurse_index_key(
         const std::shared_ptr<stream::StreamSource>& store, const IndexTypeKey& index_key,
         const std::optional<VersionId>& version_id = std::nullopt
@@ -200,104 +200,65 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_segment(
     return res;
 }
 
-/* Given a container of [multi-]index keys, returns a set containing all the multi-index, index, and data keys
- * referenced by these [multi-]index keys.
- * Note that this differs from recurse_index_key, which includes the passed in key in the returned set. */
+/* The keys the segment of index_key references: the index and data keys of a multi-index key, or the data keys of an
+ * index key. */
+inline std::vector<AtomKey> keys_in_index_segment(
+        const std::shared_ptr<stream::StreamSource>& store, const IndexTypeKey& index_key, SegmentInMemory&& segment
+) {
+    std::vector<AtomKey> res;
+    if (index_key.type() == KeyType::MULTI_KEY) {
+        return recurse_segment(store, std::move(segment), std::nullopt).extract();
+    }
+    KeySegment key_segment(std::move(segment), SymbolStructure::SAME);
+    auto data_keys = key_segment.materialise();
+    util::variant_match(
+            data_keys,
+            [&res](std::vector<AtomKey>& keys) { res = std::move(keys); },
+            [&res, &index_key](std::vector<AtomKeyPacked>& keys) {
+                res.reserve(keys.size());
+                for (const auto& key : keys) {
+                    res.emplace_back(key.to_atom_key(index_key.id()));
+                }
+            }
+    );
+    return res;
+}
+
+/* Reads the [multi-]index keys in parallel and gives the keys each references, in the order of keys. A key that could
+ * not be read because it is missing gives std::nullopt, if opts.ignores_missing_key_. Blocks the calling thread: from a
+ * CPU pool thread this waits on IO pool work, which is safe as the pools are separate (verified by
+ * test_batch_write_with_pruning and test_batch_delete_symbols with single-threaded config). */
 template<typename KeyContainer>
 requires std::is_base_of_v<AtomKey, typename KeyContainer::value_type>
-inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
+inline std::vector<std::optional<std::vector<AtomKey>>> recurse_index_keys_per_key(
         const std::shared_ptr<stream::StreamSource>& store, const KeyContainer& keys, storage::ReadKeyOpts opts
 ) {
-    if (keys.empty()) {
-        return {};
-    }
-    // Having one set for AtomKeys and one for AtomKeyPacked is intentional. This handles the case of pruning data for
-    // symbol. In that case all keys will be for the same symbol and we can use the less expensive to hash AtomKeyPacked
-    // struct as rehashing when the set grows is expensive for AtomKeys. In case the keys are for different symbols
-    // (e.g. when deleting a snapshot) AtomKey must be used as we need the symbol_id per key.
-    const StreamId& first_stream_id = keys.begin()->id();
-    bool same_stream_id =
-            std::all_of(keys.begin(), keys.end(), [&](const auto& k) { return k.id() == first_stream_id; });
-
-    struct PerKeyResult {
-        ankerl::unordered_dense::set<AtomKey> atom_keys;
-        ankerl::unordered_dense::set<AtomKeyPacked> packed_keys;
-    };
-
-    // Read all top-level index keys in parallel and process each segment in the read callback.
-    // For MULTI_KEY entries, recurse_segment handles the contained TABLE_INDEX keys
-    // (MULTI_KEY is flat — it only ever contains TABLE_INDEX keys, never nested MULTI_KEYs).
-    std::vector<folly::Future<PerKeyResult>> process_futures;
-    process_futures.reserve(keys.size());
+    std::vector<folly::Future<std::vector<AtomKey>>> futures;
+    futures.reserve(keys.size());
     for (const auto& index_key : keys) {
-        if (index_key.type() == KeyType::TABLE_INDEX || index_key.type() == KeyType::MULTI_KEY) {
-            process_futures.push_back(
-                    store->read(index_key, opts)
-                            .thenValue([store, index_key, same_stream_id](auto&& key_seg) -> PerKeyResult {
-                                PerKeyResult result;
-                                auto segment = std::move(key_seg.second);
-                                if (index_key.type() == KeyType::MULTI_KEY) {
-                                    auto sub_keys = recurse_segment(store, std::move(segment), std::nullopt);
-                                    for (auto&& key : sub_keys) {
-                                        result.atom_keys.emplace(std::move(key));
-                                    }
-                                } else {
-                                    KeySegment key_segment(std::move(segment), SymbolStructure::SAME);
-                                    auto data_keys = key_segment.materialise();
-                                    util::variant_match(data_keys, [&]<typename KT>(std::vector<KT>& atom_keys) {
-                                        for (KT& key : atom_keys) {
-                                            if constexpr (std::is_same_v<KT, AtomKey>) {
-                                                result.atom_keys.emplace(std::move(key));
-                                            } else if constexpr (std::is_same_v<KT, AtomKeyPacked>) {
-                                                if (same_stream_id) {
-                                                    result.packed_keys.emplace(std::move(key));
-                                                } else {
-                                                    result.atom_keys.emplace(key.to_atom_key(index_key.id()));
-                                                }
-                                            }
-                                        }
-                                    });
-                                }
-                                return result;
-                            })
-            );
-        } else {
-            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                    "recurse_index_keys: expected index or multi-index key, received {}", index_key.type()
-            );
-        }
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                index_key.type() == KeyType::TABLE_INDEX || index_key.type() == KeyType::MULTI_KEY,
+                "Expected index or multi-index key, received {}",
+                index_key.type()
+        );
+        futures.push_back(store->read(index_key, opts).thenValue([store, index_key](auto&& key_seg) {
+            return keys_in_index_segment(store, index_key, std::move(key_seg.second));
+        }));
     }
-
-    // This .get() blocks the calling thread. When reached from delete_unreferenced_pruned_indexes
-    // (via cpu_executor), it blocks a CPU pool thread while awaiting IO futures. This is safe because
-    // IO tasks run on the separate IO executor, so they are not starved by the blocked CPU thread.
-    // Verified by test_batch_write_with_pruning and test_batch_delete_symbols with single-threaded config.
-    auto results = folly::collectAll(process_futures).get();
-
-    // Merge per-key results
-    ankerl::unordered_dense::set<AtomKey> res;
-    ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
-    for (auto& try_result : results) {
+    auto tries = folly::collectAll(futures).get();
+    std::vector<std::optional<std::vector<AtomKey>>> res;
+    res.reserve(tries.size());
+    for (auto& try_result : tries) {
         try {
-            auto per_key = std::move(try_result).value();
-            for (auto&& key : per_key.atom_keys) {
-                res.emplace(std::move(key));
-            }
-            for (auto&& key : per_key.packed_keys) {
-                res_packed.emplace(std::move(key));
-            }
+            res.emplace_back(std::move(try_result).value());
         } catch (storage::KeyNotFoundException& e) {
-            if (opts.ignores_missing_key_) {
-                log::version().info("Missing key while recursing index key {}", e.keys());
-            } else {
+            if (!opts.ignores_missing_key_) {
                 throw;
             }
-        }
-    }
-    if (!res_packed.empty()) {
-        res.reserve(res_packed.size() + res.size());
-        for (const auto& key : res_packed) {
-            res.emplace(key.to_atom_key(first_stream_id));
+            if (!opts.dont_warn_about_missing_key) {
+                log::version().info("Missing key while recursing index key: {}", e.what());
+            }
+            res.emplace_back(std::nullopt);
         }
     }
     return res;

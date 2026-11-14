@@ -199,6 +199,53 @@ def test_delete_snapshot_key_shared_with_another_snapshot(version_store_factory)
     assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) == 0
 
 
+def _df_for_day(day):
+    return pd.DataFrame({"col": [day]}, index=pd.DatetimeIndex([pd.Timestamp("2020-01-01") + pd.Timedelta(days=day)]))
+
+
+def test_remove_from_snapshot_keeps_data_of_snapshot_it_would_empty(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0
+    lib.snapshot("snap")
+    lib.delete(sym)
+
+    # snap would be empty so isn't rewritten, and still holds v0
+    lib.remove_from_snapshot("snap", [sym], [0])
+
+    assert_frame_equal(lib.read(sym, as_of="snap").data, _df_for_day(0))
+
+
+def test_delete_snapshot_with_many_symbols(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    lib.write("in_other_snapshot", _df_for_day(0))
+    lib.write("live", _df_for_day(1))
+    lib.write("only_in_snapshot", _df_for_day(2))
+    lib.write("shares_data", _df_for_day(3))  # v0: d3
+    lib.write("other", _df_for_day(4))
+    lib.snapshot("snap")
+    lib.snapshot("other_snap", versions={"in_other_snapshot": 0, "other": 0})
+    lib.append("shares_data", _df_for_day(5))  # v1: (d3, d5)
+    lib.snapshot("snap_shares_data", versions={"shares_data": 1})
+    for sym in ["in_other_snapshot", "only_in_snapshot", "other"]:
+        lib.delete(sym)
+    lib.delete_version("shares_data", 0)
+    lib.delete_version("shares_data", 1)
+
+    lib.delete_snapshot("snap")
+
+    assert_frame_equal(lib.read("in_other_snapshot", as_of="other_snap").data, _df_for_day(0))
+    assert_frame_equal(lib.read("other", as_of="other_snap").data, _df_for_day(4))
+    assert_frame_equal(lib.read("live").data, _df_for_day(1))
+    assert_frame_equal(
+        lib.read("shares_data", as_of="snap_shares_data").data, pd.concat([_df_for_day(3), _df_for_day(5)])
+    )
+    lib_tool = lib.library_tool()
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "only_in_snapshot")
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "only_in_snapshot")
+    assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "shares_data")) == 1
+
+
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
     lib = lmdb_version_store_prune_previous
     assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True

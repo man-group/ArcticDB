@@ -420,18 +420,25 @@ VersionResultVector PythonVersionStore::list_versions(
 
 namespace {
 
-py::object get_metadata_from_segment(const SegmentInMemory& segment) {
+std::optional<proto::descriptors::UserDefinedMetadata> user_metadata_from_segment(const SegmentInMemory& segment) {
     if (segment.has_user_metadata()) {
         // Between v4.5.0 and v5.2.1 we saved this metadata here (commit 516d16968f0)
-        return python_util::pb_to_python(segment.user_metadata());
+        return segment.user_metadata();
     }
     // Before v4.5.0 and after v5.2.1 we saved this metadata here
-    return python_util::any_metadata_to_py(segment.metadata());
+    proto::descriptors::UserDefinedMetadata user_meta;
+    if (const auto* metadata = segment.metadata(); metadata && metadata->UnpackTo(&user_meta)) {
+        return user_meta;
+    }
+    return std::nullopt;
 }
 
-py::object get_metadata_for_snapshot(const std::shared_ptr<Store>& store, const VariantKey& snap_key) {
-    auto seg = store->read_sync(snap_key).second;
-    return get_metadata_from_segment(seg);
+py::object user_metadata_to_python(const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta) {
+    return user_meta ? python_util::pb_to_python(*user_meta) : py::none{};
+}
+
+py::object get_metadata_from_segment(const SegmentInMemory& segment) {
+    return user_metadata_to_python(user_metadata_from_segment(segment));
 }
 
 std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snapshot(
@@ -445,14 +452,34 @@ std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snaps
 
 std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshots(std::optional<bool> load_metadata) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_snapshots");
-    auto snap_ids = std::vector<std::pair<SnapshotId, py::object>>();
-    auto fetch_metadata = opt_false(load_metadata);
-    iterate_snapshots(store(), [store = store(), &snap_ids, fetch_metadata](const VariantKey& vk) {
-        auto snapshot_meta_as_pyobject = fetch_metadata ? get_metadata_for_snapshot(store, vk) : py::none{};
-        auto snapshot_id = fmt::format("{}", variant_key_id(vk));
-        snap_ids.emplace_back(std::move(snapshot_id), std::move(snapshot_meta_as_pyobject));
-    });
+    const auto snapshot_keys = list_snapshot_keys(store());
+    std::vector<std::pair<SnapshotId, py::object>> snap_ids;
+    if (!opt_false(load_metadata)) {
+        snap_ids.reserve(snapshot_keys.size());
+        for (const auto& snapshot_key : snapshot_keys) {
+            snap_ids.emplace_back(fmt::format("{}", variant_key_id(snapshot_key)), py::none{});
+        }
+        return snap_ids;
+    }
 
+    // Read in parallel, but convert to Python objects here, on the calling thread
+    struct SnapshotMetadata {
+        bool read = false; // Not read if deleted since listing
+        std::optional<proto::descriptors::UserDefinedMetadata> user_meta;
+    };
+    std::vector<SnapshotMetadata> metadata(snapshot_keys.size());
+    read_snapshots(store(), snapshot_keys, [&metadata](size_t idx, const VariantKey&, SegmentInMemory&& segment) {
+        metadata[idx] = {true, user_metadata_from_segment(segment)};
+        return true;
+    });
+    for (size_t idx = 0; idx < snapshot_keys.size(); ++idx) {
+        if (metadata[idx].read) {
+            snap_ids.emplace_back(
+                    fmt::format("{}", variant_key_id(snapshot_keys[idx])),
+                    user_metadata_to_python(metadata[idx].user_meta)
+            );
+        }
+    }
     return snap_ids;
 }
 
@@ -508,8 +535,9 @@ void PythonVersionStore::add_to_snapshot(
         for (const auto& key : deleted_keys) {
             deleted_stream_ids.insert(key.id());
         }
+        // snap_name is already rewritten, so it must protect the keys it still holds
         delete_trees_responsibly(
-                store(), version_map(), deleted_keys, get_master_snapshots_map(store(), deleted_stream_ids), snap_name
+                store(), version_map(), deleted_keys, get_snapshotted_index_keys(store(), deleted_stream_ids)
         )
                 .get();
         if (version_map()->log_changes()) {
@@ -562,8 +590,9 @@ void PythonVersionStore::remove_from_snapshot(
         for (const auto& key : deleted_keys) {
             deleted_stream_ids.insert(key.id());
         }
+        // snap_name is rewritten first, or left as is if it would be empty, so it protects the keys it still holds
         delete_trees_responsibly(
-                store(), version_map(), deleted_keys, get_master_snapshots_map(store(), deleted_stream_ids), snap_name
+                store(), version_map(), deleted_keys, get_snapshotted_index_keys(store(), deleted_stream_ids)
         )
                 .get();
         if (version_map()->log_changes()) {
@@ -1096,16 +1125,24 @@ void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
 void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key) {
     ARCTICDB_DEBUG(log::version(), "Deleting data of Snapshot {}", snap_name);
 
-    auto snap_map_and_keys = get_master_snapshots_map_and_keys_in_given_snapshot(store(), snap_key);
+    std::vector<IndexTypeKey> index_keys_in_snapshot;
+    try {
+        index_keys_in_snapshot = get_versions_from_segment(store()->read_sync(snap_key).second);
+    } catch (const storage::KeyNotFoundException&) {
+        ARCTICDB_DEBUG(log::version(), "Snapshot {} was deleted concurrently", snap_name);
+    }
+    std::unordered_set<StreamId> stream_ids;
+    stream_ids.reserve(index_keys_in_snapshot.size());
+    for (const auto& key : index_keys_in_snapshot) {
+        stream_ids.insert(key.id());
+    }
+    auto keys_in_other_snapshots = get_snapshotted_index_keys(store(), stream_ids, snap_name);
 
     ARCTICDB_DEBUG(log::version(), "Deleting Snapshot {}", snap_name);
     store()->remove_key(snap_key).get();
 
     try {
-        delete_trees_responsibly(
-                store(), version_map(), snap_map_and_keys.index_keys_in_given_snapshot, snap_map_and_keys.map, snap_name
-        )
-                .get();
+        delete_trees_responsibly(store(), version_map(), index_keys_in_snapshot, keys_in_other_snapshots).get();
         ARCTICDB_DEBUG(log::version(), "Deleted orphaned index keys in snapshot {}", snap_name);
     } catch (const std::exception& ex) {
         log::version().warn("Garbage collection of unreachable deleted index keys failed due to: {}", ex.what());
@@ -1261,7 +1298,7 @@ std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
         );
     }
 
-    // Make sure to call delete_tree and thus get_master_snapshots_map only once for all symbols
+    // Make sure to call delete_tree and thus get_snapshotted_index_keys only once for all symbols
     if (!keys_to_delete.empty()) {
         delete_tree(keys_to_delete, TombstoneVersionResult{true});
     }
@@ -1279,10 +1316,10 @@ std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
 }
 
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {
-    auto snaps = get_master_snapshots_map(store());
+    auto snaps = get_snapshotted_index_keys(store(), {symbols.begin(), symbols.end()});
     for (const auto& sym : symbols) {
         auto index_keys_from_symbol_tree = get_all_versions(store(), version_map(), sym);
-        for (const auto& [key, map] : snaps[sym]) {
+        for (const auto& key : snaps[sym]) {
             index_keys_from_symbol_tree.push_back(key);
         }
         std::sort(
