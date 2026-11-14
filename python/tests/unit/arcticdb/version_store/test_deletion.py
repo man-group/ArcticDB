@@ -203,6 +203,19 @@ def _df_for_day(day):
     return pd.DataFrame({"col": [day]}, index=pd.DatetimeIndex([pd.Timestamp("2020-01-01") + pd.Timedelta(days=day)]))
 
 
+def test_remove_from_snapshot_keeps_data_of_snapshot_it_would_empty(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0
+    lib.snapshot("snap")
+    lib.delete(sym)
+
+    # snap would be empty so isn't rewritten, and still holds v0
+    lib.remove_from_snapshot("snap", [sym], [0])
+
+    assert_frame_equal(lib.read(sym, as_of="snap").data, _df_for_day(0))
+
+
 def test_delete_snapshot_with_many_symbols(version_store_factory):
     lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
     lib.write("in_other_snapshot", _df_for_day(0))
