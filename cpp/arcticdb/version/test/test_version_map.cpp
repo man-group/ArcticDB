@@ -691,7 +691,7 @@ std::shared_ptr<VersionMapEntry> write_versions(
 ) {
     const auto cached_entry = [&]() {
         return version_map->check_reload(
-                store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+                store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, "write_versions"
         );
     };
     auto entry = cached_entry();
@@ -1307,7 +1307,7 @@ TEST(VersionMap, CompactionUpdateCache) {
     // Store is nullptr as we shouldn't go to storage
     const auto cached_entry = [&]() {
         return version_map->check_reload(
-                nullptr, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+                nullptr, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, "CompactionUpdateCache"
         );
     };
 
@@ -1632,6 +1632,7 @@ TEST(VersionMap, ReloadDoesNotChangeEntryHeldByAnotherThread) {
     const auto held = version_map->check_reload(store, id, load_all, __FUNCTION__);
     const auto keys_of = [](const VersionMapEntry& entry) {
         std::vector<AtomKey> keys;
+        keys.reserve(entry.keys_.size());
         for (const auto& key : entry.keys_)
             keys.push_back(key.to_atom_key(entry.stream_id_));
         return keys;
@@ -1654,7 +1655,7 @@ TEST(VersionMap, ReloadDoesNotChangeEntryHeldByAnotherThread) {
                               }
                           })}}});
     std::shared_ptr<VersionMapEntry> reloaded;
-    std::thread reloader([&] { reloaded = version_map->check_reload(store, id, load_all, __FUNCTION__); });
+    std::thread reloader([&] { reloaded = version_map->check_reload(store, id, load_all, "reloader"); });
     reload_paused.get_future().wait();
     const auto keys_mid_reload = keys_of(*held);
     const auto head_mid_reload = held->head_;

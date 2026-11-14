@@ -957,7 +957,7 @@ class VersionMapImpl {
                 ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE);
         entry->last_reload_time_ = Clock::nanos_since_epoch() - clock_unsync_tolerance;
 
-        load_via_ref_key(store, stream_id, load_strategy, entry);
+        load_via_ref_key(std::move(store), stream_id, load_strategy, entry);
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
         if (validate_)
