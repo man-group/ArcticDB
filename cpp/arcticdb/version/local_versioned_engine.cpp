@@ -959,6 +959,36 @@ VersionedItem LocalVersionedEngine::write_segment(
     return versioned_item;
 }
 
+std::vector<bool> protected_versions_to_read(
+        std::vector<VersionId> candidate_versions, std::vector<VersionId> cut_versions,
+        const std::vector<VersionId>& protected_versions
+) {
+    std::ranges::sort(candidate_versions);
+    const auto [dup_begin, dup_end] = std::ranges::unique(candidate_versions);
+    candidate_versions.erase(dup_begin, dup_end);
+    std::ranges::sort(cut_versions);
+
+    // Merged windows [first, second], no second meaning unbounded. The upper bound grows with the candidate version.
+    std::vector<std::pair<VersionId, std::optional<VersionId>>> windows;
+    for (const auto version : candidate_versions) {
+        const auto cut = std::ranges::upper_bound(cut_versions, version);
+        const auto upper = cut == cut_versions.end() ? std::nullopt : std::make_optional(*cut);
+        if (!windows.empty() && (!windows.back().second || version <= *windows.back().second)) {
+            windows.back().second = upper;
+        } else {
+            windows.emplace_back(version, upper);
+        }
+    }
+
+    std::vector<bool> res;
+    res.reserve(protected_versions.size());
+    for (const auto version : protected_versions) {
+        auto it = std::ranges::upper_bound(windows, version, {}, [](const auto& window) { return window.first; });
+        res.push_back(it != windows.begin() && (!std::prev(it)->second || version <= *std::prev(it)->second));
+    }
+    return res;
+}
+
 namespace {
 
 std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::vector<AtomKey>& keys) {
@@ -972,6 +1002,9 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
     return out;
 }
 
+// Kill switch for reading only the snapshotted versions that could hold candidate data (protected_versions_to_read)
+bool lineage_prune_deletes() { return ConfigsMap::instance()->get_int("VersionStore.LineagePruneDeletes", 1) != 0; }
+
 using DataKeySet = ankerl::unordered_dense::set<AtomKey>;
 
 // What the index keys read so far say about one symbol with targets
@@ -979,6 +1012,8 @@ struct SymbolCandidates {
     // Data keys of its targets that none of its neighbours reference
     DataKeySet candidates;
     std::unordered_set<IndexTypeKey> read_keys;
+    std::vector<VersionId> cut_versions;
+    bool lineage_reliable = true;
 };
 
 struct TargetsAndNeighbours {
@@ -989,24 +1024,36 @@ struct TargetsAndNeighbours {
     DataKeySet protected_data;
 };
 
-void add_target_data_keys(std::vector<AtomKey>& data_keys, SymbolCandidates& state, DataKeySet& all_candidates) {
+void add_target_data_keys(
+        const IndexTypeKey& target, std::vector<AtomKey>& data_keys, SymbolCandidates& state, DataKeySet& all_candidates
+) {
     for (auto& data_key : data_keys) {
+        // Data keys carry the id of the version that created them, which can't be above a version using them
+        if (data_key.type() != KeyType::TABLE_DATA || data_key.version_id() > target.version_id()) {
+            state.lineage_reliable = false;
+        }
         all_candidates.insert(data_key);
         state.candidates.insert(std::move(data_key));
     }
 }
 
-void add_neighbour_data_keys(std::vector<AtomKey>& data_keys, SymbolCandidates& state, DataKeySet& protected_data) {
+void add_neighbour_data_keys(
+        const IndexTypeKey& neighbour, std::vector<AtomKey>& data_keys,
+        const std::unordered_set<IndexTypeKey>& live_neighbours, SymbolCandidates& state, DataKeySet& protected_data
+) {
     for (auto& data_key : data_keys) {
         state.candidates.erase(data_key);
         protected_data.insert(std::move(data_key));
+    }
+    if (live_neighbours.contains(neighbour)) {
+        state.cut_versions.push_back(neighbour.version_id());
     }
 }
 
 // Reads the targets, and the neighbours of the targets' symbols
 TargetsAndNeighbours read_targets_and_neighbours(
         const std::shared_ptr<Store>& store, const std::vector<IndexTypeKey>& targets,
-        const std::unordered_set<IndexTypeKey>& neighbours
+        const std::unordered_set<IndexTypeKey>& neighbours, const std::unordered_set<IndexTypeKey>& live_neighbours
 ) {
     TargetsAndNeighbours out;
     for (const auto& key : targets) {
@@ -1026,45 +1073,106 @@ TargetsAndNeighbours read_targets_and_neighbours(
         const auto& key = to_read[i];
         auto& state = out.symbols.at(key.id());
         state.read_keys.insert(key);
+        if (key.type() != KeyType::TABLE_INDEX) {
+            state.lineage_reliable = false;
+        }
         if (!contents[i]) {
             continue;
         }
         if (i < targets.size()) {
-            add_target_data_keys(*contents[i], state, out.all_candidates);
+            add_target_data_keys(key, *contents[i], state, out.all_candidates);
         } else {
-            add_neighbour_data_keys(*contents[i], state, out.protected_data);
+            add_neighbour_data_keys(key, *contents[i], live_neighbours, state, out.protected_data);
         }
     }
     return out;
 }
 
+// The snapshotted keys of a symbol with candidates that weren't already read as targets or neighbours
+std::vector<IndexTypeKey> unread_snapshotted_keys(
+        const SymbolCandidates& state, const std::unordered_set<IndexTypeKey>& snapshotted
+) {
+    std::vector<IndexTypeKey> res;
+    for (const auto& key : snapshotted) {
+        if (!state.read_keys.contains(key)) {
+            res.push_back(key);
+        }
+    }
+    return res;
+}
+
+/**
+ * The keys of protected_keys whose versions could hold the symbol's candidate data keys. The live neighbours come from
+ * a version chain, possibly cached, whose latest version is latest_version. Versions above it may have been written
+ * since, by another client building on an older version, so the live neighbours say nothing about them and they are
+ * always read.
+ */
+std::vector<IndexTypeKey> keys_in_candidate_lineage(
+        SymbolCandidates& state, const std::vector<IndexTypeKey>& protected_keys, VersionId latest_version
+) {
+    std::vector<IndexTypeKey> res;
+    std::vector<IndexTypeKey> below_latest;
+    for (const auto& key : protected_keys) {
+        (key.version_id() > latest_version ? res : below_latest).push_back(key);
+    }
+    std::vector<VersionId> candidate_versions;
+    candidate_versions.reserve(state.candidates.size());
+    for (const auto& data_key : state.candidates) {
+        candidate_versions.push_back(data_key.version_id());
+    }
+    std::vector<VersionId> protected_versions;
+    protected_versions.reserve(below_latest.size());
+    for (const auto& key : below_latest) {
+        protected_versions.push_back(key.version_id());
+    }
+    const auto to_read_mask = protected_versions_to_read(
+            std::move(candidate_versions), std::move(state.cut_versions), protected_versions
+    );
+    for (size_t i = 0; i < below_latest.size(); ++i) {
+        if (to_read_mask[i]) {
+            res.push_back(below_latest[i]);
+        }
+    }
+    return res;
+}
+
 /**
  * The data keys only the targets reference: those of the targets, less those of the neighbours and of the snapshotted
- * index keys in keys_in_other_snapshots. Reads the snapshotted index keys of a symbol only if it has candidate data
- * keys.
- * @return The data keys to delete, and the number of data keys of the targets.
+ * index keys in keys_in_other_snapshots. Reads a symbol's snapshotted index keys only if it has candidate data keys
+ * and, if its lineage can be relied on, only those whose version could hold them.
  */
-std::pair<DataKeySet, size_t> candidate_data_keys(
+DataKeySet candidate_data_keys(
         const std::shared_ptr<Store>& store, const std::vector<IndexTypeKey>& targets,
-        const std::unordered_set<IndexTypeKey>& neighbours, const SnapshottedIndexKeys& keys_in_other_snapshots
+        const std::unordered_set<IndexTypeKey>& neighbours, const std::unordered_set<IndexTypeKey>& live_neighbours,
+        const std::unordered_map<StreamId, VersionId>& latest_versions,
+        const SnapshottedIndexKeys& keys_in_other_snapshots, DeleteTreesStats& stats
 ) {
-    auto read = read_targets_and_neighbours(store, targets, neighbours);
+    auto read = read_targets_and_neighbours(store, targets, neighbours, live_neighbours);
     auto& all_candidates = read.all_candidates;
     auto& protected_data = read.protected_data;
-    const auto data_keys_considered = all_candidates.size();
+    stats.data_keys_considered = all_candidates.size();
 
+    const bool prune = lineage_prune_deletes();
     std::vector<IndexTypeKey> protected_to_read;
-    for (const auto& [symbol, state] : read.symbols) {
+    size_t protected_considered = 0;
+    for (auto& [symbol, state] : read.symbols) {
         auto snapshotted = keys_in_other_snapshots.find(symbol);
         if (state.candidates.empty() || snapshotted == keys_in_other_snapshots.end()) {
             continue;
         }
-        for (const auto& key : snapshotted->second) {
-            if (!state.read_keys.contains(key)) {
-                protected_to_read.push_back(key);
-            }
+        auto protected_keys = unread_snapshotted_keys(state, snapshotted->second);
+        protected_considered += protected_keys.size();
+        const bool reliable = std::ranges::all_of(protected_keys, [](const IndexTypeKey& key) {
+            return key.type() == KeyType::TABLE_INDEX;
+        });
+        const auto latest_version = latest_versions.find(symbol);
+        if (prune && reliable && state.lineage_reliable && latest_version != latest_versions.end()) {
+            protected_keys = keys_in_candidate_lineage(state, protected_keys, latest_version->second);
         }
+        protected_to_read.insert(protected_to_read.end(), protected_keys.begin(), protected_keys.end());
     }
+    stats.protected_index_keys_read = protected_to_read.size();
+    stats.protected_index_keys_skipped = protected_considered - protected_to_read.size();
 
     storage::ReadKeyOpts read_opts;
     read_opts.ignores_missing_key_ = true;
@@ -1079,12 +1187,13 @@ std::pair<DataKeySet, size_t> candidate_data_keys(
     }
     std::erase_if(all_candidates, [&protected_data](const AtomKey& key) { return protected_data.contains(key); });
     log::version().debug(
-            "Candidate: {} data keys, {} to delete; read {} snapshotted index keys",
-            data_keys_considered,
+            "Candidate: {} data keys, {} to delete; read {} snapshotted index keys, skipped {}",
+            stats.data_keys_considered,
             all_candidates.size(),
-            protected_to_read.size()
+            stats.protected_index_keys_read,
+            stats.protected_index_keys_skipped
     );
-    return {std::move(all_candidates), data_keys_considered};
+    return std::move(all_candidates);
 }
 
 } // namespace
@@ -1132,6 +1241,11 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
     // 1) remove any keys_to_delete that are still visible
     // 2) find any other index key that could share data with the keys_to_delete (due to dedup).
 
+    // Keys that were undeleted before this delete, so may limit which snapshotted versions need reading
+    auto live_neighbours = check.live_before_delete;
+    // Per symbol, the lowest latest version of the version chains the live neighbours come from
+    auto latest_versions = check.latest_version_before_delete;
+
     // Remove any keys considered for deletion that are covered by a snapshot. Check 2) for snapshotted versions is
     // below, once the candidate data keys are known.
     if (check.snapshots) {
@@ -1178,11 +1292,18 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
             // Verified by test_batch_delete_versions_* with single-threaded config.
             auto results = folly::collectAll(reload_futures).get();
             for (size_t i = 0; i < results.size(); ++i) {
-                entry_map.try_emplace(std::move(stream_ids[i]), std::move(results[i]).value());
+                auto entry = std::move(results[i]).value();
+                if (auto latest = entry->get_first_index(true).first) {
+                    auto [it, inserted] = latest_versions.try_emplace(stream_ids[i], latest->version_id());
+                    if (!inserted) {
+                        it->second = std::min(it->second, latest->version_id());
+                    }
+                }
+                entry_map.try_emplace(std::move(stream_ids[i]), std::move(entry));
             }
         }
 
-        keys_to_delete.remove_if([&entry_map, &check, &not_to_delete](const auto& key) {
+        keys_to_delete.remove_if([&entry_map, &check, &not_to_delete, &live_neighbours](const auto& key) {
             const auto entry = entry_map.at(key.id());
             if (check.version_visible && !entry->is_tombstoned(key)) { // Check 1)
                 log::version().debug(
@@ -1192,17 +1313,24 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
                 );
                 return true;
             }
+            const auto protect_live_neighbour = [&not_to_delete, &live_neighbours, &entry](auto& neighbour) {
+                not_to_delete.insert(neighbour.to_atom_key(entry->stream_id_));
+                live_neighbours.insert(neighbour.to_atom_key(entry->stream_id_));
+            };
             get_matching_prev_and_next_versions(
                     entry,
                     key.version_id(), // Check 2)
                     [](const AtomKeyPacked&) {},
-                    [&check, &not_to_delete, &entry](auto& prev) {
-                        if (check.prev_version)
-                            not_to_delete.insert(prev.to_atom_key(entry->stream_id_));
+                    // prev and next are undeleted, as the entry was loaded after any tombstoning
+                    [&check, &protect_live_neighbour](auto& prev) {
+                        if (check.prev_version) {
+                            protect_live_neighbour(prev);
+                        }
                     },
-                    [&check, &not_to_delete, &entry](auto& next) {
-                        if (check.next_version)
-                            not_to_delete.insert(next.to_atom_key(entry->stream_id_));
+                    [&check, &protect_live_neighbour](auto& next) {
+                        if (check.next_version) {
+                            protect_live_neighbour(next);
+                        }
                     },
                     [v = key.version_id()](const AtomKeyPacked& key, const std::shared_ptr<VersionMapEntry>& entry) {
                         // Can't use is_live_index_type_key() because the target version's index key might have
@@ -1221,9 +1349,9 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
         not_to_delete.erase(key);
     }
 
-    auto [data_keys_to_be_deleted, data_keys_considered] =
-            candidate_data_keys(store, *keys_to_delete, *not_to_delete, keys_in_other_snapshots);
-    stats.data_keys_considered = data_keys_considered;
+    auto data_keys_to_be_deleted = candidate_data_keys(
+            store, *keys_to_delete, *not_to_delete, live_neighbours, latest_versions, keys_in_other_snapshots, stats
+    );
     not_to_delete.clear();
     storage::RemoveOpts remove_opts;
     remove_opts.ignores_missing_key_ = true;

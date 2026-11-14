@@ -43,6 +43,18 @@ struct PreDeleteChecks {
      */
     std::unordered_set<IndexTypeKey> could_share_data{};
 
+    /**
+     * The keys of could_share_data that were undeleted before this delete started. Deletes can skip reading some
+     * snapshotted versions based on them, so only add keys known to have been undeleted.
+     */
+    std::unordered_set<IndexTypeKey> live_before_delete{};
+
+    /**
+     * Per symbol, the latest version id in the version chain live_before_delete was taken from. That chain may be a
+     * cached one, and versions above it may have been written since, so live_before_delete says nothing about them.
+     */
+    std::unordered_map<StreamId, VersionId> latest_version_before_delete{};
+
     LoadType calc_load_type() const {
         if (prev_version)
             return LoadType::ALL;

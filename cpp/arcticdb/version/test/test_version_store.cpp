@@ -1408,3 +1408,86 @@ TEST(IterateSnapshots, IgnoresKeyNotFoundForVisitedSnapshot) {
 
     ASSERT_EQ(visited, (std::set<StreamId>{StreamId{"deleted_snap"}, StreamId{"live_snap"}}));
 }
+
+TEST(ProtectedVersionsToRead, WindowsFromCandidateToNextCut) {
+    using arcticdb::version_store::protected_versions_to_read;
+    // One window [5, 7]: above the cut at 7 a version builds on 7 or later, which does not hold the data
+    EXPECT_EQ(
+            protected_versions_to_read({5}, {3, 7}, {2, 4, 5, 6, 7, 8}),
+            (std::vector<bool>{false, false, true, true, true, false})
+    );
+    // No cut above the candidate, so no upper bound
+    EXPECT_EQ(protected_versions_to_read({9}, {3}, {8, 9, 20}), (std::vector<bool>{false, true, true}));
+    // Separate windows [1, 2] and [4, 6]; a cut at a candidate's own version does not bound it
+    EXPECT_EQ(
+            protected_versions_to_read({4, 1, 4}, {6, 2, 4}, {0, 1, 2, 3, 4, 5, 6, 7}),
+            (std::vector<bool>{false, true, true, false, true, true, true, false})
+    );
+    // Overlapping windows merge
+    EXPECT_EQ(protected_versions_to_read({1, 2}, {3}, {1, 3, 4}), (std::vector<bool>{true, true, false}));
+    EXPECT_EQ(protected_versions_to_read({}, {1}, {0, 1}), (std::vector<bool>{false, false}));
+}
+
+namespace {
+// Deletes k0 (data created by version 0) of the three-version fixture in a dry run, with k1 a live neighbour and k2
+// snapshotted. latest_version is that of the chain k1 was found live in.
+arcticdb::version_store::DeleteTreesStats delete_k0_with_live_k1(
+        const std::string& name, std::optional<arcticdb::VersionId> latest_version
+) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture(name);
+    SnapshottedIndexKeys snapshotted_keys;
+    snapshotted_keys[f.sym].insert(f.k2);
+    version_store::PreDeleteChecks checks{true, false, false, false, {f.k1}};
+    checks.live_before_delete.insert(f.k1);
+    if (latest_version) {
+        checks.latest_version_before_delete[f.sym] = *latest_version;
+    }
+    return version_store::delete_trees_responsibly(f.store, f.version_map, {f.k0}, snapshotted_keys, checks, true)
+            .get();
+}
+} // namespace
+
+TEST(DeleteTreesResponsiblyLineage, LiveNeighbourBoundsTheVersionsRead) {
+    // k1 was live and doesn't hold version 0's data, so neither can k2, which builds on k1 or later
+    const auto stats = delete_k0_with_live_k1("dtr_lineage_live_cut", 2);
+    EXPECT_EQ(stats.protected_index_keys_read, 0u);
+    EXPECT_EQ(stats.protected_index_keys_skipped, 1u);
+}
+
+TEST(DeleteTreesResponsiblyLineage, ReadsVersionsAboveTheChainTheNeighbourCameFrom) {
+    // The chain k1 was found live in only went up to version 1, so k2 may have been written since on top of k0
+    const auto stats = delete_k0_with_live_k1("dtr_lineage_stale_chain", 1);
+    EXPECT_EQ(stats.protected_index_keys_read, 1u);
+    EXPECT_EQ(stats.protected_index_keys_skipped, 0u);
+}
+
+TEST(DeleteTreesResponsiblyLineage, ReadsAllWithoutTheChainsLatestVersion) {
+    const auto stats = delete_k0_with_live_k1("dtr_lineage_no_latest", std::nullopt);
+    EXPECT_EQ(stats.protected_index_keys_read, 1u);
+    EXPECT_EQ(stats.protected_index_keys_skipped, 0u);
+}
+
+TEST(DeleteTreesResponsiblyLineage, KillSwitchReadsAll) {
+    arcticdb::ScopedConfig kill_switch("VersionStore.LineagePruneDeletes", 0);
+    const auto stats = delete_k0_with_live_k1("dtr_lineage_kill_switch", 2);
+    EXPECT_EQ(stats.protected_index_keys_read, 1u);
+    EXPECT_EQ(stats.protected_index_keys_skipped, 0u);
+}
+
+TEST(DeleteTreesResponsiblyLineage, NeighbourOnlyInSnapshotBeingDeletedDoesNotBoundReads) {
+    using namespace arcticdb;
+    // k1 is only in the snapshot being deleted, so may be tombstoned: it must not limit the reads
+    auto f = make_three_version_fixture("dtr_lineage_tombstoned_neighbour");
+    MasterSnapshotMap snap_map;
+    snap_map[f.sym][f.k1].insert(SnapshotId{"deleted"});
+    snap_map[f.sym][f.k2].insert(SnapshotId{"other"});
+    version_store::PreDeleteChecks checks{true, false, false, false, {}};
+    auto stats = version_store::delete_trees_responsibly(
+                         f.store, f.version_map, {f.k0}, snap_map, SnapshotId{"deleted"}, checks, true
+    )
+                         .get();
+    EXPECT_EQ(stats.protected_index_keys_read, 1u);
+    EXPECT_EQ(stats.protected_index_keys_skipped, 0u);
+    EXPECT_EQ(stats.data_keys_deleted, stats.data_keys_considered);
+}
