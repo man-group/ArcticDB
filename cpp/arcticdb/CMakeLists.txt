@@ -245,8 +245,8 @@ set(arcticdb_srcs
         column_store/column.hpp
         column_store/column_algorithms.hpp
         column_store/column_reslicer.hpp
-        column_store/column_with_strings.hpp
         column_store/column_utils.hpp
+        column_store/column_with_strings.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
         column_store/memory_segment_impl.hpp
@@ -388,9 +388,9 @@ set(arcticdb_srcs
         storage/storage_override.hpp
         storage/store.hpp
         storage/storage_utils.hpp
-        stream/de_dup_map.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
+        stream/de_dup_map.hpp
         stream/incompletes.hpp
         stream/merge_utils.hpp
         stream/piloted_clock.hpp
@@ -466,9 +466,7 @@ set(arcticdb_srcs
         util/type_traits.hpp
         util/variant.hpp
         version/admission_handler.hpp
-        version/de_dup_map.hpp
         version/op_log.hpp
-        version/merge_options.hpp
         version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
@@ -505,8 +503,8 @@ set(arcticdb_srcs
         column_store/column.cpp
         column_store/column_data.cpp
         column_store/column_reslicer.cpp
-        column_store/column_with_strings.cpp
         column_store/column_utils.cpp
+        column_store/column_with_strings.cpp
         column_store/column_data_random_accessor.cpp
         column_store/key_segment.cpp
         column_store/memory_segment.cpp

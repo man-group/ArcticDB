@@ -24,8 +24,6 @@ struct ColumnNameTag {};
 using ColumnName = util::StringWrappingValue<ColumnNameTag>;
 
 struct ProcessingUnit;
-class Column;
-class StringPool;
 
 struct FullResult {};
 
