@@ -8,12 +8,47 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
+#include <filesystem>
+#include <memory>
+
 namespace arcticdb::storage {
+
+inline const fs::path TEST_DATABASES_PATH = "./test_databases";
+
+inline std::unique_ptr<Storage> make_test_lmdb_storage(
+        const std::string& lib_name, uint64_t map_size, bool use_mock = false,
+        const fs::path& db_path = TEST_DATABASES_PATH / "test_lmdb"
+) {
+    arcticdb::proto::lmdb_storage::Config cfg;
+    cfg.set_path(db_path.generic_string());
+    cfg.set_map_size(map_size);
+    cfg.set_recreate_if_exists(true);
+    cfg.set_use_mock_storage_for_testing(use_mock);
+    return std::make_unique<lmdb::LmdbStorage>(LibraryPath(lib_name, '/'), OpenMode::DELETE, cfg);
+}
+
+class LMDBStorageTestBase : public ::testing::Test {
+  protected:
+    void SetUp() override {
+        if (!fs::exists(TEST_DATABASES_PATH)) {
+            fs::create_directories(TEST_DATABASES_PATH);
+        }
+    }
+
+    void TearDown() override {
+        if (fs::exists(TEST_DATABASES_PATH)) {
+            fs::remove_all(TEST_DATABASES_PATH);
+        }
+    }
+};
 
 inline VariantKey get_test_key(const std::string& name, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
     auto builder = arcticdb::atom_key_builder();

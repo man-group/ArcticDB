@@ -1171,6 +1171,7 @@ if(${TEST})
             processing/test/test_merge_update.cpp
             storage/test/test_lmdb_cve.cpp
             storage/test/test_lmdb_flags.cpp
+            storage/test/test_lmdb_storage_concurrency.cpp
             processing/test/test_structure_by_time_slice.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
