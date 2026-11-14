@@ -48,7 +48,7 @@ struct ProcessingUnit {
 
     /*
      * Memoization of results after applying an ExpressionNode to this processing unit. Keyed on the node's label_ with
-     * a deep comparison on hits. One slot per label, colliding writes are dropped.
+     * a deep comparison on hits. One slot per label, colliding writes are dropped, and the number of slots is bounded.
      *
      * The raw ExpressionNode pointers are owned by expression_context_, declared above so it outlives this map, and
      * the tree is not mutated while computing, so the pointers stay valid for the map's lifetime.

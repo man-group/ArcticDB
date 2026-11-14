@@ -17,6 +17,8 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/test/segment_generation_utils.hpp>
 
+#include <algorithm>
+#include <stdexcept>
 #include <unordered_set>
 
 TEST(ExpressionNode, AddBasic) {
@@ -198,4 +200,178 @@ TEST(ColumnWithStringsFixedWidth, AsciiPaddingComesOffAByteAtATime) {
 
     ASSERT_TRUE(stripped.has_value());
     ASSERT_EQ(*stripped, "ab");
+}
+
+namespace {
+using namespace arcticdb;
+
+ProcessingUnit int_column_processing_unit(const std::shared_ptr<ExpressionNode>& root) {
+    SegmentInMemory seg = create_dense_segment(
+            stream_descriptor(StreamId{"deep"}, stream::RowCountIndex{}, {scalar_field(DataType::INT64, "thing1")}),
+            std::views::iota(int64_t{0}, int64_t{20})
+    );
+    ProcessingUnit proc(std::move(seg));
+    auto expression_context = std::make_shared<ExpressionContext>();
+    expression_context->root_ = root;
+    proc.set_expression_context(expression_context);
+    return proc;
+}
+
+} // namespace
+
+TEST(ExpressionNode, DeepNotChainDoesNotOverflowStack) {
+    using namespace arcticdb;
+    // Deep enough to overflow an 8 MB stack when recursing, but not so deep that quadratic labels use much memory
+    constexpr size_t depth = 10'000;
+    auto root = node(col("thing1"), val(int64_t{9}, DataType::INT64), OperationType::GT);
+    for (size_t i = 0; i < depth; ++i) {
+        root = node(std::move(root), OperationType::NOT);
+    }
+
+    const ankerl::unordered_dense::map<std::string, DataType> column_types{{"thing1", DataType::INT64}};
+    ASSERT_TRUE(std::holds_alternative<BitSetTag>(root->compute(column_types)));
+
+    auto proc = int_column_processing_unit(root);
+    auto bitset = std::get<util::BitSet>(root->compute(proc));
+    for (size_t idx = 0; idx < 20; ++idx) {
+        ASSERT_EQ(bitset.get_bit(idx), idx > 9);
+    }
+    // Destroying the chain must not recurse once per level either
+    proc.computed_data_.clear();
+    proc.expression_context_.reset();
+    root.reset();
+}
+
+TEST(ExpressionNode, VeryDeepNotChainUsesBoundedMemory) {
+    using namespace arcticdb;
+    constexpr size_t depth = 200'000;
+    auto root = node(col("thing1"), val(int64_t{9}, DataType::INT64), OperationType::GT);
+    for (size_t i = 0; i < depth; ++i) {
+        root = node(std::move(root), OperationType::NOT);
+        // Fail at once rather than build quadratically many bytes of labels
+        ASSERT_LE(root->label_.size(), 4096);
+    }
+
+    auto proc = int_column_processing_unit(root);
+    auto bitset = std::get<util::BitSet>(root->compute(proc));
+    for (size_t idx = 0; idx < 20; ++idx) {
+        ASSERT_EQ(bitset.get_bit(idx), idx > 9);
+    }
+    ASSERT_LE(proc.computed_data_.size(), 128);
+    proc.computed_data_.clear();
+    proc.expression_context_.reset();
+    root.reset();
+}
+
+TEST(ExpressionNode, SharedSubexpressionsEvaluatedOnce) {
+    using namespace arcticdb;
+    // Each level uses the level below twice: evaluating per path would take 2^24 evaluations, slow but survivable
+    constexpr size_t depth = 24;
+    auto root = node(col("thing1"), val(int64_t{9}, DataType::INT64), OperationType::GT);
+    for (size_t i = 0; i < depth; ++i) {
+        root = node(root, root, i % 2 ? OperationType::AND : OperationType::OR);
+        // Fail at once rather than build exponentially many bytes of labels
+        ASSERT_LE(root->label_.size(), 4096);
+    }
+
+    const ankerl::unordered_dense::map<std::string, DataType> column_types{{"thing1", DataType::INT64}};
+    ASSERT_TRUE(std::holds_alternative<BitSetTag>(root->compute(column_types)));
+
+    auto proc = int_column_processing_unit(root);
+    auto bitset = std::get<util::BitSet>(root->compute(proc));
+    for (size_t idx = 0; idx < 20; ++idx) {
+        ASSERT_EQ(bitset.get_bit(idx), idx > 9);
+    }
+}
+
+TEST(ExpressionNode, StructurallyEqualSharedDagsAreMemoizedAcrossNodes) {
+    using namespace arcticdb;
+    // Column result names and labels would reach tens of MB at this depth if unbounded, so a regression fails cheaply.
+    // Do not raise this depth: at 64 unbounded names exhaust the machine's memory.
+    constexpr size_t depth = 20;
+    auto build = [] {
+        auto root = node(col("thing1"), val(int64_t{1}, DataType::INT64), OperationType::ADD);
+        for (size_t i = 0; i < depth; ++i) {
+            root = node(root, root, OperationType::ADD);
+        }
+        return root;
+    };
+    auto first = build();
+    auto second = build();
+    ASSERT_LE(first->label_.size(), 4096);
+    auto proc = int_column_processing_unit(first);
+    auto first_result = std::get<ColumnWithStrings>(first->compute(proc));
+    ASSERT_LE(first_result.column_name_.size(), 4096);
+    // second is a different DAG with the same structure, so it hits the first's memoized result
+    auto second_result = std::get<ColumnWithStrings>(second->compute(proc));
+    ASSERT_EQ(first_result.column_, second_result.column_);
+}
+
+TEST(ExpressionNode, TruncatedLabelsStillDistinguishExpressions) {
+    using namespace arcticdb;
+    auto build = [](int64_t innermost) {
+        auto root = node(col("thing1"), val(innermost, DataType::INT64), OperationType::GT);
+        for (size_t i = 0; i < 1'000; ++i) {
+            root = node(std::move(root), OperationType::NOT);
+        }
+        return root;
+    };
+    auto a = build(1);
+    ASSERT_LE(a->label_.size(), 4096);
+    ASSERT_EQ(a->label_, build(1)->label_);
+    ASSERT_NE(a->label_, build(2)->label_);
+}
+
+namespace {
+// Counts evaluations and how many results are alive at once. Throws rather than evaluate without limit.
+struct BottomUpProbe {
+    static constexpr size_t max_evaluations = 100'000;
+    size_t evaluations{0};
+    std::shared_ptr<int> token{std::make_shared<int>(0)};
+    size_t peak_alive{0};
+
+    std::shared_ptr<int> result() {
+        if (++evaluations > max_evaluations) {
+            throw std::runtime_error("Too many evaluations");
+        }
+        peak_alive = std::max(peak_alive, static_cast<size_t>(token.use_count()));
+        return token;
+    }
+
+    std::shared_ptr<int> run(const arcticdb::ExpressionNode& root) {
+        using namespace arcticdb;
+        return evaluate_bottom_up<std::shared_ptr<int>>(
+                root,
+                [this](const ExpressionNode::Leaf&) { return result(); },
+                [](const ExpressionNode&) -> std::optional<std::shared_ptr<int>> { return std::nullopt; },
+                [this](const ExpressionNode&, const ExpressionNode::Operation&, const auto&) { return result(); }
+        );
+    }
+};
+} // namespace
+
+TEST(ExpressionNode, BottomUpEvaluationFreesIntermediateResultsOfAChain) {
+    using namespace arcticdb;
+    auto root = col("thing1");
+    constexpr size_t depth = 1'000;
+    for (size_t i = 0; i < depth; ++i) {
+        root = node(std::move(root), OperationType::ABS);
+    }
+    BottomUpProbe probe;
+    probe.run(*root);
+    ASSERT_EQ(probe.evaluations, depth + 1);
+    ASSERT_LE(probe.peak_alive, 3);
+}
+
+TEST(ExpressionNode, BottomUpEvaluationVisitsEachNodeOfASharedDagOnce) {
+    using namespace arcticdb;
+    auto root = col("thing1");
+    constexpr size_t depth = 64;
+    for (size_t i = 0; i < depth; ++i) {
+        root = node(root, root, OperationType::ADD);
+    }
+    BottomUpProbe probe;
+    probe.run(*root);
+    ASSERT_EQ(probe.evaluations, depth + 1);
+    ASSERT_LE(probe.peak_alive, 3);
 }

@@ -34,8 +34,8 @@ StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationTyp
 StatsVariantData evaluate_ast_node_against_stats(
         const ExpressionNode& node, const StatsRowIndices& row_indices, const ColumnStatsData& column_stats
 ) {
-    return util::variant_match(
-            node.kind_,
+    return evaluate_bottom_up<StatsVariantData>(
+            node,
             [&](const ExpressionNode::Leaf& leaf) -> StatsVariantData {
                 return util::variant_match(
                         leaf,
@@ -49,17 +49,18 @@ StatsVariantData evaluate_ast_node_against_stats(
                         }
                 );
             },
-            [&](const ExpressionNode::Operation& op) -> StatsVariantData {
-                if (is_binary_operation(op.operation_type_)) {
-                    auto left = evaluate_ast_node_against_stats(*op.left_, row_indices, column_stats);
-                    auto right = evaluate_ast_node_against_stats(*op.right_, row_indices, column_stats);
-                    return dispatch_binary_stats(left, right, op.operation_type_);
-                }
-                if (is_unary_operation(op.operation_type_)) {
-                    auto left = evaluate_ast_node_against_stats(*op.left_, row_indices, column_stats);
-                    return dispatch_unary_stats(left, op.operation_type_);
+            [&](const ExpressionNode& operation_node) -> std::optional<StatsVariantData> {
+                const auto& op = std::get<ExpressionNode::Operation>(operation_node.kind_);
+                if (is_binary_operation(op.operation_type_) || is_unary_operation(op.operation_type_)) {
+                    return std::nullopt;
                 }
                 return std::vector(row_indices.size(), StatsComparison::UNKNOWN);
+            },
+            [&](const ExpressionNode&, const ExpressionNode::Operation& op, const auto& operand) -> StatsVariantData {
+                if (is_binary_operation(op.operation_type_)) {
+                    return dispatch_binary_stats(operand(op.left_), operand(op.right_), op.operation_type_);
+                }
+                return dispatch_unary_stats(operand(op.left_), op.operation_type_);
             }
     );
 }

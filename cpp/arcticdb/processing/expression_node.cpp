@@ -18,28 +18,38 @@
 
 namespace arcticdb {
 
+namespace {
+
+// A name embeds its operands' names, so it would grow like a label does. It only appears in error messages.
+std::string bounded_expression_name(std::string_view name) {
+    constexpr size_t max_length = 1024;
+    return name.size() > max_length ? fmt::format("{}...", name.substr(0, max_length)) : std::string(name);
+}
+
+} // namespace
+
 ColumnWithStrings::ColumnWithStrings(std::unique_ptr<Column>&& col, std::string_view col_name) :
     column_(std::move(col)),
-    column_name_(col_name) {}
+    column_name_(bounded_expression_name(col_name)) {}
 
 ColumnWithStrings::ColumnWithStrings(
         std::unique_ptr<Column> column, std::shared_ptr<StringPool> string_pool, std::string_view col_name
 ) :
     column_(std::move(column)),
     string_pool_(std::move(string_pool)),
-    column_name_(col_name) {}
+    column_name_(bounded_expression_name(col_name)) {}
 
 ColumnWithStrings::ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
     column_(std::make_shared<Column>(std::move(col))),
     string_pool_(std::move(string_pool)),
-    column_name_(col_name) {}
+    column_name_(bounded_expression_name(col_name)) {}
 
 ColumnWithStrings::ColumnWithStrings(
         std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name
 ) :
     column_(std::move(column)),
     string_pool_(string_pool),
-    column_name_(col_name) {}
+    column_name_(bounded_expression_name(col_name)) {}
 
 [[nodiscard]] std::optional<std::string_view> ColumnWithStrings::string_at_offset(
         entity::position_t offset, bool strip_fixed_width_trailing_nulls
@@ -97,14 +107,41 @@ std::string label_for(const ExpressionNode::Leaf& leaf) {
     );
 }
 
-std::string label_for(const ExpressionNode::Operation& op) {
-    if (is_ternary_operation(op.operation_type_)) {
-        return fmt::format("{} if {} else {}", op.left_->label_, op.condition_->label_, op.right_->label_);
-    } else if (is_binary_operation(op.operation_type_)) {
-        return fmt::format("({} {} {})", op.left_->label_, op.operation_type_, op.right_->label_);
-    } else {
-        return fmt::format("{}({})", op.operation_type_, op.left_->label_);
+size_t combine_hash(size_t seed, size_t value) {
+    return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
+}
+
+size_t hash_for(const ExpressionNode::Operation& op) {
+    size_t hash = std::hash<int>{}(static_cast<int>(op.operation_type_));
+    for (const auto* child : {op.condition_.get(), op.left_.get(), op.right_.get()}) {
+        hash = combine_hash(hash, child ? child->hash_ : 0);
     }
+    return hash;
+}
+
+// Labels embed their operands' labels, so without a bound their size would grow quadratically with the depth of an
+// expression, and exponentially with the depth of a shared sub-expression
+constexpr size_t max_label_length = 1024;
+
+// Bounds what a processing unit retains for an expression with very many nodes. Beyond it results are not memoized,
+// which only costs recomputation for a structurally equal expression in a later clause.
+constexpr size_t max_memoized_results = 128;
+
+// A truncated label ends in the hash so that labels, and so QueryBuilder comparison, still tell expressions apart
+std::string label_for(const ExpressionNode::Operation& op, size_t hash) {
+    std::string label;
+    if (is_ternary_operation(op.operation_type_)) {
+        label = fmt::format("{} if {} else {}", op.left_->label_, op.condition_->label_, op.right_->label_);
+    } else if (is_binary_operation(op.operation_type_)) {
+        label = fmt::format("({} {} {})", op.left_->label_, op.operation_type_, op.right_->label_);
+    } else {
+        label = fmt::format("{}({})", op.operation_type_, op.left_->label_);
+    }
+    if (label.size() > max_label_length) {
+        label.resize(max_label_length);
+        label.append(fmt::format("...#{:x}", hash));
+    }
+    return label;
 }
 
 bool value_sets_equal(ValueSet& a, ValueSet& b) {
@@ -125,56 +162,74 @@ bool value_sets_equal(ValueSet& a, ValueSet& b) {
     });
 }
 
-bool nodes_equal(const ExpressionNode& a, const ExpressionNode& b);
-
-bool equal_child(const std::shared_ptr<ExpressionNode>& a, const std::shared_ptr<ExpressionNode>& b) {
-    if (!a && !b) {
-        return true;
-    }
-    if (!a || !b) {
+bool leaves_equal(const ExpressionNode::Leaf& leaf_a, const ExpressionNode::Leaf& leaf_b) {
+    if (leaf_a.index() != leaf_b.index()) {
         return false;
     }
-    return nodes_equal(*a, *b);
+    // Now we know that leaf_a and leaf_b hold the same variant type member
+    return util::variant_match(
+            leaf_a,
+            [&leaf_b](const ColumnName& a_col) { return a_col.value == std::get<ColumnName>(leaf_b).value; },
+            [&leaf_b](const std::shared_ptr<Value>& a_val) {
+                return *a_val == *std::get<std::shared_ptr<Value>>(leaf_b);
+            },
+            [&leaf_b](const std::shared_ptr<ValueSet>& a_set) {
+                return value_sets_equal(*a_set, *std::get<std::shared_ptr<ValueSet>>(leaf_b));
+            },
+            [&leaf_b](const std::shared_ptr<util::RegexGeneric>& a_regex) {
+                return a_regex->text() == std::get<std::shared_ptr<util::RegexGeneric>>(leaf_b)->text();
+            }
+    );
 }
 
-bool nodes_equal(const ExpressionNode& a, const ExpressionNode& b) {
-    if (a.kind_.index() != b.kind_.index()) {
-        return false;
+struct NodePairHash {
+    size_t operator()(const std::pair<const ExpressionNode*, const ExpressionNode*>& pair) const {
+        return combine_hash(std::hash<const void*>{}(pair.first), std::hash<const void*>{}(pair.second));
     }
-    // Now we know that a and b hold the same variant type member
-    if (std::holds_alternative<ExpressionNode::Leaf>(a.kind_)) {
-        const auto& leaf_a = std::get<ExpressionNode::Leaf>(a.kind_);
-        const auto& leaf_b = std::get<ExpressionNode::Leaf>(b.kind_);
-        if (leaf_a.index() != leaf_b.index()) {
+};
+
+// Iterative, and compares each pair of nodes once, so deep and shared sub-expressions are cheap to compare
+bool nodes_equal(const ExpressionNode& a, const ExpressionNode& b) {
+    using NodePair = std::pair<const ExpressionNode*, const ExpressionNode*>;
+    std::vector<NodePair> stack{{&a, &b}};
+    ankerl::unordered_dense::set<NodePair, NodePairHash> compared;
+    while (!stack.empty()) {
+        const auto [x, y] = stack.back();
+        stack.pop_back();
+        if (x == y) {
+            continue;
+        }
+        if (!x || !y || x->hash_ != y->hash_ || x->kind_.index() != y->kind_.index()) {
             return false;
         }
-        // Now we know that leaf_a and leaf_b hold the same variant type member
-        return util::variant_match(
-                leaf_a,
-                [&leaf_b](const ColumnName& a_col) { return a_col.value == std::get<ColumnName>(leaf_b).value; },
-                [&leaf_b](const std::shared_ptr<Value>& a_val) {
-                    return *a_val == *std::get<std::shared_ptr<Value>>(leaf_b);
-                },
-                [&leaf_b](const std::shared_ptr<ValueSet>& a_set) {
-                    return value_sets_equal(*a_set, *std::get<std::shared_ptr<ValueSet>>(leaf_b));
-                },
-                [&leaf_b](const std::shared_ptr<util::RegexGeneric>& a_regex) {
-                    return a_regex->text() == std::get<std::shared_ptr<util::RegexGeneric>>(leaf_b)->text();
-                }
-        );
+        if (!compared.emplace(x, y).second) {
+            continue;
+        }
+        // Now we know that x and y hold the same variant type member
+        if (std::holds_alternative<ExpressionNode::Leaf>(x->kind_)) {
+            if (!leaves_equal(std::get<ExpressionNode::Leaf>(x->kind_), std::get<ExpressionNode::Leaf>(y->kind_))) {
+                return false;
+            }
+            continue;
+        }
+        const auto& operation_x = std::get<ExpressionNode::Operation>(x->kind_);
+        const auto& operation_y = std::get<ExpressionNode::Operation>(y->kind_);
+        if (operation_x.operation_type_ != operation_y.operation_type_) {
+            return false;
+        }
+        stack.emplace_back(operation_x.right_.get(), operation_y.right_.get());
+        stack.emplace_back(operation_x.left_.get(), operation_y.left_.get());
+        stack.emplace_back(operation_x.condition_.get(), operation_y.condition_.get());
     }
-    const auto& operation_a = std::get<ExpressionNode::Operation>(a.kind_);
-    const auto& operation_b = std::get<ExpressionNode::Operation>(b.kind_);
-    if (operation_a.operation_type_ != operation_b.operation_type_) {
-        return false;
-    }
-    return equal_child(operation_a.condition_, operation_b.condition_) &&
-           equal_child(operation_a.left_, operation_b.left_) && equal_child(operation_a.right_, operation_b.right_);
+    return true;
 }
 
 } // namespace
 
-ExpressionNode::ExpressionNode(Leaf leaf) : kind_(std::move(leaf)), label_(label_for(std::get<Leaf>(kind_))) {}
+ExpressionNode::ExpressionNode(Leaf leaf) :
+    kind_(std::move(leaf)),
+    label_(label_for(std::get<Leaf>(kind_))),
+    hash_(std::hash<std::string>{}(label_)) {}
 
 ExpressionNode::ExpressionNode(
         std::shared_ptr<ExpressionNode> condition, std::shared_ptr<ExpressionNode> left,
@@ -182,7 +237,8 @@ ExpressionNode::ExpressionNode(
 ) :
     kind_(Operation{op, std::move(left), std::move(right), std::move(condition)}) {
     util::check(is_ternary_operation(op), "Non-ternary expression provided with three arguments");
-    label_ = label_for(std::get<Operation>(kind_));
+    hash_ = hash_for(std::get<Operation>(kind_));
+    label_ = label_for(std::get<Operation>(kind_), hash_);
 }
 
 ExpressionNode::ExpressionNode(
@@ -190,18 +246,46 @@ ExpressionNode::ExpressionNode(
 ) :
     kind_(Operation{op, std::move(left), std::move(right)}) {
     util::check(is_binary_operation(op), "Non-binary expression provided with two arguments");
-    label_ = label_for(std::get<Operation>(kind_));
+    hash_ = hash_for(std::get<Operation>(kind_));
+    label_ = label_for(std::get<Operation>(kind_), hash_);
 }
 
 ExpressionNode::ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op) :
     kind_(Operation{op, std::move(left)}) {
     util::check(is_unary_operation(op), "Non-unary expression provided with single argument");
-    label_ = label_for(std::get<Operation>(kind_));
+    hash_ = hash_for(std::get<Operation>(kind_));
+    label_ = label_for(std::get<Operation>(kind_), hash_);
+}
+
+ExpressionNode::~ExpressionNode() {
+    auto* operation = std::get_if<Operation>(&kind_);
+    if (!operation) {
+        return;
+    }
+    // Release descendants one at a time: a node is only taken apart once this is its last owner
+    std::vector<std::shared_ptr<ExpressionNode>> pending;
+    const auto adopt_operands = [&pending](Operation& op) {
+        for (auto* child : {&op.left_, &op.right_, &op.condition_}) {
+            if (*child) {
+                pending.emplace_back(std::move(*child));
+            }
+        }
+    };
+    adopt_operands(*operation);
+    while (!pending.empty()) {
+        auto node = std::move(pending.back());
+        pending.pop_back();
+        if (node.use_count() == 1) {
+            if (auto* child_operation = std::get_if<Operation>(&node->kind_)) {
+                adopt_operands(*child_operation);
+            }
+        }
+    }
 }
 
 VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
-    return util::variant_match(
-            kind_,
+    return evaluate_bottom_up<VariantData>(
+            *this,
             [&seg](const Leaf& leaf) -> VariantData {
                 return util::variant_match(
                         leaf,
@@ -211,34 +295,35 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
                         [](const std::shared_ptr<util::RegexGeneric>& regex) -> VariantData { return regex; }
                 );
             },
-            [&seg, this](const Operation& op) -> VariantData {
-                if (auto it = seg.computed_data_.find(label_); it != seg.computed_data_.end()) {
+            [&seg](const ExpressionNode& node) -> std::optional<VariantData> {
+                if (auto it = seg.computed_data_.find(node.label_); it != seg.computed_data_.end()) {
                     const auto& [other, cached] = it->second;
-                    if (other == this || nodes_equal(*this, *other)) {
+                    if (other == &node || nodes_equal(node, *other)) {
                         return cached;
                     }
                 }
-                VariantData result = [&seg, &op]() -> VariantData {
+                return std::nullopt;
+            },
+            [&seg](const ExpressionNode& node, const Operation& op, const auto& operand) -> VariantData {
+                VariantData result = [&op, &operand]() -> VariantData {
                     if (is_ternary_operation(op.operation_type_)) {
                         return dispatch_ternary(
-                                op.condition_->compute(seg),
-                                op.left_->compute(seg),
-                                op.right_->compute(seg),
-                                op.operation_type_
+                                operand(op.condition_), operand(op.left_), operand(op.right_), op.operation_type_
                         );
                     } else if (is_binary_operation(op.operation_type_)) {
-                        return dispatch_binary(op.left_->compute(seg), op.right_->compute(seg), op.operation_type_);
+                        return dispatch_binary(operand(op.left_), operand(op.right_), op.operation_type_);
                     } else {
-                        return dispatch_unary(op.left_->compute(seg), op.operation_type_);
+                        return dispatch_unary(operand(op.left_), op.operation_type_);
                     }
                 }();
                 // On a label collision the slot is already held by a structurally-different node; try_emplace is a
                 // no-op there, so that node keeps the slot and this result simply isn't memoized.
-                if (!seg.computed_data_.try_emplace(label_, this, result).second) {
+                if (seg.computed_data_.size() < max_memoized_results &&
+                    !seg.computed_data_.try_emplace(node.label_, &node, result).second) {
                     log::version().debug(
                             "Expression label collision for {}; result not memoized, similar queries may see "
                             "redundant recomputation",
-                            label_
+                            node.label_
                     );
                 }
                 return result;
@@ -249,16 +334,36 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
 std::variant<BitSetTag, DataType> ExpressionNode::compute(
         const ankerl::unordered_dense::map<std::string, DataType>& column_types
 ) const {
-    if (std::holds_alternative<Leaf>(kind_)) {
-        ValueSetState value_set_state;
-        return leaf_return_type(std::get<Leaf>(kind_), column_types, value_set_state);
-    }
-    const auto& operation = std::get<Operation>(kind_);
+    return evaluate_bottom_up<ReturnType>(
+                   *this,
+                   [&column_types](const Leaf& leaf) {
+                       ReturnType res;
+                       res.type_ = leaf_return_type(leaf, column_types, res.value_set_state_);
+                       return res;
+                   },
+                   [](const ExpressionNode&) -> std::optional<ReturnType> { return std::nullopt; },
+                   [](const ExpressionNode&, const Operation& operation, const auto& operand) {
+                       return ReturnType{
+                               operation_return_type(
+                                       operation,
+                                       operand(operation.left_),
+                                       operation.right_ ? &operand(operation.right_) : nullptr,
+                                       operation.condition_ ? &operand(operation.condition_) : nullptr
+                               ),
+                               ValueSetState::NOT_A_SET
+                       };
+                   }
+    ).type_;
+}
+
+std::variant<BitSetTag, DataType> ExpressionNode::operation_return_type(
+        const Operation& operation, const ReturnType& left, const ReturnType* right, const ReturnType* condition
+) {
     const OperationType operation_type_ = operation.operation_type_;
     // Default to BitSetTag
     std::variant<BitSetTag, DataType> res;
-    ValueSetState left_value_set_state;
-    auto left_type = child_return_type(*operation.left_, column_types, left_value_set_state);
+    const ValueSetState left_value_set_state = left.value_set_state_;
+    const auto& left_type = left.type_;
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             left_value_set_state == ValueSetState::NOT_A_SET, "Unexpected value set input to {}", operation_type_
     );
@@ -314,8 +419,8 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected unary operator {}", operation_type_);
         }
     } else if (is_binary_operation(operation_type_)) {
-        ValueSetState right_value_set_state;
-        auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state);
+        const ValueSetState right_value_set_state = right->value_set_state_;
+        const auto& right_type = right->type_;
         switch (operation_type_) {
         case OperationType::ADD:
         case OperationType::SUB:
@@ -537,10 +642,10 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
         }
     } else {
         // Ternary operation
-        ValueSetState condition_value_set_state;
-        auto condition_type = child_return_type(*operation.condition_, column_types, condition_value_set_state);
-        ValueSetState right_value_set_state;
-        auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state);
+        const ValueSetState condition_value_set_state = condition->value_set_state_;
+        const auto& condition_type = condition->type_;
+        const ValueSetState right_value_set_state = right->value_set_state_;
+        const auto& right_type = right->type_;
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 condition_value_set_state == ValueSetState::NOT_A_SET &&
                         right_value_set_state == ValueSetState::NOT_A_SET,
@@ -644,17 +749,6 @@ std::variant<BitSetTag, DataType> ExpressionNode::leaf_return_type(
                 return DataType::UTF_DYNAMIC64;
             }
     );
-}
-
-std::variant<BitSetTag, DataType> ExpressionNode::child_return_type(
-        const ExpressionNode& child, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
-        ValueSetState& value_set_state
-) {
-    value_set_state = ValueSetState::NOT_A_SET;
-    if (std::holds_alternative<Leaf>(child.kind_)) {
-        return leaf_return_type(std::get<Leaf>(child.kind_), column_types, value_set_state);
-    }
-    return child.compute(column_types);
 }
 
 } // namespace arcticdb
