@@ -14,6 +14,9 @@
 #include <arcticdb/storage/lmdb/lmdb.hpp>
 #include <arcticdb/storage/lmdb/lmdb_error_handling.hpp>
 #include <filesystem>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -42,11 +45,9 @@ class LmdbStorage final : public Storage {
 
     std::string name() const final;
 
-    LmdbEnvDiagnostics diagnostics() { return lmdb_env_diagnostics(env()); }
+    LmdbEnvDiagnostics diagnostics() { return lmdb_env_diagnostics(instance()->env_); }
 
   private:
-    ::lmdb::env* env_ptr() { return lmdb_instance_ ? &lmdb_instance_->env_ : nullptr; }
-
     void do_write(KeySegmentPair& key_seg) final;
 
     void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
@@ -81,9 +82,18 @@ class LmdbStorage final : public Storage {
 
     std::optional<char> do_verify_library_suffix(std::string_view path) const final;
 
-    ::lmdb::env& env();
+    // Hold the result while using the environment or a dbi: cleanup() can drop the storage's reference concurrently
+    std::shared_ptr<LmdbInstance> instance() const;
 
-    ::lmdb::dbi& get_dbi(const std::string& db_name);
+    // The write mutex, the environment and a write transaction on it, which aborts unless committed
+    struct WriteTxn {
+        explicit WriteTxn(const LmdbStorage& storage);
+        std::lock_guard<std::mutex> lock_;
+        std::shared_ptr<LmdbInstance> instance_;
+        ::lmdb::txn txn_;
+    };
+
+    static ::lmdb::dbi& get_dbi(const LmdbInstance& instance, const std::string& db_name);
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
@@ -95,11 +105,14 @@ class LmdbStorage final : public Storage {
     void print_warning_if_lmdb_already_open() const;
 
     // _internal methods assume the write mutex is already held
-    void do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn);
+    void do_write_internal(KeySegmentPair& key_seg, WriteTxn& write);
     boost::container::small_vector<VariantKey, 1> do_remove_internal(
-            std::span<VariantKey> variant_key, ::lmdb::txn& txn, RemoveOpts opts
+            std::span<VariantKey> variant_key, WriteTxn& write, RemoveOpts opts
     );
     std::unique_ptr<std::mutex> write_mutex_;
+
+    // Guards lmdb_instance_ itself, not the environment it points at
+    std::unique_ptr<std::shared_mutex> instance_mutex_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;
 
     std::filesystem::path lib_dir_;
@@ -109,6 +122,8 @@ class LmdbStorage final : public Storage {
     // For log warning only
     // Number of times an LMDB path has been opened. See also reinit_lmdb_warning.
     // Opening an LMDB env over the same path twice in the same process is unsafe, so we warn the user about it.
+    // Storages over different paths are constructed and destroyed from arbitrary threads, so all access is guarded.
+    inline static std::mutex times_path_opened_mutex;
     inline static std::unordered_map<std::string, uint64_t> times_path_opened;
 };
 

@@ -3,34 +3,20 @@
 #include <benchmark/benchmark.h>
 
 #include <arcticdb/codec/codec.hpp>
-#include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/test/common.hpp>
 
 using namespace arcticdb;
+using arcticdb::storage::TEST_DATABASES_PATH;
 
-inline const fs::path TEST_DATABASES_PATH = "./test_databases";
 const std::string TEST_LIB_NAME = "test_lib";
 const uint64_t MAP_SIZE = 128ULL * (1ULL << 20); // 128 MiB
 struct LMDBStore {
 
-    std::unique_ptr<storage::lmdb::LmdbStorage> storage;
+    std::unique_ptr<arcticdb::storage::Storage> storage;
 
     LMDBStore(bool use_mock) {
         setup();
-
-        arcticdb::proto::lmdb_storage::Config cfg;
-
-        cfg.set_path((TEST_DATABASES_PATH / "test_lmdb").generic_string());
-        cfg.set_map_size(MAP_SIZE);
-        cfg.set_recreate_if_exists(true);
-        cfg.set_use_mock_storage_for_testing(use_mock);
-
-        arcticdb::storage::LibraryPath library_path(TEST_LIB_NAME, '/');
-
-        storage = std::make_unique<arcticdb::storage::lmdb::LmdbStorage>(
-                library_path, arcticdb::storage::OpenMode::DELETE, cfg
-        );
+        storage = arcticdb::storage::make_test_lmdb_storage(TEST_LIB_NAME, MAP_SIZE, use_mock);
     }
 
     ~LMDBStore() { clear(); }

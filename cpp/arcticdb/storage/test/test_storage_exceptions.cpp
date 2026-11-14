@@ -27,8 +27,6 @@
 using namespace arcticdb;
 using namespace storage;
 
-inline const fs::path TEST_DATABASES_PATH = "./test_databases";
-
 class StorageFactory {
   public:
     virtual ~StorageFactory() = default;
@@ -56,18 +54,7 @@ class LMDBStorageFactory : public StorageFactory {
         LMDBStorageFactory(128ULL * (1ULL << 20) /* 128MB */, use_mock) {}
 
     std::unique_ptr<arcticdb::storage::Storage> create() override {
-        arcticdb::proto::lmdb_storage::Config cfg;
-
-        cfg.set_path((db_path).generic_string());
-        cfg.set_map_size(map_size);
-        cfg.set_recreate_if_exists(true);
-        cfg.set_use_mock_storage_for_testing(use_mock);
-
-        arcticdb::storage::LibraryPath library_path(lib_name, '/');
-
-        return std::make_unique<arcticdb::storage::lmdb::LmdbStorage>(
-                library_path, arcticdb::storage::OpenMode::DELETE, cfg
-        );
+        return make_test_lmdb_storage(lib_name, map_size, use_mock, db_path);
     }
 
     fs::path get_lib_path() const { return db_path / lib_name; }
@@ -184,21 +171,6 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 // LMDB Storage specific tests
-
-class LMDBStorageTestBase : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        if (!fs::exists(TEST_DATABASES_PATH)) {
-            fs::create_directories(TEST_DATABASES_PATH);
-        }
-    }
-
-    void TearDown() override {
-        if (fs::exists(TEST_DATABASES_PATH)) {
-            fs::remove_all(TEST_DATABASES_PATH);
-        }
-    }
-};
 
 TEST_F(LMDBStorageTestBase, WriteMapFullError) {
     // Create a Storage with 64KB map size
