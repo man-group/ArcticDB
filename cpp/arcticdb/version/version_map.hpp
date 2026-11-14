@@ -111,9 +111,12 @@ class VersionMapImpl {
     static constexpr uint64_t DEFAULT_CLOCK_UNSYNC_TOLERANCE = ONE_MILLISECOND * 200;
     static constexpr uint64_t DEFAULT_RELOAD_INTERVAL = ONE_SECOND * 2;
     MapType map_;
-    // The id of the latest publish_entry for each symbol, to tell whether one happened during a reload
+    // Bumped on every publish, so a reload can tell whether the cached entry changed while it read storage. Comparing
+    // pointers is not enough, as do_write changes the cached entry in place and publishes the same pointer.
     std::map<StreamId, uint64_t> publish_ids_;
     uint64_t next_publish_id_ = 0;
+    // The id of a symbol with no publish since the last flush, so a reload that spans a flush is not published
+    uint64_t flush_publish_id_ = 0;
     bool validate_ = false;
     bool log_changes_ = false;
     std::optional<timestamp> reload_interval_;
@@ -218,6 +221,7 @@ class VersionMapImpl {
         std::lock_guard lock(map_mutex_);
         map_.clear();
         publish_ids_.clear();
+        flush_publish_id_ = ++next_publish_id_;
     }
 
     void load_via_iteration(
@@ -251,6 +255,8 @@ class VersionMapImpl {
 
         do_write(store, key, entry, prevent_non_increasing_version_id);
         write_symbol_ref(store, key, previous_key, entry->head_.value());
+        // Again now the ref key is written, so a reload that read the old one is not published
+        publish_entry(key.id(), entry);
         if (validate_)
             entry->validate();
         if (log_changes_)
@@ -280,10 +286,13 @@ class VersionMapImpl {
         if (validate_)
             entry->validate();
 
-        if (entry->head_)
+        if (entry->head_) {
             write_symbol_ref(
                     store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), std::nullopt, entry->head_.value()
             );
+            // Again now the ref key is written, so a reload that read the old one is not published
+            publish_entry(stream_id, entry);
+        }
 
         return output;
     }
@@ -317,6 +326,8 @@ class VersionMapImpl {
         write_symbol_ref(
                 store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), previous_index, entry->head_.value()
         );
+        // Again now the ref key is written, so a reload that read the old one is not published
+        publish_entry(key.id(), entry);
 
         maybe_invalidate_cached_undeleted(*entry);
         if (log_changes_) {
@@ -531,6 +542,7 @@ class VersionMapImpl {
                     e.what()
             );
         }
+        // A snapshot, as a write holding the cached entry may still change it
         auto old_entry = *entry;
         if (!index_keys.empty()) {
             auto new_entry = std::make_shared<VersionMapEntry>(old_entry);
@@ -651,6 +663,8 @@ class VersionMapImpl {
                 ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
         auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
         write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
+        // Again now the ref key is written, so a reload that read the old one is not published
+        publish_entry(stream_id, entry);
         if (log_changes_) {
             if (should_log_individual_tombstones) {
                 for (const auto& key : tombstone_keys) {
@@ -917,27 +931,30 @@ class VersionMapImpl {
         publish_entry_locked(stream_id, std::move(entry));
     }
 
+    // Caller holds map_mutex_
     void publish_entry_locked(const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry) {
         map_.insert_or_assign(stream_id, std::move(entry));
         publish_ids_.insert_or_assign(stream_id, ++next_publish_id_);
     }
 
-    std::optional<uint64_t> latest_publish_id(const StreamId& stream_id) const {
+    uint64_t latest_publish_id(const StreamId& stream_id) const {
         std::lock_guard lock(map_mutex_);
+        return latest_publish_id_locked(stream_id);
+    }
+
+    // Caller holds map_mutex_
+    uint64_t latest_publish_id_locked(const StreamId& stream_id) const {
         if (auto it = publish_ids_.find(stream_id); it != publish_ids_.end())
             return it->second;
-        return std::nullopt;
+        return flush_publish_id_;
     }
 
     // Publishes a reloaded entry unless something else, such as a write, was published since the reload started
     void publish_reloaded_entry(
-            const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry,
-            const std::optional<uint64_t>& publish_id_before_reload
+            const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry, uint64_t publish_id_before_reload
     ) {
         std::lock_guard lock(map_mutex_);
-        const auto it = publish_ids_.find(stream_id);
-        const auto current = it == publish_ids_.end() ? std::nullopt : std::make_optional(it->second);
-        if (current == publish_id_before_reload)
+        if (latest_publish_id_locked(stream_id) == publish_id_before_reload)
             publish_entry_locked(stream_id, std::move(entry));
     }
 
@@ -999,6 +1016,8 @@ class VersionMapImpl {
         if (validate_)
             entry->validate();
 
+        // If this is not published, a newer entry is cached. The caller still gets the entry it asked for: a writer
+        // would only be handed a stale one by a concurrent write to the same symbol, which is not supported.
         publish_reloaded_entry(stream_id, entry, publish_id_before_reload);
         return entry;
     }
