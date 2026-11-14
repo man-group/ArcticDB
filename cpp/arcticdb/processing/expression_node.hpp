@@ -148,15 +148,6 @@ struct ExpressionNode {
     );
 };
 
-/*
- * Evaluates the expression rooted at root bottom-up, without recursion, so the depth of the expression is not limited
- * by the stack. Each distinct node is evaluated once, so sub-expressions shared between several parents cost the same
- * as in a tree, and a result is freed once its last parent has used it. Operands are evaluated left, condition, right.
- *  - on_leaf(const ExpressionNode::Leaf&) -> Result
- *  - before_operation(const ExpressionNode&) -> std::optional<Result>: a result for the node that skips its operands
- *  - on_operation(const ExpressionNode&, const ExpressionNode::Operation&, operand) -> Result, where operand(child)
- *    returns the result of an operand as a const reference
- */
 namespace expression_detail {
 
 using PendingUses = ankerl::unordered_dense::map<const ExpressionNode*, size_t>;
@@ -191,6 +182,17 @@ void push_unevaluated_operands(const ExpressionNode::Operation& op, const Result
 
 } // namespace expression_detail
 
+/*
+ * Evaluates the expression rooted at root bottom-up, without recursion, so the depth of the expression is not limited
+ * by the stack. Each distinct node is evaluated once, so sub-expressions shared between several parents cost the same
+ * as in a tree. A result is freed once every parent that evaluates its operands has used it. Operands are evaluated
+ * left, condition, right.
+ *  - on_leaf(const ExpressionNode::Leaf&) -> Result
+ *  - before_operation(const ExpressionNode&, const ExpressionNode::Operation&) -> std::optional<Result>: called when
+ *    a node is reached, before its operands. A result skips them, and it may also raise, before they are evaluated.
+ *  - on_operation(const ExpressionNode&, const ExpressionNode::Operation&, operand) -> Result, where operand(child)
+ *    returns the result of an operand as a const reference
+ */
 template<typename Result, typename OnLeaf, typename BeforeOperation, typename OnOperation>
 Result evaluate_bottom_up(
         const ExpressionNode& root, const OnLeaf& on_leaf, const BeforeOperation& before_operation,
@@ -216,7 +218,7 @@ Result evaluate_bottom_up(
             results.emplace(node, on_operation(*node, *op, operand));
             stack.pop_back();
             expression_detail::release_operands(*op, pending_uses, results);
-        } else if (std::optional<Result> known = before_operation(*node)) {
+        } else if (std::optional<Result> known = before_operation(*node, *op)) {
             results.emplace(node, std::move(*known));
             stack.pop_back();
         } else {

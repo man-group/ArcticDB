@@ -1366,47 +1366,49 @@ def visit_expression(expr):
             return _ExpressionNode(create_value(node))
 
     def _operands(node):
+        # In the order they are converted, and so the order in which an invalid one raises: left, condition, right
         if node.condition is not None:
             check(node.right is not None, "Ternary operator requires three inputs")
-            return [node.condition, node.left, node.right]
+            return [node.left, node.condition, node.right]
         elif node.right is not None:
             return [node.left, node.right]
         else:
             return [node.left]
 
+    def _operation(operator, operands):
+        if len(operands) == 3:
+            left, condition, right = operands
+            return _ExpressionNode(condition, left, right, operator)
+        return _ExpressionNode(*operands, operator)
+
     def _visit(root):
-        # Each entry holds a node and its operands converted so far, by position. Operands are converted left, then
-        # condition, then right, so an invalid one raises the same error as when this was recursive.
-        stack = [(root, {})]
+        # Each entry holds a node and its operands converted so far
+        stack = [(root, [])]
         while stack:
             node, done = stack[-1]
             if id(node) in converted:
                 stack.pop()
                 continue
+            # A bare column at the root is converted as an operation, as it always was
             if node.operator == COLUMN and node is not root:
                 input_columns.add(node.left)
                 converted[id(node)] = _ExpressionNode(_ColumnName(node.left))
                 stack.pop()
                 continue
             operands = _operands(node)
-            unconverted = None
-            # _operands lists a ternary's condition first
-            for position in (1, 0, 2) if len(operands) == 3 else range(len(operands)):
-                if position in done:
-                    continue
-                child = operands[position]
+            while len(done) < len(operands):
+                child = operands[len(done)]
                 if not isinstance(child, ExpressionNode):
-                    done[position] = _leaf(child)
+                    done.append(_leaf(child))
                 elif id(child) in converted:
-                    done[position] = converted[id(child)]
+                    done.append(converted[id(child)])
                 else:
-                    unconverted = child
                     break
-            if unconverted is None:
+            if len(done) == len(operands):
                 stack.pop()
-                converted[id(node)] = _ExpressionNode(*(done[i] for i in range(len(operands))), node.operator)
+                converted[id(node)] = _operation(node.operator, done)
             else:
-                stack.append((unconverted, {}))
+                stack.append((operands[len(done)], []))
         return converted[id(root)]
 
     expression_context = _ExpressionContext()

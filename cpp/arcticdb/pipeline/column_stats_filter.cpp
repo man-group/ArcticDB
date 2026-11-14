@@ -49,8 +49,7 @@ StatsVariantData evaluate_ast_node_against_stats(
                         }
                 );
             },
-            [&](const ExpressionNode& operation_node) -> std::optional<StatsVariantData> {
-                const auto& op = std::get<ExpressionNode::Operation>(operation_node.kind_);
+            [&](const ExpressionNode&, const ExpressionNode::Operation& op) -> std::optional<StatsVariantData> {
                 if (is_binary_operation(op.operation_type_) || is_unary_operation(op.operation_type_)) {
                     return std::nullopt;
                 }

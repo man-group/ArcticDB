@@ -205,6 +205,10 @@ TEST(ColumnWithStringsFixedWidth, AsciiPaddingComesOffAByteAtATime) {
 namespace {
 using namespace arcticdb;
 
+// Labels and names are cut to 1024 bytes plus a short suffix, and a processing unit memoizes at most 128 results
+constexpr size_t max_bounded_label_size = 4096;
+constexpr size_t max_memoized_results = 128;
+
 ProcessingUnit int_column_processing_unit(const std::shared_ptr<ExpressionNode>& root) {
     SegmentInMemory seg = create_dense_segment(
             stream_descriptor(StreamId{"deep"}, stream::RowCountIndex{}, {scalar_field(DataType::INT64, "thing1")}),
@@ -231,34 +235,19 @@ void check_filters_thing1_above_9(const std::shared_ptr<ExpressionNode>& root, P
 
 TEST(ExpressionNode, DeepNotChainDoesNotOverflowStack) {
     using namespace arcticdb;
-    // Deep enough to overflow an 8 MB stack when recursing, but not so deep that quadratic labels use much memory
-    constexpr size_t depth = 10'000;
-    auto root = node(col("thing1"), val(int64_t{9}, DataType::INT64), OperationType::GT);
-    for (size_t i = 0; i < depth; ++i) {
-        root = node(std::move(root), OperationType::NOT);
-    }
-
-    auto proc = int_column_processing_unit(root);
-    check_filters_thing1_above_9(root, proc);
-    // Destroying the chain must not recurse once per level either
-    proc.computed_data_.clear();
-    proc.expression_context_.reset();
-    root.reset();
-}
-
-TEST(ExpressionNode, VeryDeepNotChainUsesBoundedMemory) {
-    using namespace arcticdb;
+    // Far deeper than recursive evaluation or destruction fits in an 8 MB stack
     constexpr size_t depth = 200'000;
     auto root = node(col("thing1"), val(int64_t{9}, DataType::INT64), OperationType::GT);
     for (size_t i = 0; i < depth; ++i) {
         root = node(std::move(root), OperationType::NOT);
         // Fail at once rather than build quadratically many bytes of labels
-        ASSERT_LE(root->label_.size(), 4096);
+        ASSERT_LE(root->label_.size(), max_bounded_label_size);
     }
 
     auto proc = int_column_processing_unit(root);
     check_filters_thing1_above_9(root, proc);
-    ASSERT_LE(proc.computed_data_.size(), 128);
+    ASSERT_LE(proc.computed_data_.size(), max_memoized_results);
+    // Destroying the chain must not recurse once per level either
     proc.computed_data_.clear();
     proc.expression_context_.reset();
     root.reset();
@@ -272,7 +261,7 @@ TEST(ExpressionNode, SharedSubexpressionsEvaluatedOnce) {
     for (size_t i = 0; i < depth; ++i) {
         root = node(root, root, i % 2 ? OperationType::AND : OperationType::OR);
         // Fail at once rather than build exponentially many bytes of labels
-        ASSERT_LE(root->label_.size(), 4096);
+        ASSERT_LE(root->label_.size(), max_bounded_label_size);
     }
 
     auto proc = int_column_processing_unit(root);
@@ -293,10 +282,10 @@ TEST(ExpressionNode, StructurallyEqualSharedDagsAreMemoizedAcrossNodes) {
     };
     auto first = build();
     auto second = build();
-    ASSERT_LE(first->label_.size(), 4096);
+    ASSERT_LE(first->label_.size(), max_bounded_label_size);
     auto proc = int_column_processing_unit(first);
     auto first_result = std::get<ColumnWithStrings>(first->compute(proc));
-    ASSERT_LE(first_result.column_name_.size(), 4096);
+    ASSERT_LE(first_result.column_name_.size(), max_bounded_label_size);
     // second is a different DAG with the same structure, so it hits the first's memoized result
     auto second_result = std::get<ColumnWithStrings>(second->compute(proc));
     ASSERT_EQ(first_result.column_, second_result.column_);
@@ -312,7 +301,7 @@ TEST(ExpressionNode, TruncatedLabelsStillDistinguishExpressions) {
         return root;
     };
     auto a = build(1);
-    ASSERT_LE(a->label_.size(), 4096);
+    ASSERT_LE(a->label_.size(), max_bounded_label_size);
     ASSERT_EQ(a->label_, build(1)->label_);
     ASSERT_NE(a->label_, build(2)->label_);
 }
@@ -324,6 +313,8 @@ struct BottomUpProbe {
     size_t evaluations{0};
     std::shared_ptr<int> token{std::make_shared<int>(0)};
     size_t peak_alive{0};
+    // before_operation gives this node a result, so its operands are not evaluated
+    const arcticdb::ExpressionNode* skipped{nullptr};
 
     std::shared_ptr<int> result() {
         if (++evaluations > max_evaluations) {
@@ -338,7 +329,10 @@ struct BottomUpProbe {
         return evaluate_bottom_up<std::shared_ptr<int>>(
                 root,
                 [this](const ExpressionNode::Leaf&) { return result(); },
-                [](const ExpressionNode&) -> std::optional<std::shared_ptr<int>> { return std::nullopt; },
+                [this](const ExpressionNode& node,
+                       const ExpressionNode::Operation&) -> std::optional<std::shared_ptr<int>> {
+                    return &node == skipped ? std::optional(result()) : std::nullopt;
+                },
                 [this](const ExpressionNode&, const ExpressionNode::Operation&, const auto&) { return result(); }
         );
     }
@@ -368,5 +362,24 @@ TEST(ExpressionNode, BottomUpEvaluationVisitsEachNodeOfASharedDagOnce) {
     BottomUpProbe probe;
     probe.run(*root);
     ASSERT_EQ(probe.evaluations, depth + 1);
+    ASSERT_LE(probe.peak_alive, 3);
+}
+
+TEST(ExpressionNode, BottomUpEvaluationSkipsTheOperandsOfANodeGivenAResult) {
+    using namespace arcticdb;
+    auto root = col("thing1");
+    std::shared_ptr<ExpressionNode> skipped;
+    constexpr size_t depth = 1'000;
+    for (size_t i = 0; i < depth; ++i) {
+        root = node(std::move(root), OperationType::ABS);
+        if (i == depth / 2) {
+            skipped = root;
+        }
+    }
+    BottomUpProbe probe;
+    probe.skipped = skipped.get();
+    probe.run(*root);
+    // The nodes above the skipped one, plus its own result
+    ASSERT_EQ(probe.evaluations, depth - depth / 2);
     ASSERT_LE(probe.peak_alive, 3);
 }

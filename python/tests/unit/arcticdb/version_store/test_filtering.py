@@ -65,7 +65,7 @@ _VALUE_SET = np.array([1, 2])
 _VALUE_SET_INPUT = (UserInputException, "Unexpected value set input")
 _NON_NUMERIC = (UserInputException, "Non-numeric operand")
 _INFINITE_VALUE = (ArcticNativeException, "Infinite values")
-_UNCONVERTIBLE_VALUE = (TypeError, "Value")
+_UNCONVERTIBLE_VALUE = (TypeError, r"Value\(\): incompatible function arguments")
 
 
 # With several errors in one query, the one raised is the first in operand order: left, then condition, then right

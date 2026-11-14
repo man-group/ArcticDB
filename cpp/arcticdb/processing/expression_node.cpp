@@ -16,40 +16,56 @@
 #include <arcticdb/processing/operation_dispatch_unary.hpp>
 #include <arcticdb/stream/index.hpp>
 
+#include <folly/hash/Hash.h>
+
 namespace arcticdb {
 
 namespace {
 
-// A name embeds its operands' names, so it would grow like a label does. It only appears in error messages.
-std::string bounded_expression_name(std::string_view name) {
-    constexpr size_t max_length = 1024;
-    return name.size() > max_length ? fmt::format("{}...", name.substr(0, max_length)) : std::string(name);
+// Labels and result column names embed their operands', so without a bound their size would grow quadratically with
+// the depth of an expression, and exponentially with the depth of a shared sub-expression
+constexpr size_t max_name_length = 1024;
+
+// Cuts a name that is too long at a UTF-8 character boundary, so that Python can still decode it, and appends suffix
+std::string bounded_name(std::string name, std::string_view suffix = {}) {
+    if (name.size() <= max_name_length) {
+        return name;
+    }
+    size_t end = max_name_length;
+    // Back up over UTF-8 continuation bytes (10xxxxxx) so as not to split a multi-byte character
+    while (end > 0 && (static_cast<unsigned char>(name[end]) & 0xC0) == 0x80) {
+        --end;
+    }
+    name.resize(end);
+    name.append("...");
+    name.append(suffix);
+    return name;
 }
 
 } // namespace
 
 ColumnWithStrings::ColumnWithStrings(std::unique_ptr<Column>&& col, std::string_view col_name) :
     column_(std::move(col)),
-    column_name_(bounded_expression_name(col_name)) {}
+    column_name_(bounded_name(std::string(col_name))) {}
 
 ColumnWithStrings::ColumnWithStrings(
         std::unique_ptr<Column> column, std::shared_ptr<StringPool> string_pool, std::string_view col_name
 ) :
     column_(std::move(column)),
     string_pool_(std::move(string_pool)),
-    column_name_(bounded_expression_name(col_name)) {}
+    column_name_(bounded_name(std::string(col_name))) {}
 
 ColumnWithStrings::ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
     column_(std::make_shared<Column>(std::move(col))),
     string_pool_(std::move(string_pool)),
-    column_name_(bounded_expression_name(col_name)) {}
+    column_name_(bounded_name(std::string(col_name))) {}
 
 ColumnWithStrings::ColumnWithStrings(
         std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name
 ) :
     column_(std::move(column)),
     string_pool_(string_pool),
-    column_name_(bounded_expression_name(col_name)) {}
+    column_name_(bounded_name(std::string(col_name))) {}
 
 [[nodiscard]] std::optional<std::string_view> ColumnWithStrings::string_at_offset(
         entity::position_t offset, bool strip_fixed_width_trailing_nulls
@@ -107,24 +123,17 @@ std::string label_for(const ExpressionNode::Leaf& leaf) {
     );
 }
 
-size_t combine_hash(size_t seed, size_t value) {
-    return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
-}
-
 size_t hash_for(const ExpressionNode::Operation& op) {
-    size_t hash = std::hash<int>{}(static_cast<int>(op.operation_type_));
-    for (const auto* child : {op.condition_.get(), op.left_.get(), op.right_.get()}) {
-        hash = combine_hash(hash, child ? child->hash_ : 0);
-    }
-    return hash;
+    const auto hash_of = [](const std::shared_ptr<ExpressionNode>& child) -> size_t {
+        return child ? child->hash_ : 0;
+    };
+    return folly::hash::hash_combine(
+            static_cast<int>(op.operation_type_), hash_of(op.condition_), hash_of(op.left_), hash_of(op.right_)
+    );
 }
-
-// Labels embed their operands' labels, so without a bound their size would grow quadratically with the depth of an
-// expression, and exponentially with the depth of a shared sub-expression
-constexpr size_t max_label_length = 1024;
 
 // Bounds what a processing unit retains for an expression with very many nodes. Beyond it results are not memoized,
-// which only costs recomputation for a structurally equal expression in a later clause.
+// so structurally equal sub-expressions met later, in this clause or a later one, are recomputed.
 constexpr size_t max_memoized_results = 128;
 
 // A truncated label ends in the hash so that labels, and so QueryBuilder comparison, still tell expressions apart
@@ -137,11 +146,7 @@ std::string label_for(const ExpressionNode::Operation& op, size_t hash) {
     } else {
         label = fmt::format("{}({})", op.operation_type_, op.left_->label_);
     }
-    if (label.size() > max_label_length) {
-        label.resize(max_label_length);
-        label.append(fmt::format("...#{:x}", hash));
-    }
-    return label;
+    return bounded_name(std::move(label), fmt::format("#{:x}", hash));
 }
 
 bool value_sets_equal(ValueSet& a, ValueSet& b) {
@@ -184,7 +189,7 @@ bool leaves_equal(const ExpressionNode::Leaf& leaf_a, const ExpressionNode::Leaf
 
 struct NodePairHash {
     size_t operator()(const std::pair<const ExpressionNode*, const ExpressionNode*>& pair) const {
-        return combine_hash(std::hash<const void*>{}(pair.first), std::hash<const void*>{}(pair.second));
+        return folly::hash::hash_combine(pair.first, pair.second);
     }
 };
 
@@ -320,7 +325,7 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
                         [](const std::shared_ptr<util::RegexGeneric>& regex) -> VariantData { return regex; }
                 );
             },
-            [&seg](const ExpressionNode& node) -> std::optional<VariantData> {
+            [&seg](const ExpressionNode& node, const Operation&) -> std::optional<VariantData> {
                 if (auto it = seg.computed_data_.find(node.label_); it != seg.computed_data_.end()) {
                     const auto& [other, cached] = it->second;
                     if (other == &node || nodes_equal(node, *other)) {
@@ -366,9 +371,8 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                        res.type_ = leaf_return_type(leaf, column_types, res.value_set_state_);
                        return res;
                    },
-                   [](const ExpressionNode& node) -> std::optional<ReturnType> {
+                   [](const ExpressionNode&, const Operation& operation) -> std::optional<ReturnType> {
                        // Before the other operands are checked, so that their errors do not take precedence
-                       const auto& operation = std::get<Operation>(node.kind_);
                        const auto* left_leaf = std::get_if<Leaf>(&operation.left_->kind_);
                        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                !left_leaf || !std::holds_alternative<std::shared_ptr<ValueSet>>(*left_leaf),
@@ -378,15 +382,12 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                        return std::nullopt;
                    },
                    [](const ExpressionNode&, const Operation& operation, const auto& operand) {
-                       return ReturnType{
-                               operation_return_type(
-                                       operation,
-                                       operand(operation.left_),
-                                       operation.right_ ? &operand(operation.right_) : nullptr,
-                                       operation.condition_ ? &operand(operation.condition_) : nullptr
-                               ),
-                               ValueSetState::NOT_A_SET
-                       };
+                       return ReturnType{operation_return_type(
+                               operation,
+                               operand(operation.left_),
+                               operation.right_ ? &operand(operation.right_) : nullptr,
+                               operation.condition_ ? &operand(operation.condition_) : nullptr
+                       )};
                    }
     ).type_;
 }

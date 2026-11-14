@@ -11,8 +11,13 @@ import sys
 import textwrap
 import time
 
+import numpy as np
+import pandas as pd
 import psutil
 import pytest
+
+from arcticdb import QueryBuilder, where
+from arcticdb.util.test import assert_frame_equal
 
 # Run in a subprocess: a stack overflow kills the process, and exponential evaluation never finishes or exhausts memory.
 _MAX_RSS_BYTES = 4 * 1024**3
@@ -56,14 +61,13 @@ _SCRIPT = textwrap.dedent("""
         e = base
         for k in range(depth):
             e = (e & e) if k % 2 else (e | e)
-        pd.testing.assert_frame_equal(read(q[e]), read(QueryBuilder()[QueryBuilder()["i"] > 3]))
+        assert_filtered(q[e], df[df["i"] > 3])
     elif kind == "shared_projection":
         e = q["i"]
         for _ in range(depth):
             e = e + e
         result = read(q.apply("new", e))["new"]
-        equivalent = read(QueryBuilder().apply("new", QueryBuilder()["i"] * (2**depth)))["new"]
-        pd.testing.assert_series_equal(result, equivalent)
+        pd.testing.assert_series_equal(result, df["i"] * 2**depth, check_names=False)
     elif kind == "label_limit":
         def build(innermost):
             builder = QueryBuilder()
@@ -124,3 +128,41 @@ def test_shared_subexpressions_are_evaluated_once(tmp_path, kind):
 
 def test_query_builders_differing_beyond_the_label_limit_are_not_equal(tmp_path):
     _run(tmp_path, "label_limit", 500, timeout=60)
+
+
+def _deep_filter(q, kind):
+    e = q["i"] > 3
+    if kind == "not_chain":
+        for _ in range(300):
+            e = ~e
+    elif kind == "shared_filter":
+        for k in range(12):
+            e = (e & e) if k % 2 else (e | e)
+    elif kind == "shared_ternary":
+        for _ in range(12):
+            e = where(q["b"], e, e)
+    return q[e]
+
+
+# In process and shallower than the cases above, so that it can run over many segments and with column stats
+@pytest.mark.parametrize("kind", ["not_chain", "shared_filter", "shared_ternary"])
+def test_deep_and_shared_filters_over_many_segments(
+    lmdb_version_store_tiny_segment, column_stats_filtering_enabled_and_disabled, kind
+):
+    lib = lmdb_version_store_tiny_segment
+    index = pd.date_range("2026-01-01", periods=20)
+    df = pd.DataFrame({"i": np.arange(20, dtype=np.int64), "b": np.arange(20) % 2 == 0}, index=index)
+    lib.write("sym", df)
+    lib.create_column_stats_experimental("sym")
+    received = lib.read("sym", query_builder=_deep_filter(QueryBuilder(), kind)).data
+    assert_frame_equal(received, df[df["i"] > 3])
+
+
+def test_shared_filter_on_a_column_missing_from_some_segments(lmdb_version_store_tiny_segment_dynamic):
+    lib = lmdb_version_store_tiny_segment_dynamic
+    index = pd.date_range("2026-01-01", periods=12)
+    with_column = pd.DataFrame({"i": np.arange(6, dtype=np.int64), "b": [True] * 6}, index=index[:6])
+    lib.write("sym", with_column)
+    lib.append("sym", pd.DataFrame({"b": [False] * 6}, index=index[6:]))
+    received = lib.read("sym", query_builder=_deep_filter(QueryBuilder(), "shared_filter")).data
+    assert_frame_equal(received, with_column[with_column["i"] > 3])
