@@ -644,6 +644,7 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
         const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
 ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
+    py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             version.has_value(),
@@ -658,6 +659,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
         const BatchReadOptions& batch_read_options
 ) {
+    py::gil_scoped_release release_gil;
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
     for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
@@ -2310,6 +2312,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
                 const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
                 const BatchReadOptions& batch_read_options
         ) {
+    py::gil_scoped_release release_gil;
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
     for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
@@ -2329,6 +2332,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
 std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_metadata_internal(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
+    py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
     std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
     return get_metadata(std::move(key)).get();
