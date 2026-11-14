@@ -683,7 +683,7 @@ struct VersionChainOperation {
 };
 
 // The entry the version map has cached, without going to storage while it is fresh
-std::shared_ptr<VersionMapEntry> cached_entry(
+static std::shared_ptr<VersionMapEntry> cached_entry(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, const StreamId& id
 ) {
     return version_map->check_reload(
@@ -1653,7 +1653,7 @@ class StoragePause {
 };
 
 // A version map that has cached only the latest of versions 0, 1 and 2 of `id`
-std::shared_ptr<VersionMap> map_caching_latest_of_three_versions(
+static std::shared_ptr<VersionMap> map_caching_latest_of_three_versions(
         const std::shared_ptr<InMemoryStore>& store, const StreamId& id
 ) {
     write_versions(store, std::make_shared<VersionMap>(), id, 3);
@@ -1662,7 +1662,9 @@ std::shared_ptr<VersionMap> map_caching_latest_of_three_versions(
     return version_map;
 }
 
-std::optional<VersionId> latest_cached_version(const std::shared_ptr<VersionMap>& version_map, const StreamId& id) {
+static std::optional<VersionId> latest_cached_version(
+        const std::shared_ptr<VersionMap>& version_map, const StreamId& id
+) {
     // Store is nullptr as we shouldn't go to storage
     const auto latest = cached_entry(version_map, nullptr, id)->get_first_index(true).first;
     return latest ? std::make_optional(latest->version_id()) : std::nullopt;
@@ -1762,6 +1764,7 @@ TEST(VersionMap, ReloadThatSpansAFlushIsNotCached) {
     auto version_map = std::make_shared<VersionMap>();
     const LoadStrategy load_all{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
 
+    // Pause a reload in its first storage read and flush meanwhile, so the reload must not cache what it read
     StoragePause pause(FailureType::READ);
     std::thread reloader([&] { version_map->check_reload(store, id, load_all, "reloader"); });
     const bool paused = pause.wait_until_paused();
