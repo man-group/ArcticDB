@@ -32,6 +32,16 @@ static auto write_version_frame_with_three_segments(
     return key;
 }
 
+namespace {
+size_t total_keys(const std::vector<std::optional<std::vector<AtomKey>>>& per_key) {
+    size_t total = 0;
+    for (const auto& keys : per_key) {
+        total += keys ? keys->size() : 0;
+    }
+    return total;
+}
+} // namespace
+
 TEST(KeyUtils, RecurseIndexKeyNothingMissing) {
     // Given
     auto [version_store, mock_store] = python_version_store_in_memory();
@@ -53,18 +63,19 @@ TEST(KeyUtils, RecurseIndexKeyNothingMissing) {
     });
 
     // When
-    auto res = recurse_index_keys(mock_store, index_keys, opts);
+    auto res = recurse_index_keys_per_key(mock_store, index_keys, opts);
 
     // Then
-    ASSERT_EQ(res.size(), 6);
+    ASSERT_EQ(res.size(), 2u);
+    ASSERT_EQ(total_keys(res), 6u);
 
     // When
     auto first_key = index_keys.at(0);
     auto keys = std::vector<AtomKeyImpl>{first_key};
-    res = recurse_index_keys(mock_store, keys, opts);
+    res = recurse_index_keys_per_key(mock_store, keys, opts);
 
     // Then
-    ASSERT_EQ(res.size(), 3);
+    ASSERT_EQ(total_keys(res), 3u);
 }
 
 TEST(KeyUtils, RecurseIndexKeyDoNotIgnoreMissing) {
@@ -91,7 +102,7 @@ TEST(KeyUtils, RecurseIndexKeyDoNotIgnoreMissing) {
     });
 
     // When & Then
-    ASSERT_THROW(recurse_index_keys(mock_store, index_keys, opts), storage::KeyNotFoundException);
+    ASSERT_THROW(recurse_index_keys_per_key(mock_store, index_keys, opts), storage::KeyNotFoundException);
 }
 
 TEST(KeyUtils, RecurseIndexKeyIgnoreMissing) {
@@ -122,19 +133,18 @@ TEST(KeyUtils, RecurseIndexKeyIgnoreMissing) {
     // When
     storage::ReadKeyOpts opts;
     opts.ignores_missing_key_ = true;
-    auto res = recurse_index_keys(mock_store, index_keys, opts);
+    auto res = recurse_index_keys_per_key(mock_store, index_keys, opts);
 
     // Then
-    ASSERT_EQ(res.size(), 6);
-    int count_first = 0;
-    int count_third = 0;
-    for (const AtomKey& atom_key : res) {
-        if (atom_key.id() == first_id) {
-            count_first++;
-        } else if (atom_key.id() == third_id) {
-            count_third++;
+    ASSERT_EQ(res.size(), 3u);
+    ASSERT_EQ(total_keys(res), 6u);
+    for (size_t i = 0; i < index_keys.size(); ++i) {
+        ASSERT_EQ(res[i].has_value(), index_keys[i].id() != second_id);
+        if (res[i]) {
+            ASSERT_EQ(res[i]->size(), 3u);
+            for (const auto& key : *res[i]) {
+                ASSERT_EQ(key.id(), index_keys[i].id());
+            }
         }
     }
-    ASSERT_EQ(3, count_first);
-    ASSERT_EQ(3, count_third);
 }
