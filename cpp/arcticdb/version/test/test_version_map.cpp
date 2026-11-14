@@ -9,9 +9,13 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
+#include <future>
+#include <thread>
+
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/storage/failure_simulation.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
@@ -685,9 +689,12 @@ std::shared_ptr<VersionMapEntry> write_versions(
         const std::shared_ptr<InMemoryStore>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& id,
         const std::vector<VersionChainOperation>& operations
 ) {
-    auto entry = version_map->check_reload(
-            store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
-    );
+    const auto cached_entry = [&]() {
+        return version_map->check_reload(
+                store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+        );
+    };
+    auto entry = cached_entry();
 
     for (const auto& [type, version_id_opt] : operations) {
         switch (type) {
@@ -708,6 +715,8 @@ std::shared_ptr<VersionMapEntry> write_versions(
                 key = atom_key_builder().version_id(*version_id_opt).build(id, KeyType::VERSION);
             }
             version_map->tombstone_from_key_or_all(store, id, key);
+            // It reloads the entry, which replaces the one we hold
+            entry = cached_entry();
             break;
         }
         }
@@ -853,7 +862,10 @@ TEST(VersionMap, FollowingVersionChainWithCaching) {
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}));
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}));
 
-    // We add a new undeleted key
+    // We add a new undeleted key, to the entry the FROM_TIME load above replaced the cached one with
+    entry = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
     auto key4 = atom_key_with_version(id, 3, 5);
     version_map->do_write(store, key4, entry);
     write_symbol_ref(store, key4, std::nullopt, entry->head_.value());
@@ -1291,9 +1303,13 @@ TEST(VersionMap, CompactionUpdateCache) {
     auto version_map = std::make_shared<VersionMap>();
 
     // We load all to keep everything in the cache
-    auto entry = version_map->check_reload(
-            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
-    );
+    version_map->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
+    // Store is nullptr as we shouldn't go to storage
+    const auto cached_entry = [&]() {
+        return version_map->check_reload(
+                nullptr, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+        );
+    };
 
     // Write 10 versions
     for (auto i = 0; i < 10; ++i) {
@@ -1328,9 +1344,9 @@ TEST(VersionMap, CompactionUpdateCache) {
         ASSERT_EQ(version_keys_in_store, expected_version_keys);
     };
 
-    assert_keys_in_entry_and_store(entry, 10, 10, 0);
+    assert_keys_in_entry_and_store(cached_entry(), 10, 10, 0);
     version_map->compact(store, id);
-    assert_keys_in_entry_and_store(entry, 2, 10, 0);
+    assert_keys_in_entry_and_store(cached_entry(), 2, 10, 0);
 
     // Write 10 more versions but delete some
     for (auto i = 10; i < 20; ++i) {
@@ -1338,19 +1354,19 @@ TEST(VersionMap, CompactionUpdateCache) {
         version_map->write_version(store, key, std::nullopt);
         if (i % 3 == 0) {
             auto key = atom_key_with_version(id, i, i);
-            version_map->write_tombstones(store, {key}, id, entry);
+            version_map->write_tombstones(store, {key}, id, cached_entry());
         }
     }
-    assert_keys_in_entry_and_store(entry, 15, 20, 3);
+    assert_keys_in_entry_and_store(cached_entry(), 15, 20, 3);
     version_map->compact(store, id);
-    assert_keys_in_entry_and_store(entry, 2, 20, 3);
+    assert_keys_in_entry_and_store(cached_entry(), 2, 20, 3);
     // TODO: If we ever use compact_and_remove_deleted_indexes fix the below assertions (method is currently unused with
     // TODOs to fix): version_map->compact_and_remove_deleted_indexes(store, id); assert_keys_in_entry_and_store(entry,
     // 2, 17, 3);
 
     // Flush and reload to see that what we have in storage also matches what we have in the cache.
     version_map->flush();
-    entry = version_map->check_reload(
+    auto entry = version_map->check_reload(
             store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
     );
     assert_keys_in_entry_and_store(entry, 2, 20, 3);
@@ -1602,6 +1618,54 @@ TEST_F(VersionMapStore, StressTestWrite) {
     }
     timer.stop_timer(timer_name);
     GTEST_COUT << timer.display_all() << std::endl;
+}
+
+TEST(VersionMap, ReloadDoesNotChangeEntryHeldByAnotherThread) {
+    // Every lookup goes to storage, so two lookups of a symbol can reload it at the same time
+    ScopedConfig sc("VersionMap.ReloadInterval", 0);
+    StreamId id{"test"};
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    write_versions(store, version_map, id, 3);
+
+    const LoadStrategy load_all{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
+    const auto held = version_map->check_reload(store, id, load_all, __FUNCTION__);
+    const auto keys_of = [](const VersionMapEntry& entry) {
+        std::vector<AtomKey> keys;
+        for (const auto& key : entry.keys_)
+            keys.push_back(key.to_atom_key(entry.stream_id_));
+        return keys;
+    };
+    const auto expected_keys = keys_of(*held);
+    const auto expected_head = held->head_;
+    ASSERT_EQ(std::ranges::count_if(expected_keys, [](const auto& k) { return k.type() == KeyType::TABLE_INDEX; }), 3);
+
+    // Pause the reload in its first storage read, and inspect the held entry while it is paused
+    std::promise<void> reload_paused;
+    std::promise<void> resume_reload;
+    std::shared_future<void> resume = resume_reload.get_future().share();
+    std::atomic<bool> paused{false};
+    StorageFailureSimulator::reset();
+    StorageFailureSimulator::instance()
+            ->configure({{FailureType::READ, {FailureAction("pause_first_read", [&](FailureType) {
+                              if (!paused.exchange(true)) {
+                                  reload_paused.set_value();
+                                  resume.wait();
+                              }
+                          })}}});
+    std::shared_ptr<VersionMapEntry> reloaded;
+    std::thread reloader([&] { reloaded = version_map->check_reload(store, id, load_all, __FUNCTION__); });
+    reload_paused.get_future().wait();
+    const auto keys_mid_reload = keys_of(*held);
+    const auto head_mid_reload = held->head_;
+    resume_reload.set_value();
+    reloader.join();
+    StorageFailureSimulator::reset();
+
+    EXPECT_EQ(keys_mid_reload, expected_keys);
+    EXPECT_EQ(head_mid_reload, expected_head);
+    EXPECT_EQ(keys_of(*reloaded), expected_keys);
+    EXPECT_EQ(reloaded->head_, expected_head);
 }
 
 } // namespace arcticdb
