@@ -1630,14 +1630,21 @@ class StoragePause {
                                                              }
                                                          })}}});
     }
-    ~StoragePause() { StorageFailureSimulator::reset(); }
+    ~StoragePause() {
+        resume();
+        StorageFailureSimulator::reset();
+    }
     ARCTICDB_NO_MOVE_OR_COPY(StoragePause)
 
     bool wait_until_paused() { return paused_future_.wait_for(std::chrono::seconds(30)) == std::future_status::ready; }
-    void resume() { resume_promise_.set_value(); }
+    void resume() {
+        if (!resumed_.exchange(true))
+            resume_promise_.set_value();
+    }
 
   private:
     std::atomic<bool> paused_{false};
+    std::atomic<bool> resumed_{false};
     std::promise<void> paused_promise_;
     std::future<void> paused_future_ = paused_promise_.get_future();
     std::promise<void> resume_promise_;
@@ -1670,8 +1677,12 @@ TEST(VersionMap, ReloadDoesNotChangeEntryHeldByAnotherThread) {
     std::shared_ptr<VersionMapEntry> reloaded;
     std::thread reloader([&] { reloaded = version_map->check_reload(store, id, load_all, "reloader"); });
     const bool paused = pause.wait_until_paused();
-    const auto keys_mid_reload = keys_of(*held);
-    const auto head_mid_reload = held->head_;
+    std::vector<AtomKey> keys_mid_reload;
+    std::optional<AtomKey> head_mid_reload;
+    if (paused) {
+        keys_mid_reload = keys_of(*held);
+        head_mid_reload = held->head_;
+    }
     pause.resume();
     reloader.join();
     ASSERT_TRUE(paused);

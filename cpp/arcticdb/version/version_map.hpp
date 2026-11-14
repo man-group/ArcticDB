@@ -631,7 +631,7 @@ class VersionMapImpl {
 
             write_to_entry(entry, key, atom_journal_key);
         }
-        // A reload may have replaced the entry we were given since we fetched it, and would not have this write
+        // Callers pass the cached entry, which a concurrent reload may have replaced in the map without this write
         publish_entry(stream_id, entry);
 
         auto previous_index = entry->get_second_undeleted_index();
@@ -906,14 +906,13 @@ class VersionMapImpl {
         return map_.try_emplace(stream_id, std::make_shared<VersionMapEntry>(stream_id)).first->second;
     }
 
-    // Reloaded and rebuilt entries replace the cached one rather than being swapped into it, as other threads may hold
-    // it
+    // Replaces the cached entry rather than swapping into it, as other threads may hold the old one
     void publish_entry(const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry) {
         std::lock_guard lock(map_mutex_);
         map_.insert_or_assign(stream_id, std::move(entry));
     }
 
-    // An empty entry with no reload time, which the next lookup reloads
+    // Forces the next lookup to reload from storage
     void invalidate_cached_entry(const StreamId& stream_id) {
         publish_entry(stream_id, std::make_shared<VersionMapEntry>(stream_id));
     }
