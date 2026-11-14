@@ -527,9 +527,8 @@ class VersionMapImpl {
                     e.what()
             );
         }
-        auto old_entry = *entry;
         if (!index_keys.empty()) {
-            auto new_entry = std::make_shared<VersionMapEntry>(old_entry);
+            auto new_entry = std::make_shared<VersionMapEntry>(*entry);
             new_entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
             auto new_version_id = index_keys[0].version_id();
             new_entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, new_entry);
@@ -538,7 +537,7 @@ class VersionMapImpl {
             publish_entry(stream_id, std::move(new_entry));
         }
         try {
-            remove_entry_version_keys(store, old_entry, stream_id);
+            remove_entry_version_keys(store, entry, stream_id);
         } catch (const storage::KeyNotFoundException& e) {
             log::version().debug(
                     "Failed to remove version keys for symbol {} in overwrite_symbol_tree, exception: {}",
@@ -632,6 +631,8 @@ class VersionMapImpl {
 
             write_to_entry(entry, key, atom_journal_key);
         }
+        // A reload may have replaced the entry we were given since we fetched it, and would not have this write
+        publish_entry(stream_id, entry);
 
         auto previous_index = entry->get_second_undeleted_index();
         return previous_index;
@@ -905,10 +906,16 @@ class VersionMapImpl {
         return map_.try_emplace(stream_id, std::make_shared<VersionMapEntry>(stream_id)).first->second;
     }
 
-    // Cached entries may be in use by other threads, so they are replaced rather than modified
+    // Reloaded and rebuilt entries replace the cached one rather than being swapped into it, as other threads may hold
+    // it
     void publish_entry(const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry) {
         std::lock_guard lock(map_mutex_);
         map_.insert_or_assign(stream_id, std::move(entry));
+    }
+
+    // An empty entry with no reload time, which the next lookup reloads
+    void invalidate_cached_entry(const StreamId& stream_id) {
+        publish_entry(stream_id, std::make_shared<VersionMapEntry>(stream_id));
     }
 
     AtomKey write_entry_to_storage(
@@ -1049,7 +1056,7 @@ class VersionMapImpl {
 
     void scan_and_rewrite(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
         log::version().warn("Version map scanning and rewriting  versions for stream {}", stream_id);
-        publish_entry(stream_id, std::make_shared<VersionMapEntry>(stream_id));
+        invalidate_cached_entry(stream_id);
         auto entry = std::make_shared<VersionMapEntry>(stream_id);
         load_via_iteration(store, stream_id, entry, false);
         remove_duplicate_index_keys(entry);
@@ -1058,7 +1065,7 @@ class VersionMapImpl {
 
     void remove_and_rewrite_version_keys(std::shared_ptr<Store> store, const StreamId& stream_id) {
         log::version().warn("Rewriting all index keys for {}", stream_id);
-        publish_entry(stream_id, std::make_shared<VersionMapEntry>(stream_id));
+        invalidate_cached_entry(stream_id);
         auto entry = std::make_shared<VersionMapEntry>(stream_id);
         load_via_iteration(store, stream_id, entry, true);
         remove_duplicate_index_keys(entry);
@@ -1114,7 +1121,7 @@ class VersionMapImpl {
     }
 
     void recover_deleted(std::shared_ptr<Store> store, const StreamId& stream_id) {
-        publish_entry(stream_id, std::make_shared<VersionMapEntry>(stream_id));
+        invalidate_cached_entry(stream_id);
         auto entry = std::make_shared<VersionMapEntry>(stream_id);
         load_via_iteration(store, stream_id, entry);
 
