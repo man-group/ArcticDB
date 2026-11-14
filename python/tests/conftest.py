@@ -650,6 +650,14 @@ def monkeypatch_session():
     m.undo()
 
 
+def _putenv_shared_with_extension(name, value):
+    # Off Windows the extension shares the process environment, so this stands in for arcticdb_ext.tools.putenv_s
+    if value:
+        os.putenv(name, value)
+    else:
+        os.unsetenv(name)
+
+
 @pytest.fixture
 def route_env_to_extension(monkeypatch):
     # We statically linked msvcrt which maintains a seprate copy of the environment
@@ -678,6 +686,14 @@ def route_env_to_extension(monkeypatch):
                 putenv_s(name, os.environ.get(name, ""))
 
         monkeypatch.undo = undo_and_resync
+    else:
+        putenv_s = _putenv_shared_with_extension
+
+    # Opening an S3 library with neither of these set to when_supported makes configure_s3_checksum_validation set both
+    # to when_required in the extension's environment, where os.environ cannot see them. Resync both, so a test that
+    # sets only one does not inherit the other from an earlier test.
+    for name in ("AWS_RESPONSE_CHECKSUM_VALIDATION", "AWS_REQUEST_CHECKSUM_CALCULATION"):
+        putenv_s(name, os.environ.get(name, ""))
     yield
 
 
