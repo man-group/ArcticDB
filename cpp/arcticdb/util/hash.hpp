@@ -43,9 +43,11 @@ class HashAccum {
 
     [[nodiscard]] HashedValue digest() const { return XXH64_digest(&state_); }
 
+    /// The seed of every block hash the encoders store
+    static constexpr HashedValue DEFAULT_SEED = 0x42;
+
   private:
     XXH64_state_t state_ = XXH64_state_t{};
-    static constexpr std::size_t DEFAULT_SEED = 0x42;
 };
 
 } // namespace arcticdb

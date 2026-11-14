@@ -18,7 +18,7 @@ namespace arcticdb {
 struct PythonEmptyHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-            const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+            const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
             const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
@@ -45,7 +45,7 @@ struct PythonStringHandler {
 
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-            const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+            const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
             const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
@@ -73,7 +73,7 @@ struct PythonStringHandler {
 struct PythonBoolHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-            const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+            const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
             const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
@@ -98,7 +98,7 @@ struct PythonBoolHandler {
 struct PythonArrayHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-            const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+            const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
             const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 

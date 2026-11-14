@@ -48,7 +48,9 @@ pipelines::SegmentAndSlice DecodeSliceTask::decode_into_slice(storage::KeySegmen
             ranges_and_key_.col_range_.first + (descriptor.field_count() - descriptor.index().field_count());
     ARCTICDB_TRACE(log::codec(), "Creating segment");
     SegmentInMemory segment_in_memory(std::move(descriptor));
-    decode_into_memory_segment(seg, hdr, segment_in_memory, desc);
+    with_key_decode_context(key_segment_pair.variant_key(), [&] {
+        decode_into_memory_segment(seg, hdr, segment_in_memory, desc);
+    });
     segment_in_memory.set_row_data(std::max(segment_in_memory.row_count() - 1, ranges_and_key_.row_range().diff() - 1));
     segment_in_memory.mark_from_disk();
     return pipelines::SegmentAndSlice(std::move(ranges_and_key_), std::move(segment_in_memory));

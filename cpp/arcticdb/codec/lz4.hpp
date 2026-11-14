@@ -76,17 +76,18 @@ struct Lz4Decoder {
         );
         codec::check<ErrorCode::E_DECODE_ERROR>(
                 decompressed_size >= 0,
-                "Error while decoding with lz4 at address {:x} with size {}. Code {}",
-                uintptr_t(in),
+                "Error while decoding with lz4 (code {}): {} encoded bytes, expected {} decoded bytes",
+                decompressed_size,
                 in_bytes,
-                decompressed_size
+                out_bytes
         );
 
         codec::check<ErrorCode::E_DECODE_ERROR>(
                 std::size_t(decompressed_size) == out_bytes,
-                "expected out_bytes == lz4 decompressed bytes, actual {} != {}",
+                "Decoded size mismatch in lz4 block: expected {} bytes, decoded {} ({} encoded bytes)",
                 out_bytes,
-                decompressed_size
+                decompressed_size,
+                in_bytes
         );
     }
 };

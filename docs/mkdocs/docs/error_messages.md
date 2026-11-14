@@ -58,6 +58,7 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 | 5001       | ArcticDB is attempting to write to an already-existing key in storage.                                                      | This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.                                                                                                                                                            |
 | 5002       | The symbol being worked on does not exist.                                                                                  | ArcticDB has requested a key that does not exist in storage. Ensure that the symbol exists.                                                                                                                                                                                                         |
 | 5003       | Don't have permissions to carry out the operation.                                                                          | Ensure that you have the permissions to perform the requested operation on the given key.                                                                                                                                                                                                           |
+| 5006       | The bytes read for an object don't match what was written: a block's stored hash doesn't match its decoded contents. Raised as `DataIntegrityException`, only when [`Codec.VerifyBlockHash`](runtime_config.md#codecverifyblockhash) is on. | The message names the key, column and block. Read the data again: if that succeeds, the bytes were damaged in transit (consider HTTPS, or S3 response checksums); if it keeps failing, the stored object is corrupt. |
 | 5010       | The LMDB map is full.                                                                                                       | Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open `/tmp/a/b/` with a map size of 5GB, use `adb.Arctic("lmdb:///tmp/a/b?map_size=5GB")`. Also see the [LMDB documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). |
 | 5011       | An unexpected LMDB error occurred. e.g. File corruption, Environment version mismatch, Page type mismatch etc.              | Varies depending on the type of failure. Read more on [LMDB: return codes](http://www.lmdb.tech/doc/group__errors.html)                                                                                                                                                                             |
 | 5020       | An unexpected S3 error occurred. e.g. Network error, Service not available, Throttling failure etc.                         | Varies depending on the type of failure.                                                                                                                                                                                                                                                            |
@@ -160,6 +161,7 @@ All of these errors are of type `arcticdb.exceptions.ArcticException`.
 | Error messages | Cause | Resolution |
 |:--------------|:-------|:-----------|
 |  Error decoding | A column was unable to be decoded by the compression algorithm. | Upgrade to a later version of the client. |
+|  Error while decoding with lz4, Decoded size mismatch | The compressed bytes of a block don't decode to the size its header records. These are `CodecException`s, and the message names the key, column and block. | If the data was written by a client of the same or an older version, the bytes read from storage were damaged: see error 5006 above. |
 
 ## Exception Hierarchy
 
@@ -179,6 +181,7 @@ RuntimeError
     |-- StorageException
     |   └-- LmdbMapFullError
     |   └-- PermissionException
+    |   └-- DataIntegrityException
     |   └-- DuplicateKeyException
     |-- StreamDescriptorMismatch
     └-- InternalException

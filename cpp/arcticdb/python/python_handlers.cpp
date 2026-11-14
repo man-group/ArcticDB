@@ -27,7 +27,7 @@ static void fill_missing(
 
 void PythonEmptyHandler::handle_type(
         const uint8_t*& input, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& mapping,
-        const DecodePathData&, std::any& handler_data, EncodingVersion encoding_version,
+        const DecodePathData&, std::any& handler_data, const DecodeOptions& decode_options,
         const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     ARCTICDB_SAMPLE(HandleEmpty, 0)
@@ -40,7 +40,7 @@ void PythonEmptyHandler::handle_type(
     );
     static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
 
-    if (encoding_version == EncodingVersion::V2)
+    if (decode_options.encoding_version == EncodingVersion::V2)
         util::check_magic<ColumnMagic>(input);
 
     if (field.encoding_case() == EncodedFieldType::NDARRAY) {
@@ -109,7 +109,7 @@ void PythonEmptyHandler::
 
 void PythonBoolHandler::handle_type(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+        const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
         const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     ARCTICDB_SAMPLE(HandleBool, 0)
@@ -122,9 +122,7 @@ void PythonBoolHandler::handle_type(
                    bytes / get_type_size(m.source_type_desc_.data_type()),
                    AllocationType::DYNAMIC,
                    Sparsity::PERMITTED);
-    data += decode_field(
-            m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
-    );
+    data += decode_field(m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), decode_options);
     // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
     // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
     decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
@@ -180,7 +178,7 @@ void PythonBoolHandler::
 
 void PythonStringHandler::handle_type(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+        const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
         const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     ARCTICDB_SAMPLE(PythonHandleString, 0)
@@ -199,9 +197,7 @@ void PythonStringHandler::handle_type(
         }
     }();
 
-    data += decode_field(
-            m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
-    );
+    data += decode_field(m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), decode_options);
     // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
     // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
     decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
@@ -254,13 +250,13 @@ void PythonStringHandler::default_initialize(
 
 void PythonArrayHandler::handle_type(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-        const DecodePathData& shared_data, std::any& any, EncodingVersion encoding_version,
+        const DecodePathData& shared_data, std::any& any, const DecodeOptions& decode_options,
         const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     ARCTICDB_SAMPLE(HandleArray, 0)
     util::check(field.has_ndarray(), "Expected ndarray in array object handler");
     Column column{m.source_type_desc_, Sparsity::PERMITTED};
-    data += decode_field(m.source_type_desc_, field, data, column, column.opt_sparse_map(), encoding_version);
+    data += decode_field(m.source_type_desc_, field, data, column, column.opt_sparse_map(), decode_options);
     // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
     // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
     column.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);

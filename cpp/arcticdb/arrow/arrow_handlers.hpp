@@ -15,7 +15,7 @@ namespace arcticdb {
 struct ArrowStringHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-            const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+            const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
             const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
@@ -38,7 +38,7 @@ struct ArrowStringHandler {
 struct ArrowBoolHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-            const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+            const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
             const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
@@ -61,7 +61,7 @@ struct ArrowBoolHandler {
 struct ArrowTimestampHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
-            const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+            const DecodePathData& shared_data, std::any& handler_data, const DecodeOptions& decode_options,
             const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
