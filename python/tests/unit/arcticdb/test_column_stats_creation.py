@@ -908,6 +908,8 @@ def test_column_stats_object_deleted_with_index_key(
         lib.write(sym, df0)
         create_stats()
         assert_column_stats_key_count()
+        # A second symbol keeps the snapshot non-empty, so remove_from_snapshot rewrites it
+        lib.write(f"{sym}_other", df0)
         snapshot_name = "snapshot_name"
         lib.snapshot(snapshot_name)
         lib.delete(sym)
