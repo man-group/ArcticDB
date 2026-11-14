@@ -49,42 +49,6 @@ void decode_block(const BlockType& block, const std::uint8_t* input, T* output) 
     }
 }
 
-// A block's decoded size is stored, and sizes an allocation before anything is decompressed. No codec can expand its
-// stored bytes beyond a fixed ratio, so a larger decoded size is corrupt.
-template<typename BlockType>
-void check_block_decoded_size(const BlockType& block) {
-    uint64_t max_expansion = 1; // passthrough copies its stored bytes
-    if (block.has_codec()) {
-        switch (block.codec().codec_type()) {
-        case Codec::LZ4:
-            max_expansion = 255; // a match's length grows by at most 255 per stored byte
-            break;
-        case Codec::ZSTD:
-            max_expansion = 32768; // an RLE block expands 4 stored bytes to at most 128 KiB
-            break;
-        default:
-            return; // decode_block raises for any other codec
-        }
-    }
-    constexpr uint64_t slack = 64; // fixed per-block overhead of a tiny compressed block
-    const uint64_t decoded_bytes = block.in_bytes();
-    const uint64_t stored_bytes = block.out_bytes();
-    codec::check<ErrorCode::E_DECODE_ERROR>(
-            decoded_bytes <= stored_bytes * max_expansion + slack,
-            "Corrupt segment: block of {} stored bytes decodes to {} bytes",
-            stored_bytes,
-            decoded_bytes
-    );
-}
-
-template<typename NDArrayEncodedFieldType>
-void check_field_decoded_sizes(const NDArrayEncodedFieldType& field) {
-    for (const auto& block : field.shapes())
-        check_block_decoded_size(block);
-    for (const auto& block : field.values())
-        check_block_decoded_size(block);
-}
-
 template<typename FieldType, class DataSink>
 inline void read_shapes(
         FieldType& encoded_field, DataSink& data_sink, uint8_t const*& data_in, int shapes_block, shape_t*& shapes_out
@@ -108,7 +72,6 @@ std::size_t decode_ndarray(
         using TD = std::decay_t<decltype(type_desc_tag)>;
         using T = typename TD::DataTypeTag::raw_type;
 
-        check_field_decoded_sizes(field);
         const auto data_size = encoding_sizes::data_uncompressed_size(field);
         const bool is_empty_array = (data_size == 0) && type_desc_tag.dimension() > Dimension::Dim0;
         const bool is_fully_sparse = (data_size == 0) && field.sparse_map_bytes() > 0;

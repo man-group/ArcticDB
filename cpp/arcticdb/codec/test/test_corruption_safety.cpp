@@ -329,7 +329,7 @@ struct SmallAllocationSink {
 };
 } // namespace
 
-// A block's stored decoded size sizes the output allocation, so it must be within what its codec can expand to.
+// A block's stored decoded size sizes allocations before decoding, so it must be within what its codec can expand to.
 TEST(CorruptionSafety, BlockDecodedSizeBeyondCodecExpansionRejected) {
     for (const auto codec : {Codec::PASS, Codec::LZ4, Codec::ZSTD}) {
         SCOPED_TRACE(codec_type_to_string(codec));
@@ -342,6 +342,8 @@ TEST(CorruptionSafety, BlockDecodedSizeBeyondCodecExpansionRejected) {
             block.mutable_codec()->mutable_zstd();
         // 64 stored bytes claiming to decode to 2 GiB
         block.set_in_bytes(1U << 31);
+        // Handlers and decode_ndarray size their allocations from this
+        expect_corrupt([&] { (void)encoding_sizes::data_uncompressed_size(field); }, "decodes to");
         std::vector<uint8_t> input(64, 0);
         SmallAllocationSink sink;
         std::optional<util::BitMagic> bv;
