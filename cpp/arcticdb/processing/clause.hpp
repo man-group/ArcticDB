@@ -19,7 +19,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <folly/Poly.h>
 #include <arcticdb/pipeline/pipeline_common.hpp>
-#include <arcticdb/version/merge_options.hpp>
+#include <arcticdb/processing/merge_options.hpp>
 #include <arcticdb/util/string_utils.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/util/type_traits.hpp>

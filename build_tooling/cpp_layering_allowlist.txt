@@ -21,7 +21,6 @@ async -> pipeline
 async -> storage
 async -> stream
 async -> util
-async -> version
 codec -> column_store
 codec -> entity
 codec -> log
@@ -31,7 +30,6 @@ codec -> stream
 codec -> util
 column_store -> entity
 column_store -> pipeline
-column_store -> processing
 column_store -> python
 column_store -> storage
 column_store -> stream
@@ -68,7 +66,6 @@ processing -> pipeline
 processing -> storage
 processing -> stream
 processing -> util
-processing -> version
 python -> arrow
 python -> async
 python -> codec
@@ -99,11 +96,9 @@ stream -> column_store
 stream -> entity
 stream -> log
 stream -> pipeline
-stream -> processing
 stream -> python
 stream -> storage
 stream -> util
-stream -> version
 toolbox -> async
 toolbox -> entity
 toolbox -> log
@@ -119,7 +114,6 @@ util -> column_store
 util -> entity
 util -> log
 util -> pipeline
-util -> processing
 util -> storage
 util -> stream
 version -> arrow

@@ -1,7 +1,9 @@
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
+#include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <folly/futures/Future.h>
 
@@ -45,12 +47,12 @@ AtomKey write_table_index_tree_from_source_to_target(
     ARCTICDB_SAMPLE(WriteIndexSourceToTarget, 0)
     // In
     auto [_, index_seg] = source_store->read_sync(index_key);
-    index::IndexSegmentReader index_segment_reader{std::move(index_seg)};
+    pipelines::index::IndexSegmentReader index_segment_reader{std::move(index_seg)};
     auto index = stream::index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     return util::variant_match(index, [&](auto index_type) {
         using IndexType = decltype(index_type);
         // Out
-        index::IndexWriter<IndexType> writer(
+        pipelines::index::IndexWriter<IndexType> writer(
                 target_store,
                 {index_key.id(), new_version_id.value_or(index_key.version_id())},
                 std::move(index_segment_reader.mutable_tsd()),

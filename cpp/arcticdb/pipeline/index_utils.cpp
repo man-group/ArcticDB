@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 
 #include <arcticdb/entity/normalization_utils.hpp>
 

@@ -8,7 +8,7 @@
 
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
-#include <arcticdb/version/de_dup_map.hpp>
+#include <arcticdb/stream/de_dup_map.hpp>
 
 namespace arcticdb::async {
 DeDupLookupResult lookup_match_in_dedup_map(

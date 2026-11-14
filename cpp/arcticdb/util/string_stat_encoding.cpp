@@ -9,7 +9,7 @@
 #include <arcticdb/util/string_stat_encoding.hpp>
 
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/processing/expression_node.hpp>
+#include <arcticdb/column_store/column_with_strings.hpp>
 #include <arcticdb/util/string_utils.hpp>
 
 #include <algorithm>

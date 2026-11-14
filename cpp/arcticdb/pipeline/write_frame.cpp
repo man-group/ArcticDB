@@ -15,6 +15,8 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/util/bitset.hpp>
+#include <arcticdb/util/lambda_inlining.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/async/task_scheduler.hpp>

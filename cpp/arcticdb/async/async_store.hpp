@@ -471,7 +471,7 @@ class AsyncStore : public Store {
             const auto key = ranges_and_key.key_;
             return read_compressed(key, storage::ReadKeyOpts{})
                     .thenValueInline([ranges_and_key](storage::KeySegmentPair&& key_segment) mutable {
-                        return SegmentAndSlice{std::move(ranges_and_key), key_segment.segment_ptr()};
+                        return pipelines::SegmentAndSlice{std::move(ranges_and_key), key_segment.segment_ptr()};
                     });
         };
     }
@@ -485,19 +485,19 @@ class AsyncStore : public Store {
         return res;
     }
 
-    SliceAndKey write_if_new(std::pair<DeDupLookupResult, FrameSlice>&& item) {
+    pipelines::SliceAndKey write_if_new(std::pair<DeDupLookupResult, pipelines::FrameSlice>&& item) {
         auto [dedup_lookup, slice] = std::move(item);
         return util::variant_match(
                 std::move(dedup_lookup),
                 [&, this](NewObject&& obj) {
                     library_->write(obj);
-                    return SliceAndKey{std::move(slice), std::move(obj).atom_key()};
+                    return pipelines::SliceAndKey{std::move(slice), std::move(obj).atom_key()};
                 },
-                [&](ExistingObject&& obj) { return SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }
+                [&](ExistingObject&& obj) { return pipelines::SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }
         );
     }
 
-    folly::Future<SliceAndKey> async_write(
+    folly::Future<pipelines::SliceAndKey> async_write(
             folly::Future<std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) override {
@@ -507,7 +507,9 @@ class AsyncStore : public Store {
                     auto key_seg = EncodeAtomTask{
                             std::move(key), ClockType::nanos_since_epoch(), std::move(seg), codec_, encoding_version_
                     }();
-                    return std::pair<storage::KeySegmentPair, FrameSlice>(std::move(key_seg), std::move(slice));
+                    return std::pair<storage::KeySegmentPair, pipelines::FrameSlice>(
+                            std::move(key_seg), std::move(slice)
+                    );
                 })
                 .thenValue([de_dup_map](auto&& ks) -> std::pair<DeDupLookupResult, pipelines::FrameSlice> {
                     auto& [key_seg, slice] = ks;
@@ -517,7 +519,7 @@ class AsyncStore : public Store {
                 .thenValue([this](auto&& item) { return write_if_new(std::move(item)); });
     }
 
-    folly::Future<SliceAndKey> compress_and_schedule_async_write(
+    folly::Future<pipelines::SliceAndKey> compress_and_schedule_async_write(
             std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input,
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) override {

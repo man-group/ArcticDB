@@ -246,6 +246,7 @@ set(arcticdb_srcs
         column_store/column_algorithms.hpp
         column_store/column_reslicer.hpp
         column_store/column_utils.hpp
+        column_store/column_with_strings.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
         column_store/memory_segment_impl.hpp
@@ -335,6 +336,8 @@ set(arcticdb_srcs
         processing/schema_combine.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        processing/mem_segment_processing_task.hpp
+        processing/merge_options.hpp
         processing/query_planner.hpp
         processing/sorted_aggregation.hpp
         processing/ternary_utils.hpp
@@ -387,6 +390,7 @@ set(arcticdb_srcs
         storage/storage_utils.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
+        stream/de_dup_map.hpp
         stream/incompletes.hpp
         stream/merge_utils.hpp
         stream/piloted_clock.hpp
@@ -462,9 +466,7 @@ set(arcticdb_srcs
         util/type_traits.hpp
         util/variant.hpp
         version/admission_handler.hpp
-        version/de_dup_map.hpp
         version/op_log.hpp
-        version/merge_options.hpp
         version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
@@ -502,6 +504,7 @@ set(arcticdb_srcs
         column_store/column_data.cpp
         column_store/column_reslicer.cpp
         column_store/column_utils.cpp
+        column_store/column_with_strings.cpp
         column_store/column_data_random_accessor.cpp
         column_store/key_segment.cpp
         column_store/memory_segment.cpp
@@ -561,6 +564,7 @@ set(arcticdb_srcs
         processing/schema_combine.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
+        processing/merge_options.cpp
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp
@@ -640,7 +644,6 @@ set(arcticdb_srcs
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
-        version/merge_options.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
         version/version_core.cpp

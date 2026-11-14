@@ -13,6 +13,7 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
 #include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/util/bitset.hpp>
 
 namespace arcticdb {
 

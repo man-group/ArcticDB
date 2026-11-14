@@ -25,6 +25,7 @@
 #include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
+#include <arcticdb/processing/mem_segment_processing_task.hpp>
 #include <arcticdb/util/name_validation.hpp>
 #include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
