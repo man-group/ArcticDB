@@ -329,57 +329,43 @@ struct SmallAllocationSink {
 };
 } // namespace
 
-// A block's stored decoded size sizes allocations before decoding, so it must be within what its codec can expand to.
+namespace {
+// A block of 64 stored bytes claiming to decode to 2 GiB must be rejected before its size is allocated: both by the
+// size accumulators that handlers allocate from, and by decode_ndarray.
+void expect_oversized_block_rejected(Codec codec, std::string_view message) {
+    EncodedFieldCollection coll;
+    auto& field = passthrough_field(coll, 64);
+    auto& block = const_cast<EncodedBlock&>(field.values(0));
+    block.mutable_codec()->codec_ = codec;
+    block.set_in_bytes(1U << 31);
+    expect_corrupt([&] { (void)encoding_sizes::data_uncompressed_size(field); }, message);
+    std::vector<uint8_t> input(64, 0);
+    SmallAllocationSink sink;
+    std::optional<util::BitMagic> bv;
+    expect_corrupt(
+            [&] {
+                (void
+                )decode_ndarray(make_scalar_type(DataType::UINT8), field, input.data(), sink, bv, EncodingVersion::V2);
+            },
+            message
+    );
+}
+} // namespace
+
+// A block's stored decoded size must be within what its codec can expand to.
 TEST(CorruptionSafety, BlockDecodedSizeBeyondCodecExpansionRejected) {
     for (const auto codec : {Codec::PASS, Codec::LZ4, Codec::ZSTD}) {
         SCOPED_TRACE(codec_type_to_string(codec));
-        EncodedFieldCollection coll;
-        auto& field = passthrough_field(coll, 64);
-        auto& block = const_cast<EncodedBlock&>(field.values(0));
-        if (codec == Codec::LZ4)
-            block.mutable_codec()->mutable_lz4();
-        else if (codec == Codec::ZSTD)
-            block.mutable_codec()->mutable_zstd();
-        // 64 stored bytes claiming to decode to 2 GiB
-        block.set_in_bytes(1U << 31);
-        // Handlers and decode_ndarray size their allocations from this
-        expect_corrupt([&] { (void)encoding_sizes::data_uncompressed_size(field); }, "decodes to");
-        std::vector<uint8_t> input(64, 0);
-        SmallAllocationSink sink;
-        std::optional<util::BitMagic> bv;
-        expect_corrupt(
-                [&] {
-                    (void)decode_ndarray(
-                            make_scalar_type(DataType::UINT8), field, input.data(), sink, bv, EncodingVersion::V2
-                    );
-                },
-                "decodes to"
-        );
+        expect_oversized_block_rejected(codec, "decodes to");
     }
 }
 
-// A block whose stored codec cannot be decoded has no expansion bound, so it must be rejected before its decoded size
-// sizes an allocation.
+// A block whose codec cannot be decoded has no expansion bound, so it is rejected outright.
 TEST(CorruptionSafety, BlockWithUndecodableCodecRejectedBeforeSizing) {
-    for (const auto codec : {Codec::UNKNOWN, Codec::PFOR, static_cast<Codec>(37)}) {
+    const auto not_an_enumerator = static_cast<Codec>(37);
+    for (const auto codec : {Codec::UNKNOWN, Codec::PFOR, not_an_enumerator}) {
         SCOPED_TRACE(static_cast<int>(codec));
-        EncodedFieldCollection coll;
-        auto& field = passthrough_field(coll, 64);
-        auto& block = const_cast<EncodedBlock&>(field.values(0));
-        block.mutable_codec()->codec_ = codec;
-        block.set_in_bytes(1U << 31);
-        expect_corrupt([&] { (void)encoding_sizes::data_uncompressed_size(field); }, "Corrupt segment");
-        std::vector<uint8_t> input(64, 0);
-        SmallAllocationSink sink;
-        std::optional<util::BitMagic> bv;
-        expect_corrupt(
-                [&] {
-                    (void)decode_ndarray(
-                            make_scalar_type(DataType::UINT8), field, input.data(), sink, bv, EncodingVersion::V2
-                    );
-                },
-                "Corrupt segment"
-        );
+        expect_oversized_block_rejected(codec, "unsupported block codec");
     }
 }
 
