@@ -682,14 +682,16 @@ struct VersionChainOperation {
     std::optional<VersionId> version_id{std::nullopt};
 };
 
+namespace {
 // The entry the version map has cached, without going to storage while it is fresh
-static std::shared_ptr<VersionMapEntry> cached_entry(
+std::shared_ptr<VersionMapEntry> cached_entry(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, const StreamId& id
 ) {
     return version_map->check_reload(
             store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, "cached_entry"
     );
 }
+} // namespace
 
 /**
  * @param operations write operations with their specified version_id in this order.
@@ -1652,8 +1654,9 @@ class StoragePause {
     std::shared_future<void> resume_ = resume_promise_.get_future().share();
 };
 
+namespace {
 // A version map that has cached only the latest of versions 0, 1 and 2 of `id`
-static std::shared_ptr<VersionMap> map_caching_latest_of_three_versions(
+std::shared_ptr<VersionMap> map_caching_latest_of_three_versions(
         const std::shared_ptr<InMemoryStore>& store, const StreamId& id
 ) {
     write_versions(store, std::make_shared<VersionMap>(), id, 3);
@@ -1662,13 +1665,12 @@ static std::shared_ptr<VersionMap> map_caching_latest_of_three_versions(
     return version_map;
 }
 
-static std::optional<VersionId> latest_cached_version(
-        const std::shared_ptr<VersionMap>& version_map, const StreamId& id
-) {
+std::optional<VersionId> latest_cached_version(const std::shared_ptr<VersionMap>& version_map, const StreamId& id) {
     // Store is nullptr as we shouldn't go to storage
     const auto latest = cached_entry(version_map, nullptr, id)->get_first_index(true).first;
     return latest ? std::make_optional(latest->version_id()) : std::nullopt;
 }
+} // namespace
 
 TEST(VersionMap, ReloadDoesNotChangeEntryHeldByAnotherThread) {
     // Every lookup goes to storage, so two lookups of a symbol can reload it at the same time
