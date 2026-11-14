@@ -358,6 +358,31 @@ TEST(CorruptionSafety, BlockDecodedSizeBeyondCodecExpansionRejected) {
     }
 }
 
+// A block whose stored codec cannot be decoded has no expansion bound, so it must be rejected before its decoded size
+// sizes an allocation.
+TEST(CorruptionSafety, BlockWithUndecodableCodecRejectedBeforeSizing) {
+    for (const auto codec : {Codec::UNKNOWN, Codec::PFOR, static_cast<Codec>(37)}) {
+        SCOPED_TRACE(static_cast<int>(codec));
+        EncodedFieldCollection coll;
+        auto& field = passthrough_field(coll, 64);
+        auto& block = const_cast<EncodedBlock&>(field.values(0));
+        block.mutable_codec()->codec_ = codec;
+        block.set_in_bytes(1U << 31);
+        expect_corrupt([&] { (void)encoding_sizes::data_uncompressed_size(field); }, "Corrupt segment");
+        std::vector<uint8_t> input(64, 0);
+        SmallAllocationSink sink;
+        std::optional<util::BitMagic> bv;
+        expect_corrupt(
+                [&] {
+                    (void)decode_ndarray(
+                            make_scalar_type(DataType::UINT8), field, input.data(), sink, bv, EncodingVersion::V2
+                    );
+                },
+                "Corrupt segment"
+        );
+    }
+}
+
 // A stored block's is_shape flag can hold any byte; validate must reject one that is neither 0 nor 1.
 TEST(CorruptionSafety, BlockIsShapeByteOtherThanZeroOrOneRejected) {
     EncodedFieldCollection coll;

@@ -32,7 +32,10 @@ void check_block_decoded_size(const BlockType& block) {
             max_expansion = 32768; // an RLE block expands 4 stored bytes to at most 128 KiB
             break;
         default:
-            return; // decode_block raises for any other codec
+            // No bound applies, and decode_block cannot decode it, so reject before the size is allocated
+            codec::raise<ErrorCode::E_DECODE_ERROR>(
+                    "Corrupt segment: unsupported block codec {}", codec_type_to_string(block.codec().codec_type())
+            );
         }
     }
     constexpr uint64_t slack = 64; // fixed per-block overhead of a tiny compressed block
