@@ -13,6 +13,7 @@ import multiprocessing
 import json
 import os
 import re
+import socket
 import sys
 import platform
 import pprint
@@ -27,6 +28,9 @@ import requests
 from typing import Optional, Any, Dict, Type
 
 import werkzeug
+from werkzeug.serving import DechunkedInput, WSGIRequestHandler
+from werkzeug.exceptions import ClientDisconnected
+from werkzeug.wsgi import LimitedStream
 import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
 
@@ -906,12 +910,89 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
         return super().__call__(environ, start_response)
 
 
+class _DiscardingWriter:
+    def write(self, data):
+        return len(data)
+
+    def flush(self):
+        pass
+
+
+class KeepAliveRequestHandler(WSGIRequestHandler):
+    """werkzeug's dev server closes the connection after every response, so every S3 request opens a new connection
+    and leaves a TIME_WAIT entry behind. Across a test run that exhausts the loopback ports on Windows, and connects
+    then fail with WinError 10048. Keep connections open so that clients reuse them.
+
+    werkzeug closes because http.server does not skip a request body the application left unread, so do that here.
+    After each response werkzeug also reads whatever is waiting on the socket, which on a kept-alive connection would
+    swallow the next request, so it is shown a socket at EOF and an empty stream instead.
+    """
+
+    # Headers and body go out in separate sends, and with Nagle on the body then waits for the client's delayed ACK,
+    # which is 40ms on Linux
+    disable_nagle_algorithm = True
+    # Free the thread of an idle connection. This also bounds each blocking read or write. Longer than clients' idle
+    # limits (libcurl's CURLOPT_MAXAGE_CONN default is 118s; Windows uses WinHTTP), so a reuse rarely races the close
+    timeout = 300
+    _eof_socket = None
+    _in_wsgi = False
+
+    def make_environ(self):
+        # Runs while run_wsgi has swapped the socket and stream out, so give the app the real ones
+        environ = super().make_environ()
+        environ["werkzeug.socket"] = self._connection
+        if environ.get("wsgi.input_terminated"):
+            environ["wsgi.input"] = DechunkedInput(self._rfile)
+        else:
+            environ["wsgi.input"] = LimitedStream(self._rfile, int(environ.get("CONTENT_LENGTH") or 0))
+        self._request_body = environ["wsgi.input"]
+        return environ
+
+    def send_header(self, keyword, value):
+        # Only drop the header werkzeug forces on app responses: http.server's own error responses still close
+        forced_close = keyword.lower() == "connection" and value.lower() == "close"
+        if self._in_wsgi and forced_close and self.request_version == "HTTP/1.1":
+            return
+        super().send_header(keyword, value)
+
+    def end_headers(self):
+        super().end_headers()
+        # werkzeug sends whatever body the app returns, even for HEAD (HostDispatcherApplication's own responses have
+        # one), and the client would read it as the start of the next response
+        if self._in_wsgi and self.command == "HEAD":
+            self.wfile = _DiscardingWriter()
+
+    def run_wsgi(self):
+        if KeepAliveRequestHandler._eof_socket is None:
+            eof_socket, peer = socket.socketpair()
+            peer.close()
+            KeepAliveRequestHandler._eof_socket = eof_socket
+        self._request_body = None
+        # end_headers swaps wfile for HEAD responses
+        self._connection, self._rfile, self._wfile = self.connection, self.rfile, self.wfile
+        self.connection, self.rfile = KeepAliveRequestHandler._eof_socket, BytesIO()
+        self._in_wsgi = True
+        try:
+            super().run_wsgi()
+        finally:
+            self._in_wsgi = False
+            self.connection, self.rfile, self.wfile = self._connection, self._rfile, self._wfile
+        if self.close_connection or self._request_body is None:
+            return
+        try:
+            while self._request_body.read(1 << 16):
+                pass
+        except (OSError, ValueError, ClientDisconnected):
+            self.close_connection = True
+
+
 def run_s3_server(port, key_file, cert_file):
     werkzeug.run_simple(
         "0.0.0.0",
         port,
         HostDispatcherApplication(create_backend_app),
         threaded=True,
+        request_handler=KeepAliveRequestHandler,
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
@@ -922,6 +1003,7 @@ def run_gcp_server(port, key_file, cert_file):
         port,
         GcpHostDispatcherApplication(create_backend_app),
         threaded=True,
+        request_handler=KeepAliveRequestHandler,
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
