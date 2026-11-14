@@ -22,6 +22,8 @@
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/util/key_utils.hpp>
+#include <arcticdb/storage/test/in_memory_store.hpp>
+#include <arcticdb/storage/failure_simulation.hpp>
 
 #include <chrono>
 #include <thread>
@@ -1306,4 +1308,18 @@ TEST(DeleteTreesResponsiblyStats, DataKeysConsideredCountsBeforeExclusion) {
     EXPECT_EQ(stats.index_keys_deleted, 1u);
     EXPECT_EQ(stats.data_keys_considered, 2u);
     EXPECT_EQ(stats.data_keys_deleted, 0u);
+}
+
+TEST(Snapshot, TombstoneSnapshotKeepsSnapshotIfItCannotWriteTheTombstone) {
+    using namespace arcticdb;
+    std::shared_ptr<Store> store = std::make_shared<InMemoryStore>();
+    const RefKey snapshot_key{StreamId{"snap"}, KeyType::SNAPSHOT_REF};
+    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"snap"}, SegmentInMemory{});
+    auto segment = store->read_sync(snapshot_key).second;
+
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE, {action_factories::fault()}}});
+    EXPECT_THROW(tombstone_snapshot(store, snapshot_key, std::move(segment), false), StorageException);
+    StorageFailureSimulator::reset();
+
+    ASSERT_TRUE(store->key_exists_sync(snapshot_key));
 }
