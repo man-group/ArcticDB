@@ -26,7 +26,7 @@ from arcticdb.exceptions import (
     SchemaException,
 )
 from arcticdb_ext.storage import KeyType
-from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.version_store.processing import QueryBuilder, where
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -59,6 +59,70 @@ def test_filter_column_not_present(lmdb_version_store_v1, any_output_format):
     lib.write(symbol, df)
     with pytest.raises(SchemaException):
         _ = lib.read(symbol, query_builder=q)
+
+
+_VALUE_SET = np.array([1, 2])
+_VALUE_SET_INPUT = (UserInputException, "Unexpected value set input")
+_NON_NUMERIC = (UserInputException, "Non-numeric operand")
+_INFINITE_VALUE = (ArcticNativeException, "Infinite values")
+_UNCONVERTIBLE_VALUE = (TypeError, "Value")
+
+
+# With several errors in one query, the one raised is the first in operand order: left, then condition, then right
+@pytest.mark.parametrize(
+    "build_query, expected",
+    [
+        pytest.param(
+            lambda q: q.apply("new", _VALUE_SET + (q["s"] + 1)), _VALUE_SET_INPUT, id="binary_value_set_left_bad_right"
+        ),
+        pytest.param(
+            lambda q: q[(_VALUE_SET + (q["s"] + 1)) > 0], _VALUE_SET_INPUT, id="binary_value_set_left_bad_right_filter"
+        ),
+        pytest.param(
+            lambda q: q.apply("new", (q["s"] + 1) + _VALUE_SET), _NON_NUMERIC, id="binary_bad_left_value_set_right"
+        ),
+        pytest.param(
+            lambda q: q.apply("new", where((q["s"] + 1) > 0, _VALUE_SET, q["i"])),
+            _VALUE_SET_INPUT,
+            id="ternary_value_set_left_bad_condition",
+        ),
+        pytest.param(
+            lambda q: q.apply("new", where(q["b"], _VALUE_SET, q["s"] + 1)),
+            _VALUE_SET_INPUT,
+            id="ternary_value_set_left_bad_right",
+        ),
+        pytest.param(
+            lambda q: q.apply("new", where(q["i"] > q["s"], q["s"] - 1, q["i"])),
+            _NON_NUMERIC,
+            id="ternary_bad_left_bad_condition",
+        ),
+        pytest.param(
+            lambda q: q.apply("new", abs(_VALUE_SET + (q["s"] + 1))), _VALUE_SET_INPUT, id="unary_over_value_set_left"
+        ),
+        pytest.param(lambda q: q[~((_VALUE_SET + (q["s"] + 1)) > 0)], _VALUE_SET_INPUT, id="not_over_value_set_left"),
+        pytest.param(
+            lambda q: q.apply("new", object() + (q["i"] + np.inf)),
+            _UNCONVERTIBLE_VALUE,
+            id="unconvertible_leaf_left_infinite_right",
+        ),
+        pytest.param(
+            lambda q: q.apply("new", where(q["i"] == object(), q["i"] + np.inf, q["i"])),
+            _INFINITE_VALUE,
+            id="ternary_infinite_left_unconvertible_condition",
+        ),
+        pytest.param(
+            lambda q: q.apply("new", where(q["i"] == np.inf, q["i"] + object(), q["i"])),
+            _UNCONVERTIBLE_VALUE,
+            id="ternary_unconvertible_left_infinite_condition",
+        ),
+    ],
+)
+def test_query_error_order(lmdb_version_store_v1, build_query, expected):
+    lib = lmdb_version_store_v1
+    lib.write("sym", pd.DataFrame({"i": np.arange(3, dtype=np.int64), "s": ["a", "b", "c"], "b": [True, False, True]}))
+    exception_type, message = expected
+    with pytest.raises(exception_type, match=message):
+        lib.read("sym", query_builder=build_query(QueryBuilder()))
 
 
 def test_filter_column_attribute_syntax(

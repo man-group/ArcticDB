@@ -8,6 +8,7 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/processing/test/ast_test_helpers.hpp>
@@ -463,4 +464,79 @@ TEST_F(AstParsingOutputTypesTest, TernaryBitsetBitset) {
     FilterClause filter_clause{{"int32", "uint8", "bool"}, ec, {}};
     auto output_schema = filter_clause.modify_schema(initial_schema());
     ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+}
+
+// The type check raises the error that a recursive left-to-right check would raise first: the whole left operand, then
+// "left is not a value set", then the condition and right operands, then the operation's own checks. Missing columns
+// are passed straight to compute here, as the clauses reject them before the type check.
+class AstTypeCheckErrorOrderTest : public AstParsingOutputTypesTest {
+  protected:
+    template<typename Exception>
+    void expect_error(const ExpressionChild& root, std::string_view message) {
+        auto column_types = initial_schema().column_types();
+        try {
+            root->compute(column_types);
+            FAIL() << "Expected an error containing: " << message;
+        } catch (const Exception& e) {
+            EXPECT_THAT(e.what(), testing::HasSubstr(std::string(message)));
+        }
+    }
+
+    static ExpressionChild value_set() {
+        return vset(std::make_shared<ValueSet>(
+                std::make_shared<std::unordered_set<uint8_t>>(std::unordered_set<uint8_t>{1, 2})
+        ));
+    }
+
+    static ExpressionChild non_numeric_add() {
+        return node(col("string"), val(std::make_shared<Value>(construct_value<uint8_t>(1))), OperationType::ADD);
+    }
+};
+
+TEST_F(AstTypeCheckErrorOrderTest, BinaryValueSetLeftBeforeMissingColumnRight) {
+    expect_error<UserInputException>(node(value_set(), col("missing"), OperationType::ADD), "Unexpected value set");
+}
+
+TEST_F(AstTypeCheckErrorOrderTest, BinaryValueSetLeftBeforeBadRightOperand) {
+    expect_error<UserInputException>(node(value_set(), non_numeric_add(), OperationType::ADD), "Unexpected value set");
+}
+
+TEST_F(AstTypeCheckErrorOrderTest, BinaryMissingColumnLeftBeforeBadRight) {
+    expect_error<SchemaException>(node(col("missing"), value_set(), OperationType::ADD), "'missing'");
+    expect_error<SchemaException>(node(col("missing"), non_numeric_add(), OperationType::ADD), "'missing'");
+}
+
+TEST_F(AstTypeCheckErrorOrderTest, BinaryBadLeftBeforeMissingColumnRight) {
+    expect_error<UserInputException>(node(non_numeric_add(), col("missing"), OperationType::ADD), "Non-numeric");
+}
+
+TEST_F(AstTypeCheckErrorOrderTest, TernaryValueSetLeftBeforeMissingColumns) {
+    expect_error<UserInputException>(
+            node(col("missing"), value_set(), col("int32"), OperationType::TERNARY), "Unexpected value set"
+    );
+    expect_error<UserInputException>(
+            node(col("bool"), value_set(), col("missing"), OperationType::TERNARY), "Unexpected value set"
+    );
+}
+
+TEST_F(AstTypeCheckErrorOrderTest, TernaryOperandsInLeftConditionRightOrder) {
+    expect_error<SchemaException>(
+            node(col("missing_condition"), col("missing_left"), col("missing_right"), OperationType::TERNARY),
+            "'missing_left'"
+    );
+    expect_error<SchemaException>(
+            node(col("missing_condition"), col("int32"), col("missing_right"), OperationType::TERNARY),
+            "'missing_condition'"
+    );
+    expect_error<SchemaException>(
+            node(col("int32"), col("int32"), col("missing_right"), OperationType::TERNARY), "'missing_right'"
+    );
+}
+
+TEST_F(AstTypeCheckErrorOrderTest, Unary) {
+    expect_error<SchemaException>(node(col("missing"), OperationType::ABS), "'missing'");
+    expect_error<UserInputException>(node(value_set(), OperationType::NEG), "Unexpected value set");
+    expect_error<UserInputException>(
+            node(node(value_set(), col("missing"), OperationType::ADD), OperationType::ABS), "Unexpected value set"
+    );
 }

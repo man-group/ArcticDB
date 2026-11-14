@@ -1374,25 +1374,39 @@ def visit_expression(expr):
         else:
             return [node.left]
 
-    def _converted(node):
-        return converted[id(node)] if isinstance(node, ExpressionNode) else _leaf(node)
-
     def _visit(root):
-        stack = [(root, False)]
+        # Each entry holds a node and its operands converted so far, by position. Operands are converted left, then
+        # condition, then right, so an invalid one raises the same error as when this was recursive.
+        stack = [(root, {})]
         while stack:
-            node, operands_done = stack.pop()
+            node, done = stack[-1]
             if id(node) in converted:
+                stack.pop()
                 continue
             if node.operator == COLUMN and node is not root:
                 input_columns.add(node.left)
                 converted[id(node)] = _ExpressionNode(_ColumnName(node.left))
-            elif operands_done:
-                converted[id(node)] = _ExpressionNode(*(_converted(child) for child in _operands(node)), node.operator)
+                stack.pop()
+                continue
+            operands = _operands(node)
+            unconverted = None
+            # _operands lists a ternary's condition first
+            for position in (1, 0, 2) if len(operands) == 3 else range(len(operands)):
+                if position in done:
+                    continue
+                child = operands[position]
+                if not isinstance(child, ExpressionNode):
+                    done[position] = _leaf(child)
+                elif id(child) in converted:
+                    done[position] = converted[id(child)]
+                else:
+                    unconverted = child
+                    break
+            if unconverted is None:
+                stack.pop()
+                converted[id(node)] = _ExpressionNode(*(done[i] for i in range(len(operands))), node.operator)
             else:
-                stack.append((node, True))
-                for child in reversed(_operands(node)):
-                    if isinstance(child, ExpressionNode) and id(child) not in converted:
-                        stack.append((child, False))
+                stack.append((unconverted, {}))
         return converted[id(root)]
 
     expression_context = _ExpressionContext()

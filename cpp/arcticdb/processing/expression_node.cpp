@@ -341,7 +341,17 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                        res.type_ = leaf_return_type(leaf, column_types, res.value_set_state_);
                        return res;
                    },
-                   [](const ExpressionNode&) -> std::optional<ReturnType> { return std::nullopt; },
+                   [](const ExpressionNode& node) -> std::optional<ReturnType> {
+                       // Before the other operands are checked, so that their errors do not take precedence
+                       const auto& operation = std::get<Operation>(node.kind_);
+                       const auto* left_leaf = std::get_if<Leaf>(&operation.left_->kind_);
+                       user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                               !left_leaf || !std::holds_alternative<std::shared_ptr<ValueSet>>(*left_leaf),
+                               "Unexpected value set input to {}",
+                               operation.operation_type_
+                       );
+                       return std::nullopt;
+                   },
                    [](const ExpressionNode&, const Operation& operation, const auto& operand) {
                        return ReturnType{
                                operation_return_type(
@@ -362,11 +372,8 @@ std::variant<BitSetTag, DataType> ExpressionNode::operation_return_type(
     const OperationType operation_type_ = operation.operation_type_;
     // Default to BitSetTag
     std::variant<BitSetTag, DataType> res;
-    const ValueSetState left_value_set_state = left.value_set_state_;
+    // compute rejects a value set as the left operand before the other operands are checked
     const auto& left_type = left.type_;
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            left_value_set_state == ValueSetState::NOT_A_SET, "Unexpected value set input to {}", operation_type_
-    );
     if (is_unary_operation(operation_type_)) {
         switch (operation_type_) {
         case OperationType::ABS:
