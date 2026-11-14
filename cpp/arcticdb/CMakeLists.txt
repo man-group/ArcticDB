@@ -1116,6 +1116,7 @@ if(${TEST})
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
             codec/test/test_segment_header.cpp
+            codec/test/test_corruption_safety.cpp
             codec/test/test_encoded_field.cpp
             column_store/test/test_chunked_buffer.cpp
             column_store/test/ingestion_stress_test.cpp

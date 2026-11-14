@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/python/python_strings.hpp>
+#include <optional>
+#include <folly/ScopeGuard.h>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
@@ -105,6 +107,20 @@ static void write_strings_to_destination(
     handler_data.increment_missing_refcount(PandasMissingValue::NaN, nan_placeholder_count);
 }
 
+// A corrupt string pool can hold bytes that are invalid for the column's string type (e.g. invalid UTF-8); the
+// constructor then returns null with a Python error set. Raise a decode error instead of using null.
+namespace {
+template<typename StringCreator>
+PyObject* create_string_or_raise(std::string_view sv, bool has_type_conversion) {
+    auto obj = StringCreator::create(sv, has_type_conversion);
+    if (ARCTICDB_UNLIKELY(obj == nullptr)) {
+        PyErr_Clear();
+        codec::raise<ErrorCode::E_DECODE_ERROR>("Corrupt segment: invalid string in string pool failed to decode");
+    }
+    return obj;
+}
+} // namespace
+
 template<typename StringCreator>
 static auto assign_python_strings(
         const ankerl::unordered_dense::map<entity::position_t, size_t>& unique_counts, bool has_type_conversion,
@@ -116,9 +132,16 @@ static auto assign_python_strings(
     {
         ARCTICDB_SUBSAMPLE(CreatePythonStrings, 0)
         py::gil_scoped_acquire gil_lock;
+        // A corrupt pool can make the loop raise part way; release the strings already built.
+        SCOPE_FAIL {
+            for (const auto& [built_offset, built_obj] : py_strings) {
+                for (size_t c = 0; c < unique_counts.at(built_offset); ++c)
+                    Py_DECREF(built_obj);
+            }
+        };
         for (const auto& [offset, count] : unique_counts) {
             const auto sv = get_string_from_pool(offset, string_pool);
-            auto obj = StringCreator::create(sv, has_type_conversion);
+            auto obj = create_string_or_raise<StringCreator>(sv, has_type_conversion);
             for (auto c = 1U; c < count; ++c)
                 inc_ref(obj);
 
@@ -176,7 +199,9 @@ static void assign_strings_shared(
                     shared != shared_map.end()) {
                     obj = shared->second;
                 } else {
-                    obj = StringCreator::create(sv, has_type_conversion);
+                    // References already taken for earlier offsets in this call leak if this raises, which only
+                    // happens on corrupt input.
+                    obj = create_string_or_raise<StringCreator>(sv, has_type_conversion);
                     shared_map.try_emplace(sv, obj);
                 }
 
@@ -273,8 +298,9 @@ static void process_string_views(
 }
 
 void write_python_dynamic_strings_to_dest(
-        PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping, const StringPool& string_pool,
-        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasMissingValue none_value
+        PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping,
+        const std::shared_ptr<StringPool>& string_pool, const DecodePathData& shared_data,
+        PythonHandlerData& handler_data, PandasMissingValue none_value
 ) {
     util::check(handler_data.is_nan_initialized(), "Got null nan in string reducer");
     util::check(is_py_nan(handler_data.non_owning_nan_handle()), "Got the wrong value in global nan");
@@ -290,6 +316,11 @@ void write_python_dynamic_strings_to_dest(
             target_type
     );
 
+    // Guard here so a corrupt segment raises instead of dereferencing a null pool and crashing.
+    check_string_pool_for_column(string_pool.get(), source_column);
+    std::optional<StringPool> empty_pool;
+    const StringPool& pool = string_pool ? *string_pool : empty_pool.emplace();
+
     auto is_utf = is_utf_type(slice_value_type(source_type.data_type()));
     const auto has_type_conversion = source_type != target_type;
     process_string_views(
@@ -298,7 +329,7 @@ void write_python_dynamic_strings_to_dest(
             is_utf,
             mapping.num_rows_,
             source_column,
-            string_pool,
+            pool,
             shared_data,
             handler_data,
             none_value

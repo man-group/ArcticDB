@@ -9,6 +9,10 @@
 
 #include "arcticdb/storage/memory_layout.hpp"
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/codec/input_bounds.hpp>
+#include <arcticdb/util/buffer.hpp>
+#include <arcticdb/util/variant.hpp>
 
 namespace arcticdb {
 
@@ -46,33 +50,32 @@ inline void write_identifier(Buffer& buffer, std::ptrdiff_t& pos, const StreamId
     );
 }
 
-inline StreamId read_identifier(const uint8_t*& data) {
-    auto* identifier = reinterpret_cast<const SegmentIdentifier*>(data);
-
+// Checks that the identifier at data, including a string identifier's body, lies within [data, end), and returns the
+// bytes it occupies.
+inline size_t checked_identifier_bytes(const uint8_t* data, const uint8_t* end) {
+    check_input_available(data, end, SegmentIdentifierSize, "segment identifier");
+    const auto* identifier = reinterpret_cast<const SegmentIdentifier*>(data);
     switch (identifier->header_.type_) {
     case IdentifierType::STRING:
-        data += SegmentIdentifierSize + identifier->header_.size_;
+        check_input_available(
+                data + SegmentIdentifierSize, end, identifier->header_.size_, "string segment identifier"
+        );
+        return SegmentIdentifierSize + identifier->header_.size_;
+    case IdentifierType::NUMERIC:
+        return SegmentIdentifierSize;
+    default:
+        util::raise_rte("Unknown identifier type {}", static_cast<int>(identifier->header_.type_));
+    }
+}
+
+inline StreamId read_identifier(const uint8_t*& data, const uint8_t* end) {
+    const auto* identifier = reinterpret_cast<const SegmentIdentifier*>(data);
+    data += checked_identifier_bytes(data, end);
+    if (identifier->header_.type_ == IdentifierType::STRING)
         return StringId(&identifier->data_[0], identifier->header_.size_);
-    case IdentifierType::NUMERIC:
-        data += SegmentIdentifierSize;
-        return NumericId(identifier->header_.size_);
-    default:
-        util::raise_rte("Unknown identifier type in read_identifier");
-    }
+    return NumericId(identifier->header_.size_);
 }
 
-inline void skip_identifier(const uint8_t*& data) {
-    auto* identifier = reinterpret_cast<const SegmentIdentifier*>(data);
-    switch (identifier->header_.type_) {
-    case IdentifierType::STRING:
-        data += SegmentIdentifierSize + identifier->header_.size_;
-        break;
-    case IdentifierType::NUMERIC:
-        data += SegmentIdentifierSize;
-        break;
-    default:
-        util::raise_rte("Unknown identifier type in skip_identifier");
-    }
-}
+inline void skip_identifier(const uint8_t*& data, const uint8_t* end) { data += checked_identifier_bytes(data, end); }
 
 } // namespace arcticdb

@@ -67,7 +67,10 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes
 
 HashedValue get_segment_hash(Segment& seg);
 
-SegmentDescriptorImpl read_segment_descriptor(const uint8_t*& data);
+SegmentDescriptorImpl read_segment_descriptor(const uint8_t*& data, const uint8_t* end);
+
+// Skips the V2 segment descriptor, stream identifier and descriptor fields, bounded by end.
+void skip_descriptor(const uint8_t*& data, const SegmentHeader& hdr, const uint8_t* end);
 
 } // namespace arcticdb
 

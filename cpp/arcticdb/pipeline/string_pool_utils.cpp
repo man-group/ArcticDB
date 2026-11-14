@@ -8,8 +8,13 @@
 
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 
 namespace arcticdb {
+void check_string_pool_for_column(const StringPool* string_pool, const Column& column) {
+    check_string_pool_present(string_pool != nullptr || !column_references_pooled_string(column));
+}
+
 size_t first_context_row(const pipelines::SliceAndKey& slice_and_key, size_t first_row_in_frame) {
     return slice_and_key.slice_.row_range.first - first_row_in_frame;
 }

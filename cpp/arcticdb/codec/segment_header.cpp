@@ -88,11 +88,29 @@ size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg) {
     return required;
 }
 
-void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) {
+void SegmentHeader::deserialize_from_bytes(const uint8_t* data, size_t header_bytes, bool copy_data) {
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            header_bytes >= sizeof(HeaderData),
+            "Corrupt segment: V2 header size {} is smaller than the header data {}",
+            header_bytes,
+            sizeof(HeaderData)
+    );
     memcpy(&data_, data, sizeof(HeaderData));
     data += sizeof(HeaderData);
     ChunkedBuffer fields_buffer;
     const auto fields_bytes = data_.field_buffer_.fields_bytes_;
+
+    // fields_bytes_ and offset_bytes_ come from the (possibly corrupt) header data. Validate that
+    // the regions they describe fit within the declared variable header before reading them, so a
+    // corrupt value raises instead of reading past the buffer or making a huge allocation.
+    const size_t consumed = sizeof(HeaderData) + static_cast<size_t>(fields_bytes) +
+                            static_cast<size_t>(data_.field_buffer_.offset_bytes_) + sizeof(offset_);
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            consumed <= header_bytes,
+            "Corrupt segment: V2 header fields ({} bytes) exceed the variable header size {}",
+            consumed,
+            header_bytes
+    );
 
     if (copy_data) {
         fields_buffer.ensure(fields_bytes);
@@ -109,6 +127,16 @@ void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) 
     auto* offsets = reinterpret_cast<const uint32_t*>(data);
     for (auto i = 0UL; i < offset_.size(); ++i)
         offset_[i] = *offsets++;
+    for (auto i = 0UL; i < offset_.size(); ++i) {
+        const auto field = FieldOffset(i);
+        codec::check<ErrorCode::E_DECODE_ERROR>(
+                !has_field(field) || offset_[i] < header_fields_.size(),
+                "Corrupt segment: header field {} has offset {} but only {} fields are stored",
+                offset_name(field),
+                offset_[i],
+                header_fields_.size()
+        );
+    }
 }
 
 size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg) {

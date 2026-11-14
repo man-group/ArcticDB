@@ -8,6 +8,10 @@
 
 #pragma once
 
+#include <arcticdb/entity/types.hpp>
+
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 
 namespace arcticdb {
@@ -21,7 +25,7 @@ class PortableEncodingConversion {
         auto pos = output;
         for (auto c = 0u; c < input_size; ++c) {
             *pos = *input++;
-            pos += UNICODE_WIDTH;
+            pos += entity::UNICODE_WIDTH;
         }
         return true;
     }

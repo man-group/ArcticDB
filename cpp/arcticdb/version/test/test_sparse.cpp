@@ -139,7 +139,7 @@ TEST(PythonStringHandler, DefaultInitializeRespectsStringType) {
 TEST(PythonStringHandler, PresentNullRespectsStringFormatAndEncoding) {
     using namespace arcticdb;
 
-    StringPool string_pool;
+    auto string_pool = std::make_shared<StringPool>();
     DecodePathData shared_data;
 
     auto check = [&](DataType type, PandasStringFormat format, bool expect_nan) {

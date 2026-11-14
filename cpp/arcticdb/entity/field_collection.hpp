@@ -200,6 +200,9 @@ class FieldCollection {
     [[nodiscard]] FieldCollection clone() const { return {buffer_.clone(), offsets_.clone(), shapes_.clone()}; }
 };
 
+// Raises E_DECODE_ERROR for a stored field whose type has invalid size bits. Call it once offsets are regenerated.
+void check_stored_field_types(const FieldCollection& fields);
+
 template<typename RangeType>
 FieldCollection fields_from_range(const RangeType& fields) {
     FieldCollection output;
