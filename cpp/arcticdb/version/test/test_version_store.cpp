@@ -1280,7 +1280,7 @@ TEST(DeleteTreesResponsiblyStats, LegacyLayoutSnapshotProtectsItsVersion) {
     ASSERT_EQ(stream::read_key_row(store->read_sync(RefKey{"legacy_snap", KeyType::SNAPSHOT_REF}).second, 0), k1);
 
     EXPECT_EQ(get_snapshotted_index_keys(store, {sym})[sym], std::unordered_set<AtomKey>{k1});
-    const auto data_keys = recurse_index_keys(store, std::vector{k1}, storage::ReadKeyOpts{});
+    const auto data_keys = recurse_index_keys_per_key(store, std::vector{k1}, storage::ReadKeyOpts{}).at(0).value();
     ASSERT_FALSE(data_keys.empty());
 
     pvs.delete_version(sym, 1);
