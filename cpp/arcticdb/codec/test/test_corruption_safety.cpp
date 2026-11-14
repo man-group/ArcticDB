@@ -313,6 +313,47 @@ TEST(CorruptionSafety, S3_FieldThatFitsAccepted) {
     });
 }
 
+namespace {
+// Refuses large allocations, so a decoded size that was not checked fails here with a non-decode error.
+struct SmallAllocationSink {
+    std::vector<uint8_t> data;
+    uint8_t* allocate_data(size_t bytes) {
+        util::check(bytes <= 1 << 20, "test sink refused {} bytes", bytes);
+        data.resize(bytes);
+        return data.data();
+    }
+    shape_t* allocate_shapes(size_t) { return nullptr; }
+    void advance_data(size_t) {}
+    void advance_shapes(size_t) {}
+    void set_allow_sparse(Sparsity) {}
+};
+} // namespace
+
+// A block's stored decoded size sizes the output allocation, so it must be within what its codec can expand to.
+TEST(CorruptionSafety, BlockDecodedSizeBeyondCodecExpansionRejected) {
+    for (const bool lz4 : {false, true}) {
+        SCOPED_TRACE(lz4 ? "lz4" : "passthrough");
+        EncodedFieldCollection coll;
+        auto& field = passthrough_field(coll, 64);
+        auto& block = const_cast<EncodedBlock&>(field.values(0));
+        if (lz4)
+            block.mutable_codec()->mutable_lz4();
+        // 64 stored bytes claiming to decode to 2 GiB
+        block.set_in_bytes(1U << 31);
+        std::vector<uint8_t> input(64, 0);
+        SmallAllocationSink sink;
+        std::optional<util::BitMagic> bv;
+        expect_corrupt(
+                [&] {
+                    (void)decode_ndarray(
+                            make_scalar_type(DataType::UINT8), field, input.data(), sink, bv, EncodingVersion::V2
+                    );
+                },
+                "decodes to"
+        );
+    }
+}
+
 // A stored block's is_shape flag can hold any byte; validate must reject one that is neither 0 nor 1.
 TEST(CorruptionSafety, BlockIsShapeByteOtherThanZeroOrOneRejected) {
     EncodedFieldCollection coll;
