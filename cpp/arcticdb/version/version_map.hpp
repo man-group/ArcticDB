@@ -111,6 +111,9 @@ class VersionMapImpl {
     static constexpr uint64_t DEFAULT_CLOCK_UNSYNC_TOLERANCE = ONE_MILLISECOND * 200;
     static constexpr uint64_t DEFAULT_RELOAD_INTERVAL = ONE_SECOND * 2;
     MapType map_;
+    // The id of the latest publish_entry for each symbol, to tell whether one happened during a reload
+    std::map<StreamId, uint64_t> publish_ids_;
+    uint64_t next_publish_id_ = 0;
     bool validate_ = false;
     bool log_changes_ = false;
     std::optional<timestamp> reload_interval_;
@@ -214,6 +217,7 @@ class VersionMapImpl {
     void flush() {
         std::lock_guard lock(map_mutex_);
         map_.clear();
+        publish_ids_.clear();
     }
 
     void load_via_iteration(
@@ -527,8 +531,9 @@ class VersionMapImpl {
                     e.what()
             );
         }
+        auto old_entry = *entry;
         if (!index_keys.empty()) {
-            auto new_entry = std::make_shared<VersionMapEntry>(*entry);
+            auto new_entry = std::make_shared<VersionMapEntry>(old_entry);
             new_entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
             auto new_version_id = index_keys[0].version_id();
             new_entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, new_entry);
@@ -537,7 +542,7 @@ class VersionMapImpl {
             publish_entry(stream_id, std::move(new_entry));
         }
         try {
-            remove_entry_version_keys(store, entry, stream_id);
+            remove_entry_version_keys(store, old_entry, stream_id);
         } catch (const storage::KeyNotFoundException& e) {
             log::version().debug(
                     "Failed to remove version keys for symbol {} in overwrite_symbol_tree, exception: {}",
@@ -909,7 +914,31 @@ class VersionMapImpl {
     // Replaces the cached entry rather than swapping into it, as other threads may hold the old one
     void publish_entry(const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry) {
         std::lock_guard lock(map_mutex_);
+        publish_entry_locked(stream_id, std::move(entry));
+    }
+
+    void publish_entry_locked(const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry) {
         map_.insert_or_assign(stream_id, std::move(entry));
+        publish_ids_.insert_or_assign(stream_id, ++next_publish_id_);
+    }
+
+    std::optional<uint64_t> latest_publish_id(const StreamId& stream_id) const {
+        std::lock_guard lock(map_mutex_);
+        if (auto it = publish_ids_.find(stream_id); it != publish_ids_.end())
+            return it->second;
+        return std::nullopt;
+    }
+
+    // Publishes a reloaded entry unless something else, such as a write, was published since the reload started
+    void publish_reloaded_entry(
+            const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry,
+            const std::optional<uint64_t>& publish_id_before_reload
+    ) {
+        std::lock_guard lock(map_mutex_);
+        const auto it = publish_ids_.find(stream_id);
+        const auto current = it == publish_ids_.end() ? std::nullopt : std::make_optional(it->second);
+        if (current == publish_id_before_reload)
+            publish_entry_locked(stream_id, std::move(entry));
     }
 
     // Forces the next lookup to reload from storage
@@ -958,6 +987,7 @@ class VersionMapImpl {
          * be much slower, though always consistent.
          */
 
+        const auto publish_id_before_reload = latest_publish_id(stream_id);
         auto entry = std::make_shared<VersionMapEntry>(stream_id);
         const auto clock_unsync_tolerance =
                 ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE);
@@ -969,7 +999,7 @@ class VersionMapImpl {
         if (validate_)
             entry->validate();
 
-        publish_entry(stream_id, entry);
+        publish_reloaded_entry(stream_id, entry, publish_id_before_reload);
         return entry;
     }
 

@@ -1618,13 +1618,13 @@ TEST_F(VersionMapStore, StressTestWrite) {
     GTEST_COUT << timer.display_all() << std::endl;
 }
 
-// Pauses the first storage operation of one type, on whichever thread makes it, until resume()
+// Pauses a storage operation of one type, the first after `calls_before_pause` others, until resume()
 class StoragePause {
   public:
-    explicit StoragePause(FailureType type) {
+    explicit StoragePause(FailureType type, size_t calls_before_pause = 0) : calls_before_pause_(calls_before_pause) {
         StorageFailureSimulator::reset();
         StorageFailureSimulator::instance()->configure({{type, {FailureAction("pause_once", [this](FailureType) {
-                                                             if (!paused_.exchange(true)) {
+                                                             if (calls_.fetch_add(1) == calls_before_pause_) {
                                                                  paused_promise_.set_value();
                                                                  resume_.wait();
                                                              }
@@ -1643,7 +1643,8 @@ class StoragePause {
     }
 
   private:
-    std::atomic<bool> paused_{false};
+    const size_t calls_before_pause_;
+    std::atomic<size_t> calls_{0};
     std::atomic<bool> resumed_{false};
     std::promise<void> paused_promise_;
     std::future<void> paused_future_ = paused_promise_.get_future();
@@ -1712,6 +1713,34 @@ TEST(VersionMap, WriteStaysCachedWhenReloadReplacesEntryMidWrite) {
         version_map->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, "test");
     pause.resume();
     writer.join();
+    ASSERT_TRUE(paused);
+
+    const auto latest = cached_entry(version_map, nullptr, id)->get_first_index(true).first;
+    ASSERT_TRUE(latest.has_value());
+    EXPECT_EQ(latest->version_id(), 3);
+}
+
+TEST(VersionMap, ReloadThatStartedBeforeAWriteDoesNotReplaceIt) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    StreamId id{"test"};
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    write_versions(store, version_map, id, 3);
+    // A fresh map that caches only the latest version
+    version_map = std::make_shared<VersionMap>();
+    version_map->check_reload(store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, "test");
+
+    // Load ALL, which the cached entry does not cover, and pause it after it has read the ref key. Meanwhile write
+    // a new version, so the reload's chain is older than the write
+    StoragePause pause(FailureType::READ, 1);
+    std::thread reloader([&] {
+        version_map->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, "reloader");
+    });
+    const bool paused = pause.wait_until_paused();
+    if (paused)
+        version_map->write_version(store, atom_key_with_version(id, 3, 3), std::nullopt);
+    pause.resume();
+    reloader.join();
     ASSERT_TRUE(paused);
 
     const auto latest = cached_entry(version_map, nullptr, id)->get_first_index(true).first;
