@@ -1710,24 +1710,26 @@ TEST(VersionMap, ReloadDoesNotChangeEntryHeldByAnotherThread) {
     EXPECT_EQ(reloaded->head_, expected_head);
 }
 
-TEST(VersionMap, WriteStaysCachedWhenReloadReplacesEntryMidWrite) {
+TEST(VersionMap, WriteStaysCachedWhenReloadOverlapsIt) {
     ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     StreamId id{"test"};
-    auto store = std::make_shared<InMemoryStore>();
-    auto version_map = map_caching_latest_of_three_versions(store, id);
+    // Pause the write at its first storage write, after it has taken the cached entry, or at its second, the ref key
+    // after the version key. Meanwhile load ALL, which the cached entry does not cover, so it is reloaded and replaced
+    for (size_t writes_before_pause : {0, 1}) {
+        SCOPED_TRACE(writes_before_pause);
+        auto store = std::make_shared<InMemoryStore>();
+        auto version_map = map_caching_latest_of_three_versions(store, id);
+        StoragePause pause(FailureType::WRITE, writes_before_pause);
+        std::thread writer([&] { version_map->write_version(store, atom_key_with_version(id, 3, 3), std::nullopt); });
+        const bool paused = pause.wait_until_paused();
+        if (paused)
+            version_map->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, "test");
+        pause.resume();
+        writer.join();
+        ASSERT_TRUE(paused);
 
-    // Pause the write in its first storage write, after it has taken the cached entry, and meanwhile load ALL,
-    // which the cached entry does not cover, so it is reloaded and replaced
-    StoragePause pause(FailureType::WRITE);
-    std::thread writer([&] { version_map->write_version(store, atom_key_with_version(id, 3, 3), std::nullopt); });
-    const bool paused = pause.wait_until_paused();
-    if (paused)
-        version_map->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, "test");
-    pause.resume();
-    writer.join();
-    ASSERT_TRUE(paused);
-
-    EXPECT_EQ(latest_cached_version(version_map, id), 3);
+        EXPECT_EQ(latest_cached_version(version_map, id), 3);
+    }
 }
 
 TEST(VersionMap, ReloadThatStartedBeforeAWriteDoesNotReplaceIt) {
@@ -1752,24 +1754,24 @@ TEST(VersionMap, ReloadThatStartedBeforeAWriteDoesNotReplaceIt) {
     EXPECT_EQ(latest_cached_version(version_map, id), 3);
 }
 
-TEST(VersionMap, ReloadBeforeAWritesRefKeyDoesNotReplaceTheWrite) {
+TEST(VersionMap, ReloadThatSpansAFlushIsNotCached) {
     ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     StreamId id{"test"};
     auto store = std::make_shared<InMemoryStore>();
-    auto version_map = map_caching_latest_of_three_versions(store, id);
+    write_versions(store, std::make_shared<VersionMap>(), id, 3);
+    auto version_map = std::make_shared<VersionMap>();
+    const LoadStrategy load_all{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
 
-    // Pause the write before it writes the ref key (after its version key), and meanwhile load ALL, which the cached
-    // entry does not cover, so the reload reads the old ref key
-    StoragePause pause(FailureType::WRITE, /*calls_before_pause=*/1);
-    std::thread writer([&] { version_map->write_version(store, atom_key_with_version(id, 3, 3), std::nullopt); });
+    StoragePause pause(FailureType::READ);
+    std::thread reloader([&] { version_map->check_reload(store, id, load_all, "reloader"); });
     const bool paused = pause.wait_until_paused();
     if (paused)
-        version_map->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, "test");
+        version_map->flush();
     pause.resume();
-    writer.join();
+    reloader.join();
     ASSERT_TRUE(paused);
 
-    EXPECT_EQ(latest_cached_version(version_map, id), 3);
+    EXPECT_FALSE(version_map->has_cached_entry(id, load_all));
 }
 
 } // namespace arcticdb

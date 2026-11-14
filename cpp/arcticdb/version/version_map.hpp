@@ -115,7 +115,8 @@ class VersionMapImpl {
     // pointers is not enough, as do_write changes the cached entry in place and publishes the same pointer.
     std::map<StreamId, uint64_t> publish_ids_;
     uint64_t next_publish_id_ = 0;
-    // The id of a symbol with no publish since the last flush, so a reload that spans a flush is not published
+    // Returned for symbols with no publish since the last flush. flush() bumps it, so a reload that started before a
+    // flush is not published.
     uint64_t flush_publish_id_ = 0;
     bool validate_ = false;
     bool log_changes_ = false;
@@ -254,9 +255,7 @@ class VersionMapImpl {
         auto entry = check_reload(store, key.id(), load_param, __FUNCTION__);
 
         do_write(store, key, entry, prevent_non_increasing_version_id);
-        write_symbol_ref(store, key, previous_key, entry->head_.value());
-        // Again now the ref key is written, so a reload that read the old one is not published
-        publish_entry(key.id(), entry);
+        write_ref_and_publish(store, key, previous_key, entry);
         if (validate_)
             entry->validate();
         if (log_changes_)
@@ -287,11 +286,7 @@ class VersionMapImpl {
             entry->validate();
 
         if (entry->head_) {
-            write_symbol_ref(
-                    store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), std::nullopt, entry->head_.value()
-            );
-            // Again now the ref key is written, so a reload that read the old one is not published
-            publish_entry(stream_id, entry);
+            write_ref_and_publish(store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), std::nullopt, entry);
         }
 
         return output;
@@ -323,11 +318,7 @@ class VersionMapImpl {
         }
 
         auto previous_index = do_write(store, key.version_id(), key.id(), std::span{keys_to_write}, entry);
-        write_symbol_ref(
-                store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), previous_index, entry->head_.value()
-        );
-        // Again now the ref key is written, so a reload that read the old one is not published
-        publish_entry(key.id(), entry);
+        write_ref_and_publish(store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), previous_index, entry);
 
         maybe_invalidate_cached_undeleted(*entry);
         if (log_changes_) {
@@ -648,7 +639,8 @@ class VersionMapImpl {
 
             write_to_entry(entry, key, atom_journal_key);
         }
-        // Callers pass the cached entry, which a concurrent reload may have replaced in the map without this write
+        // Callers pass the cached entry, which a concurrent reload may have replaced in the map without this write.
+        // Callers that then write the ref key publish again in write_ref_and_publish; this covers those that do not.
         publish_entry(stream_id, entry);
 
         auto previous_index = entry->get_second_undeleted_index();
@@ -662,9 +654,7 @@ class VersionMapImpl {
         static const bool should_log_individual_tombstones =
                 ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
         auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
-        write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
-        // Again now the ref key is written, so a reload that read the old one is not published
-        publish_entry(stream_id, entry);
+        write_ref_and_publish(store, tombstone_keys.front(), std::nullopt, entry);
         if (log_changes_) {
             if (should_log_individual_tombstones) {
                 for (const auto& key : tombstone_keys) {
@@ -956,6 +946,15 @@ class VersionMapImpl {
         std::lock_guard lock(map_mutex_);
         if (latest_publish_id_locked(stream_id) == publish_id_before_reload)
             publish_entry_locked(stream_id, std::move(entry));
+    }
+
+    // Publishes again after the ref key write, so a reload that read the old ref key is not published
+    void write_ref_and_publish(
+            const std::shared_ptr<Store>& store, const AtomKey& latest_index,
+            const std::optional<AtomKey>& previous_key, const std::shared_ptr<VersionMapEntry>& entry
+    ) {
+        write_symbol_ref(store, latest_index, previous_key, entry->head_.value());
+        publish_entry(entry->stream_id_, entry);
     }
 
     // Forces the next lookup to reload from storage
