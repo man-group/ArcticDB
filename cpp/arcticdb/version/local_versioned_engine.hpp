@@ -55,7 +55,21 @@ struct DeleteTreesStats {
     size_t column_stats_keys_deleted = 0;
     size_t data_keys_considered = 0;
     size_t data_keys_deleted = 0;
+    // Snapshotted index keys read to protect their data, and those the lineage window showed needn't be
+    size_t protected_index_keys_read = 0;
+    size_t protected_index_keys_skipped = 0;
 };
+
+/**
+ * Data created by version v can only be in a snapshotted index at version s if v <= s <= U, where U is the lowest cut
+ * version above v: a version that was undeleted before the delete, and whose data was read and does not hold the data.
+ * Versions build on the latest undeleted version, so a version above U builds on U or on a later version.
+ * @return For each protected version, whether it is in the window of any candidate version.
+ */
+std::vector<bool> protected_versions_to_read(
+        std::vector<VersionId> candidate_versions, std::vector<VersionId> cut_versions,
+        const std::vector<VersionId>& protected_versions
+);
 
 /**
  * Deletes the index keys and the data keys only they reference.
