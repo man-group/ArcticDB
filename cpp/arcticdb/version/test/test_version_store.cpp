@@ -22,6 +22,7 @@
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/util/key_utils.hpp>
+#include <arcticdb/version/test/snapshot_test_utils.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 
 #include <chrono>
@@ -1219,6 +1220,75 @@ TEST(DeleteTreesResponsiblyStats, CountsKeysProtectedBySnapshots) {
     EXPECT_EQ(stats.column_stats_keys_deleted, 2u);
     EXPECT_EQ(stats.data_keys_considered, 2u);
     EXPECT_EQ(stats.data_keys_deleted, 2u);
+}
+
+TEST(DeleteTreesResponsiblyStats, SnapshottedIndexKeysProtectKeysAndTheirData) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture("dtr_stats_snapshotted_keys");
+
+    SnapshottedIndexKeys snapshotted_keys;
+    snapshotted_keys[f.sym].insert(f.k1);
+
+    version_store::PreDeleteChecks checks{true, false, false, false, {}};
+    auto stats = version_store::delete_trees_responsibly(
+                         f.store, f.version_map, {f.k0, f.k2}, snapshotted_keys, checks, /*dry_run=*/false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 2u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
+    EXPECT_EQ(stats.index_keys_deleted, 2u);
+    EXPECT_FALSE(f.store->key_exists(f.k0).get());
+    EXPECT_TRUE(f.store->key_exists(f.k1).get());
+    EXPECT_FALSE(f.store->key_exists(f.k2).get());
+}
+
+TEST(DeleteTreesResponsiblyStats, MasterSnapshotMapIgnoresSnapshotBeingDeleted) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture("dtr_stats_snapshot_being_deleted");
+
+    // k0 is only in the snapshot being deleted, k1 is also in another snapshot, k2 is only in the other snapshot
+    MasterSnapshotMap snap_map;
+    snap_map[f.sym][f.k0].insert(SnapshotId{"deleted"});
+    snap_map[f.sym][f.k1].insert(SnapshotId{"deleted"});
+    snap_map[f.sym][f.k1].insert(SnapshotId{"other"});
+    snap_map[f.sym][f.k2].insert(SnapshotId{"other"});
+
+    version_store::PreDeleteChecks checks{true, false, false, false, {}};
+    auto stats = version_store::delete_trees_responsibly(
+                         f.store, f.version_map, {f.k0, f.k1}, snap_map, SnapshotId{"deleted"}, checks, false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 2u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 1u);
+    EXPECT_EQ(stats.index_keys_deleted, 1u);
+    EXPECT_FALSE(f.store->key_exists(f.k0).get());
+    EXPECT_TRUE(f.store->key_exists(f.k1).get());
+    EXPECT_TRUE(f.store->key_exists(f.k2).get());
+}
+
+TEST(DeleteTreesResponsiblyStats, LegacyLayoutSnapshotProtectsItsVersion) {
+    using namespace arcticdb;
+    auto pvs = get_test_engine<version_store::PythonVersionStore>({}, "dtr_legacy_layout_snapshot");
+    auto store = pvs._test_get_store();
+    const StreamId sym{"legacy_layout_sym"};
+    auto k0 = write_version_frame(sym, 0, pvs, 5, true);
+    auto k1 = write_version_frame(sym, 1, pvs, 5, true, 0, k0);
+    write_version_frame(sym, 2, pvs, 5, true, 0, k1);
+    write_legacy_layout_ref_snapshot(store, "legacy_snap", {k1});
+    ASSERT_EQ(stream::read_key_row(store->read_sync(RefKey{"legacy_snap", KeyType::SNAPSHOT_REF}).second, 0), k1);
+
+    EXPECT_EQ(get_snapshotted_index_keys(store, {sym})[sym], std::unordered_set<AtomKey>{k1});
+    const auto data_keys = recurse_index_keys(store, std::vector{k1}, storage::ReadKeyOpts{});
+    ASSERT_FALSE(data_keys.empty());
+
+    pvs.delete_version(sym, 1);
+
+    EXPECT_TRUE(store->key_exists(k1).get());
+    for (const auto& key : data_keys) {
+        EXPECT_TRUE(store->key_exists(key).get()) << fmt::format("{}", key);
+    }
 }
 
 TEST(DeleteTreesResponsiblyStats, DryRunReportsCountsButDoesNotDelete) {

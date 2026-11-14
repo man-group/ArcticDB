@@ -303,6 +303,70 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
     return res;
 }
 
+/* The keys the segment of index_key references: the index and data keys of a multi-index key, or the data keys of an
+ * index key. */
+inline std::vector<AtomKey> keys_in_index_segment(
+        const std::shared_ptr<stream::StreamSource>& store, const IndexTypeKey& index_key, SegmentInMemory&& segment
+) {
+    std::vector<AtomKey> res;
+    if (index_key.type() == KeyType::MULTI_KEY) {
+        return recurse_segment(store, std::move(segment), std::nullopt).extract();
+    }
+    KeySegment key_segment(std::move(segment), SymbolStructure::SAME);
+    auto data_keys = key_segment.materialise();
+    util::variant_match(
+            data_keys,
+            [&res](std::vector<AtomKey>& keys) { res = std::move(keys); },
+            [&res, &index_key](std::vector<AtomKeyPacked>& keys) {
+                res.reserve(keys.size());
+                for (const auto& key : keys) {
+                    res.emplace_back(key.to_atom_key(index_key.id()));
+                }
+            }
+    );
+    return res;
+}
+
+/* Reads the [multi-]index keys in parallel and gives the keys each references, in the order of keys. A key that could
+ * not be read because it is missing gives std::nullopt, if opts.ignores_missing_key_. Blocks the calling thread: from a
+ * CPU pool thread this waits on IO pool work, which is safe as the pools are separate (verified by
+ * test_batch_write_with_pruning and test_batch_delete_symbols with single-threaded config). */
+template<typename KeyContainer>
+requires std::is_base_of_v<AtomKey, typename KeyContainer::value_type>
+inline std::vector<std::optional<std::vector<AtomKey>>> recurse_index_keys_per_key(
+        const std::shared_ptr<stream::StreamSource>& store, const KeyContainer& keys, storage::ReadKeyOpts opts
+) {
+    std::vector<folly::Future<std::vector<AtomKey>>> futures;
+    futures.reserve(keys.size());
+    for (const auto& index_key : keys) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                index_key.type() == KeyType::TABLE_INDEX || index_key.type() == KeyType::MULTI_KEY,
+                "Expected index or multi-index key, received {}",
+                index_key.type()
+        );
+        futures.push_back(store->read(index_key, opts).thenValue([store, index_key](auto&& key_seg) {
+            return keys_in_index_segment(store, index_key, std::move(key_seg.second));
+        }));
+    }
+    auto tries = folly::collectAll(futures).get();
+    std::vector<std::optional<std::vector<AtomKey>>> res;
+    res.reserve(tries.size());
+    for (auto& try_result : tries) {
+        try {
+            res.emplace_back(std::move(try_result).value());
+        } catch (storage::KeyNotFoundException& e) {
+            if (!opts.ignores_missing_key_) {
+                throw;
+            }
+            if (!opts.dont_warn_about_missing_key) {
+                log::version().info("Missing key while recursing index key: {}", e.what());
+            }
+            res.emplace_back(std::nullopt);
+        }
+    }
+    return res;
+}
+
 inline VersionId get_next_version_from_key(const AtomKey& prev) {
     auto version = prev.version_id();
     return ++version;

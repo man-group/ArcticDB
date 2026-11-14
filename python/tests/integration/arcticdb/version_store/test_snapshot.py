@@ -241,7 +241,6 @@ def test_read_after_delete_with_snap(basic_store):
         basic_store.read("random")
 
 
-@pytest.mark.xfail(reason="Deleting a version loses data shared with a non-adjacent snapshotted version (13461808558)")
 def test_delete_keeps_data_shared_with_non_adjacent_snapshotted_version(lmdb_version_store_tombstone):
     lib = lmdb_version_store_tombstone
     lib.write("sym", pd.DataFrame({"x": [0, 1, 2]}))
