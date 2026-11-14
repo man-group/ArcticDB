@@ -331,13 +331,15 @@ struct SmallAllocationSink {
 
 // A block's stored decoded size sizes the output allocation, so it must be within what its codec can expand to.
 TEST(CorruptionSafety, BlockDecodedSizeBeyondCodecExpansionRejected) {
-    for (const bool lz4 : {false, true}) {
-        SCOPED_TRACE(lz4 ? "lz4" : "passthrough");
+    for (const auto codec : {Codec::PASS, Codec::LZ4, Codec::ZSTD}) {
+        SCOPED_TRACE(codec_type_to_string(codec));
         EncodedFieldCollection coll;
         auto& field = passthrough_field(coll, 64);
         auto& block = const_cast<EncodedBlock&>(field.values(0));
-        if (lz4)
+        if (codec == Codec::LZ4)
             block.mutable_codec()->mutable_lz4();
+        else if (codec == Codec::ZSTD)
+            block.mutable_codec()->mutable_zstd();
         // 64 stored bytes claiming to decode to 2 GiB
         block.set_in_bytes(1U << 31);
         std::vector<uint8_t> input(64, 0);

@@ -67,12 +67,22 @@ void check_block_decoded_size(const BlockType& block) {
         }
     }
     constexpr uint64_t slack = 64; // fixed per-block overhead of a tiny compressed block
+    const uint64_t decoded_bytes = block.in_bytes();
+    const uint64_t stored_bytes = block.out_bytes();
     codec::check<ErrorCode::E_DECODE_ERROR>(
-            uint64_t{block.in_bytes()} <= uint64_t{block.out_bytes()} * max_expansion + slack,
+            decoded_bytes <= stored_bytes * max_expansion + slack,
             "Corrupt segment: block of {} stored bytes decodes to {} bytes",
-            block.out_bytes(),
-            block.in_bytes()
+            stored_bytes,
+            decoded_bytes
     );
+}
+
+template<typename NDArrayEncodedFieldType>
+void check_field_decoded_sizes(const NDArrayEncodedFieldType& field) {
+    for (const auto& block : field.shapes())
+        check_block_decoded_size(block);
+    for (const auto& block : field.values())
+        check_block_decoded_size(block);
 }
 
 template<typename FieldType, class DataSink>
@@ -98,10 +108,7 @@ std::size_t decode_ndarray(
         using TD = std::decay_t<decltype(type_desc_tag)>;
         using T = typename TD::DataTypeTag::raw_type;
 
-        for (const auto& block : field.shapes())
-            check_block_decoded_size(block);
-        for (const auto& block : field.values())
-            check_block_decoded_size(block);
+        check_field_decoded_sizes(field);
         const auto data_size = encoding_sizes::data_uncompressed_size(field);
         const bool is_empty_array = (data_size == 0) && type_desc_tag.dimension() > Dimension::Dim0;
         const bool is_fully_sparse = (data_size == 0) && field.sparse_map_bytes() > 0;
