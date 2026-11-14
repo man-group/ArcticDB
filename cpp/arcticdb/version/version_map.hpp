@@ -111,6 +111,13 @@ class VersionMapImpl {
     static constexpr uint64_t DEFAULT_CLOCK_UNSYNC_TOLERANCE = ONE_MILLISECOND * 200;
     static constexpr uint64_t DEFAULT_RELOAD_INTERVAL = ONE_SECOND * 2;
     MapType map_;
+    // Bumped on every publish, so a reload can tell whether the cached entry changed while it read storage. Comparing
+    // pointers is not enough, as do_write changes the cached entry in place and publishes the same pointer.
+    std::map<StreamId, uint64_t> publish_ids_;
+    uint64_t next_publish_id_ = 0;
+    // Returned for symbols with no publish since the last flush. flush() bumps it, so a reload that started before a
+    // flush is not published.
+    uint64_t flush_publish_id_ = 0;
     bool validate_ = false;
     bool log_changes_ = false;
     std::optional<timestamp> reload_interval_;
@@ -214,6 +221,8 @@ class VersionMapImpl {
     void flush() {
         std::lock_guard lock(map_mutex_);
         map_.clear();
+        publish_ids_.clear();
+        flush_publish_id_ = ++next_publish_id_;
     }
 
     void load_via_iteration(
@@ -246,7 +255,7 @@ class VersionMapImpl {
         auto entry = check_reload(store, key.id(), load_param, __FUNCTION__);
 
         do_write(store, key, entry, prevent_non_increasing_version_id);
-        write_symbol_ref(store, key, previous_key, entry->head_.value());
+        write_ref_and_publish(store, key, previous_key, entry);
         if (validate_)
             entry->validate();
         if (log_changes_)
@@ -276,10 +285,9 @@ class VersionMapImpl {
         if (validate_)
             entry->validate();
 
-        if (entry->head_)
-            write_symbol_ref(
-                    store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), std::nullopt, entry->head_.value()
-            );
+        if (entry->head_) {
+            write_ref_and_publish(store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), std::nullopt, entry);
+        }
 
         return output;
     }
@@ -310,9 +318,7 @@ class VersionMapImpl {
         }
 
         auto previous_index = do_write(store, key.version_id(), key.id(), std::span{keys_to_write}, entry);
-        write_symbol_ref(
-                store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), previous_index, entry->head_.value()
-        );
+        write_ref_and_publish(store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), previous_index, entry);
 
         maybe_invalidate_cached_undeleted(*entry);
         if (log_changes_) {
@@ -407,7 +413,7 @@ class VersionMapImpl {
         if (validate_)
             new_entry->validate();
 
-        std::swap(*entry, *new_entry);
+        publish_entry(stream_id, std::move(new_entry));
     }
 
     VariantKey journal_key(
@@ -508,7 +514,7 @@ class VersionMapImpl {
         if (validate_)
             new_entry->validate();
 
-        std::swap(*entry, *new_entry);
+        publish_entry(stream_id, std::move(new_entry));
     }
 
     void overwrite_symbol_tree(
@@ -527,13 +533,16 @@ class VersionMapImpl {
                     e.what()
             );
         }
+        // A snapshot, as a write holding the cached entry may still change it
         auto old_entry = *entry;
         if (!index_keys.empty()) {
-            entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
+            auto new_entry = std::make_shared<VersionMapEntry>(old_entry);
+            new_entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
             auto new_version_id = index_keys[0].version_id();
-            entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
+            new_entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, new_entry);
             if (validate_)
-                entry->validate();
+                new_entry->validate();
+            publish_entry(stream_id, std::move(new_entry));
         }
         try {
             remove_entry_version_keys(store, old_entry, stream_id);
@@ -630,6 +639,9 @@ class VersionMapImpl {
 
             write_to_entry(entry, key, atom_journal_key);
         }
+        // Callers pass the cached entry, which a concurrent reload may have replaced in the map without this write.
+        // Callers that then write the ref key publish again in write_ref_and_publish; this covers those that do not.
+        publish_entry(stream_id, entry);
 
         auto previous_index = entry->get_second_undeleted_index();
         return previous_index;
@@ -642,7 +654,7 @@ class VersionMapImpl {
         static const bool should_log_individual_tombstones =
                 ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
         auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
-        write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
+        write_ref_and_publish(store, tombstone_keys.front(), std::nullopt, entry);
         if (log_changes_) {
             if (should_log_individual_tombstones) {
                 for (const auto& key : tombstone_keys) {
@@ -729,8 +741,8 @@ class VersionMapImpl {
         util::check(requested_load_type < LoadType::UNKNOWN, "Unexpected load type requested {}", requested_load_type);
 
         requested_load_strategy.validate();
-        MapType::const_iterator entry_it;
-        if (!find_entry(entry_it, stream_id)) {
+        const auto entry = find_entry(stream_id);
+        if (!entry) {
             return false;
         }
 
@@ -738,7 +750,6 @@ class VersionMapImpl {
                 ConfigsMap::instance()->get_int("VersionMap.ReloadInterval", DEFAULT_RELOAD_INTERVAL)
         );
 
-        const auto& entry = entry_it->second;
         if (const timestamp cache_timing = now() - entry->last_reload_time_; cache_timing > reload_interval) {
             ARCTICDB_DEBUG(
                     log::version(),
@@ -845,14 +856,13 @@ class VersionMapImpl {
             entry->validate();
     }
 
-    bool find_entry(MapType::const_iterator& entry, const StreamId& stream_id) const {
+    std::shared_ptr<VersionMapEntry> find_entry(const StreamId& stream_id) const {
         std::lock_guard lock(map_mutex_);
-        entry = map_.find(stream_id);
-        if (entry == map_.cend()) {
-            ARCTICDB_DEBUG(log::version(), "Did not find cached entry for stream id {}", stream_id);
-            return false;
-        }
-        return true;
+        if (auto it = map_.find(stream_id); it != map_.cend())
+            return it->second;
+
+        ARCTICDB_DEBUG(log::version(), "Did not find cached entry for stream id {}", stream_id);
+        return nullptr;
     }
 
     bool inline has_loaded_earliest_version(const VersionMapEntry& entry, const LoadStrategy& requested_load_strategy)
@@ -897,12 +907,59 @@ class VersionMapImpl {
         return false;
     }
 
-    std::shared_ptr<VersionMapEntry>& get_entry(const StreamId& stream_id) {
+    std::shared_ptr<VersionMapEntry> get_entry(const StreamId& stream_id) {
         std::lock_guard lock(map_mutex_);
         if (auto result = map_.find(stream_id); result != std::end(map_))
             return result->second;
 
         return map_.try_emplace(stream_id, std::make_shared<VersionMapEntry>(stream_id)).first->second;
+    }
+
+    // Replaces the cached entry rather than swapping into it, as other threads may hold the old one
+    void publish_entry(const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry) {
+        std::lock_guard lock(map_mutex_);
+        publish_entry_locked(stream_id, std::move(entry));
+    }
+
+    // Caller holds map_mutex_
+    void publish_entry_locked(const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry) {
+        map_.insert_or_assign(stream_id, std::move(entry));
+        publish_ids_.insert_or_assign(stream_id, ++next_publish_id_);
+    }
+
+    uint64_t latest_publish_id(const StreamId& stream_id) const {
+        std::lock_guard lock(map_mutex_);
+        return latest_publish_id_locked(stream_id);
+    }
+
+    // Caller holds map_mutex_
+    uint64_t latest_publish_id_locked(const StreamId& stream_id) const {
+        if (auto it = publish_ids_.find(stream_id); it != publish_ids_.end())
+            return it->second;
+        return flush_publish_id_;
+    }
+
+    // Publishes a reloaded entry unless something else, such as a write, was published since the reload started
+    void publish_reloaded_entry(
+            const StreamId& stream_id, std::shared_ptr<VersionMapEntry> entry, uint64_t publish_id_before_reload
+    ) {
+        std::lock_guard lock(map_mutex_);
+        if (latest_publish_id_locked(stream_id) == publish_id_before_reload)
+            publish_entry_locked(stream_id, std::move(entry));
+    }
+
+    // Publishes again after the ref key write, so a reload that read the old ref key is not published
+    void write_ref_and_publish(
+            const std::shared_ptr<Store>& store, const AtomKey& latest_index,
+            const std::optional<AtomKey>& previous_key, const std::shared_ptr<VersionMapEntry>& entry
+    ) {
+        write_symbol_ref(store, latest_index, previous_key, entry->head_.value());
+        publish_entry(entry->stream_id_, entry);
+    }
+
+    // Forces the next lookup to reload from storage
+    void invalidate_cached_entry(const StreamId& stream_id) {
+        publish_entry(stream_id, std::make_shared<VersionMapEntry>(stream_id));
     }
 
     AtomKey write_entry_to_storage(
@@ -946,20 +1003,21 @@ class VersionMapImpl {
          * be much slower, though always consistent.
          */
 
-        auto entry = get_entry(stream_id);
-        entry->clear();
+        const auto publish_id_before_reload = latest_publish_id(stream_id);
+        auto entry = std::make_shared<VersionMapEntry>(stream_id);
         const auto clock_unsync_tolerance =
                 ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE);
         entry->last_reload_time_ = Clock::nanos_since_epoch() - clock_unsync_tolerance;
 
-        auto temp = std::make_shared<VersionMapEntry>(*entry);
-        load_via_ref_key(store, stream_id, load_strategy, temp);
-        std::swap(*entry, *temp);
+        load_via_ref_key(std::move(store), stream_id, load_strategy, entry);
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
         if (validate_)
             entry->validate();
 
+        // If this is not published, a newer entry is cached. The caller still gets the entry it asked for: a writer
+        // would only be handed a stale one by a concurrent write to the same symbol, which is not supported.
+        publish_reloaded_entry(stream_id, entry, publish_id_before_reload);
         return entry;
     }
 
@@ -1045,8 +1103,8 @@ class VersionMapImpl {
 
     void scan_and_rewrite(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
         log::version().warn("Version map scanning and rewriting  versions for stream {}", stream_id);
-        auto entry = get_entry(stream_id);
-        entry->clear();
+        invalidate_cached_entry(stream_id);
+        auto entry = std::make_shared<VersionMapEntry>(stream_id);
         load_via_iteration(store, stream_id, entry, false);
         remove_duplicate_index_keys(entry);
         rewrite_entry(store, stream_id, entry);
@@ -1054,13 +1112,11 @@ class VersionMapImpl {
 
     void remove_and_rewrite_version_keys(std::shared_ptr<Store> store, const StreamId& stream_id) {
         log::version().warn("Rewriting all index keys for {}", stream_id);
-        auto entry = get_entry(stream_id);
-        auto old_entry = entry;
-        entry->clear();
+        invalidate_cached_entry(stream_id);
+        auto entry = std::make_shared<VersionMapEntry>(stream_id);
         load_via_iteration(store, stream_id, entry, true);
         remove_duplicate_index_keys(entry);
         rewrite_entry(store, stream_id, entry);
-        remove_entry_version_keys(store, old_entry, stream_id);
     }
 
     void fix_ref_key(std::shared_ptr<Store> store, const StreamId& stream_id) {
@@ -1112,8 +1168,8 @@ class VersionMapImpl {
     }
 
     void recover_deleted(std::shared_ptr<Store> store, const StreamId& stream_id) {
-        auto& entry = get_entry(stream_id);
-        entry->clear();
+        invalidate_cached_entry(stream_id);
+        auto entry = std::make_shared<VersionMapEntry>(stream_id);
         load_via_iteration(store, stream_id, entry);
 
         auto missing_versions = find_deleted_version_keys_for_entry(store, stream_id, entry);
