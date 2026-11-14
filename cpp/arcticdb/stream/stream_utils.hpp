@@ -156,14 +156,19 @@ inline entity::AtomKey read_key_row_impl(const SegmentInMemory& seg, ssize_t i) 
     return k;
 }
 
-inline entity::AtomKey read_key_row(const SegmentInMemory& seg, ssize_t i) {
+// Whether the key rows of seg use pipelines::index::LegacyFields rather than pipelines::index::Fields
+inline bool has_legacy_key_row_layout(const SegmentInMemory& seg) {
     // TODO remove backwards compat after a decent interval
     // We differentiate between new and legacy fields based on the column with position 4:
     // 4 = Fields::creation_ts = LegacyFields::index_type
     // where creation_ts is 8 bytes but index_type is a single byte
     constexpr auto pos = static_cast<uint32_t>(pipelines::index::Fields::creation_ts);
     static_assert(pos == static_cast<uint32_t>(pipelines::index::LegacyFields::index_type));
-    if (ARCTICDB_LIKELY(get_type_size(seg.column(pos).type().data_type()) == 8)) {
+    return get_type_size(seg.column(pos).type().data_type()) != 8;
+}
+
+inline entity::AtomKey read_key_row(const SegmentInMemory& seg, ssize_t i) {
+    if (ARCTICDB_LIKELY(!has_legacy_key_row_layout(seg))) {
         auto k = read_key_row_impl<pipelines::index::Fields>(seg, i);
         ARCTICDB_DEBUG(log::storage(), "Read key from row '{}: {}'", k.type(), k.view());
         return k;
@@ -224,11 +229,11 @@ inline auto generate_segments_from_keys(
            window(prefetch_window) | move | map([opts](auto&& key_seg) {
                try {
                    return std::make_optional(std::forward<decltype(key_seg)>(key_seg));
-               } catch (storage::KeyNotFoundException& e) {
+               } catch (const storage::KeyNotFoundException&) {
                    if (opts.ignores_missing_key_) {
                        return std::optional<std::pair<entity::VariantKey, SegmentInMemory>>();
                    }
-                   throw storage::KeyNotFoundException(std::move(e.keys()));
+                   throw;
                }
            }) |
            filter() // By default removes falsy

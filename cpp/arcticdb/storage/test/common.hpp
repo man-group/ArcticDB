@@ -56,6 +56,13 @@ inline std::string read_in_store(
     return std::get<StringId>(result.atom_key().id());
 }
 
+inline std::string async_read_in_store(
+        Storage& store, const std::string& symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA
+) {
+    auto result = store.async_api()->async_read(get_test_key(symbol, key_type), ReadKeyOpts{}).get();
+    return std::get<StringId>(result.atom_key().id());
+}
+
 inline void remove_in_store(
         Storage& store, const std::vector<std::string>& symbols, entity::KeyType key_type = entity::KeyType::TABLE_DATA
 ) {

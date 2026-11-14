@@ -330,6 +330,42 @@ TEST_F(S3StorageFixture, test_read) {
     );
 }
 
+TEST_F(S3StorageFixture, test_async_read) {
+    write_in_store(store, "symbol");
+
+    ASSERT_EQ(async_read_in_store(store, "symbol"), "symbol");
+    ASSERT_THROW(
+            async_read_in_store(
+                    store,
+                    S3ClientTestWrapper::get_failure_trigger(
+                            "symbol", StorageOperation::READ, Aws::S3::S3Errors::THROTTLING, false
+                    )
+            ),
+            UnexpectedS3ErrorException
+    );
+    // Like the sync read, a missing bucket reads as a missing key
+    ASSERT_THROW(
+            async_read_in_store(
+                    store,
+                    S3ClientTestWrapper::get_failure_trigger(
+                            "symbol", StorageOperation::READ, Aws::S3::S3Errors::NO_SUCH_BUCKET, false
+                    )
+            ),
+            KeyNotFoundException
+    );
+}
+
+TEST_F(S3StorageFixture, test_async_read_missing_key_in_exception) {
+    try {
+        async_read_in_store(store, "snap-not-present", KeyType::SNAPSHOT_REF);
+        FAIL();
+    } catch (KeyNotFoundException& e) {
+        auto keys = e.keys();
+        ASSERT_EQ(keys.size(), 1);
+        ASSERT_EQ(variant_key_id(keys.at(0)), StreamId{"snap-not-present"});
+    }
+}
+
 TEST_P(S3AndNfsStorageFixture, test_read_missing_key_in_exception) {
     auto s = get_storage();
     auto& store = *s;
