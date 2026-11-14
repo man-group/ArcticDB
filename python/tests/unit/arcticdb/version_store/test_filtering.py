@@ -115,6 +115,11 @@ _UNCONVERTIBLE_VALUE = (TypeError, r"Value\(\): incompatible function arguments"
             _UNCONVERTIBLE_VALUE,
             id="ternary_unconvertible_left_infinite_condition",
         ),
+        pytest.param(
+            lambda q: q.apply("new", where(q["i"] == np.inf, q["i"], q["i"] + object())),
+            _INFINITE_VALUE,
+            id="ternary_infinite_condition_unconvertible_right",
+        ),
     ],
 )
 def test_query_error_order(lmdb_version_store_v1, build_query, expected):

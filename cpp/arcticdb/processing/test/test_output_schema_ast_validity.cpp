@@ -540,3 +540,23 @@ TEST_F(AstTypeCheckErrorOrderTest, Unary) {
             node(node(value_set(), col("missing"), OperationType::ADD), OperationType::ABS), "Unexpected value set"
     );
 }
+
+TEST_F(AstParsingOutputTypesTest, FilterClausePlansMemoizationOnceForItsRoot) {
+    // Two structurally equal copies of the same comparison, so the plan memoizes one group
+    ec.root_ = node(bitset_node(), bitset_node(), OperationType::AND);
+    FilterClause filter_clause{{"int32", "uint8"}, ec, {}};
+    const auto& plan = filter_clause.expression_context_->memo_plan_;
+    ASSERT_TRUE(plan);
+    ASSERT_EQ(plan->root, ec.root_);
+    ASSERT_EQ(plan->reuses.size(), 1);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectClausePlansMemoizationOnceForItsRoot) {
+    auto sum = [] { return node(col("int32"), col("uint8"), OperationType::ADD); };
+    ec.root_ = node(sum(), sum(), OperationType::MUL);
+    ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
+    const auto& plan = project_clause.expression_context_->memo_plan_;
+    ASSERT_TRUE(plan);
+    ASSERT_EQ(plan->root, ec.root_);
+    ASSERT_EQ(plan->reuses.size(), 1);
+}

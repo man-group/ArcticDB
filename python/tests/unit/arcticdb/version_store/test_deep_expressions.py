@@ -141,6 +141,8 @@ def _deep_filter(q, kind):
     elif kind == "shared_ternary":
         for _ in range(12):
             e = where(q["b"], e, e)
+    else:
+        raise ValueError(kind)
     return q[e]
 
 
@@ -166,3 +168,48 @@ def test_shared_filter_on_a_column_missing_from_some_segments(lmdb_version_store
     lib.append("sym", pd.DataFrame({"b": [False] * 6}, index=index[6:]))
     received = lib.read("sym", query_builder=_deep_filter(QueryBuilder(), "shared_filter")).data
     assert_frame_equal(received, with_column[with_column["i"] > 3])
+
+
+def test_repeated_shared_projection_with_nans_over_many_segments(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    values = np.arange(20, dtype=np.float64)
+    values[::3] = np.nan
+    df = pd.DataFrame({"f": values}, index=pd.date_range("2026-01-01", periods=20))
+    lib.write("sym", df)
+    q = QueryBuilder()
+
+    def doubled(times):
+        e = q["f"]
+        for _ in range(times):
+            e = e + e
+        return e
+
+    # Two structurally equal copies built separately, so the second reuses the first's result
+    q = q.apply("new", doubled(12) + doubled(12))
+    received = lib.read("sym", query_builder=q).data
+    expected = df.assign(new=df["f"] * 2**13)
+    assert_frame_equal(received, expected)
+
+
+def test_repeated_string_sub_expression_over_many_segments(lmdb_version_store_tiny_segment_dynamic_strings):
+    lib = lmdb_version_store_tiny_segment_dynamic_strings
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {
+            "s": rng.choice(["x", "y", "z"], 20).astype(object),
+            "t": rng.choice(["x", "y", "z"], 20).astype(object),
+            "b": rng.random(20) < 0.5,
+            "c": rng.random(20) < 0.5,
+        },
+        index=pd.date_range("2026-01-01", periods=20),
+    )
+    lib.write("sym", df)
+    q = QueryBuilder()
+
+    def pick():
+        return where(q["b"], q["s"], q["t"])
+
+    # Two structurally equal copies producing a string column, at different operand positions
+    q = q.apply("picked", where(q["c"], pick(), pick()))
+    received = lib.read("sym", query_builder=q).data
+    assert_frame_equal(received, df.assign(picked=np.where(df["b"], df["s"], df["t"])))

@@ -165,6 +165,7 @@ struct FilterClause {
                 expression_context_->root_ && expression_context_->root_->is_operation(),
                 "FilterClause AST would produce a column, not a bitset"
         );
+        expression_context_->plan_memoization();
         clause_info_.input_columns_ = std::move(input_columns);
     }
 
@@ -225,6 +226,7 @@ struct ProjectClause {
                         (expression_context_->root_->is_operation() || expression_context_->root_->is_value()),
                 "ProjectClause AST would not produce a column"
         );
+        expression_context_->plan_memoization();
         clause_info_.input_columns_ = std::move(input_columns);
     }
 

@@ -161,6 +161,17 @@ inline std::array<const ExpressionNode*, 3> operands_in_push_order(const Express
 // Number of parent evaluations that need each node's result, counting a node used twice by a parent twice
 PendingUses count_uses(const ExpressionNode& root);
 
+// Which results ExpressionNode::compute keeps for structurally equal copies of a sub-expression: the group of equal
+// nodes each memoized node belongs to, and for each group the number of its nodes that will reuse the result.
+struct MemoPlan {
+    // The expression planned, kept alive so that the plan's pointers stay valid and are not mistaken for another's
+    std::shared_ptr<const ExpressionNode> root;
+    ankerl::unordered_dense::map<const ExpressionNode*, const ExpressionNode*> group_of;
+    ankerl::unordered_dense::map<const ExpressionNode*, size_t> reuses;
+};
+
+MemoPlan plan_memoization(const ExpressionNode& root);
+
 // Frees each operand's result once no other parent still needs it
 template<typename Results>
 void release_operands(const ExpressionNode::Operation& op, PendingUses& pending_uses, Results& results) {
@@ -185,8 +196,9 @@ void push_unevaluated_operands(const ExpressionNode::Operation& op, const Result
 /*
  * Evaluates the expression rooted at root bottom-up, without recursion, so the depth of the expression is not limited
  * by the stack. Each distinct node is evaluated once, so sub-expressions shared between several parents cost the same
- * as in a tree. A result is freed once every parent that evaluates its operands has used it. Operands are evaluated
- * left, condition, right.
+ * as in a tree. A result is freed once every parent has used it, except that a node given a result by before_operation
+ * does not use its operands, so results they share with other parents are kept until the evaluation ends. Operands
+ * are evaluated left, condition, right.
  *  - on_leaf(const ExpressionNode::Leaf&) -> Result
  *  - before_operation(const ExpressionNode&, const ExpressionNode::Operation&) -> std::optional<Result>: called when
  *    a node is reached, before its operands. A result skips them, and it may also raise, before they are evaluated.
