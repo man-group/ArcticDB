@@ -283,6 +283,31 @@ ExpressionNode::~ExpressionNode() {
     }
 }
 
+namespace expression_detail {
+
+PendingUses count_uses(const ExpressionNode& root) {
+    PendingUses pending_uses{{&root, 0}};
+    std::vector<const ExpressionNode*> to_count{&root};
+    while (!to_count.empty()) {
+        const auto* op = std::get_if<ExpressionNode::Operation>(&to_count.back()->kind_);
+        to_count.pop_back();
+        if (!op) {
+            continue;
+        }
+        for (const ExpressionNode* child : operands_in_push_order(*op)) {
+            if (!child) {
+                continue;
+            }
+            if (++pending_uses[child] == 1) {
+                to_count.push_back(child);
+            }
+        }
+    }
+    return pending_uses;
+}
+
+} // namespace expression_detail
+
 VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
     return evaluate_bottom_up<VariantData>(
             *this,

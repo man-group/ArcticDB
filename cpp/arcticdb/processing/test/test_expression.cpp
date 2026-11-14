@@ -217,6 +217,16 @@ ProcessingUnit int_column_processing_unit(const std::shared_ptr<ExpressionNode>&
     return proc;
 }
 
+// Checks that root type-checks as a filter and selects the rows of int_column_processing_unit where thing1 > 9
+void check_filters_thing1_above_9(const std::shared_ptr<ExpressionNode>& root, ProcessingUnit& proc) {
+    const ankerl::unordered_dense::map<std::string, DataType> column_types{{"thing1", DataType::INT64}};
+    ASSERT_TRUE(std::holds_alternative<BitSetTag>(root->compute(column_types)));
+    auto bitset = std::get<util::BitSet>(root->compute(proc));
+    for (size_t idx = 0; idx < 20; ++idx) {
+        ASSERT_EQ(bitset.get_bit(idx), idx > 9);
+    }
+}
+
 } // namespace
 
 TEST(ExpressionNode, DeepNotChainDoesNotOverflowStack) {
@@ -228,14 +238,8 @@ TEST(ExpressionNode, DeepNotChainDoesNotOverflowStack) {
         root = node(std::move(root), OperationType::NOT);
     }
 
-    const ankerl::unordered_dense::map<std::string, DataType> column_types{{"thing1", DataType::INT64}};
-    ASSERT_TRUE(std::holds_alternative<BitSetTag>(root->compute(column_types)));
-
     auto proc = int_column_processing_unit(root);
-    auto bitset = std::get<util::BitSet>(root->compute(proc));
-    for (size_t idx = 0; idx < 20; ++idx) {
-        ASSERT_EQ(bitset.get_bit(idx), idx > 9);
-    }
+    check_filters_thing1_above_9(root, proc);
     // Destroying the chain must not recurse once per level either
     proc.computed_data_.clear();
     proc.expression_context_.reset();
@@ -253,10 +257,7 @@ TEST(ExpressionNode, VeryDeepNotChainUsesBoundedMemory) {
     }
 
     auto proc = int_column_processing_unit(root);
-    auto bitset = std::get<util::BitSet>(root->compute(proc));
-    for (size_t idx = 0; idx < 20; ++idx) {
-        ASSERT_EQ(bitset.get_bit(idx), idx > 9);
-    }
+    check_filters_thing1_above_9(root, proc);
     ASSERT_LE(proc.computed_data_.size(), 128);
     proc.computed_data_.clear();
     proc.expression_context_.reset();
@@ -274,14 +275,8 @@ TEST(ExpressionNode, SharedSubexpressionsEvaluatedOnce) {
         ASSERT_LE(root->label_.size(), 4096);
     }
 
-    const ankerl::unordered_dense::map<std::string, DataType> column_types{{"thing1", DataType::INT64}};
-    ASSERT_TRUE(std::holds_alternative<BitSetTag>(root->compute(column_types)));
-
     auto proc = int_column_processing_unit(root);
-    auto bitset = std::get<util::BitSet>(root->compute(proc));
-    for (size_t idx = 0; idx < 20; ++idx) {
-        ASSERT_EQ(bitset.get_bit(idx), idx > 9);
-    }
+    check_filters_thing1_above_9(root, proc);
 }
 
 TEST(ExpressionNode, StructurallyEqualSharedDagsAreMemoizedAcrossNodes) {

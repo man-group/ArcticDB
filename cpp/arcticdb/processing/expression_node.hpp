@@ -157,66 +157,71 @@ struct ExpressionNode {
  *  - on_operation(const ExpressionNode&, const ExpressionNode::Operation&, operand) -> Result, where operand(child)
  *    returns the result of an operand as a const reference
  */
+namespace expression_detail {
+
+using PendingUses = ankerl::unordered_dense::map<const ExpressionNode*, size_t>;
+using EvaluationStack = std::vector<std::pair<const ExpressionNode*, bool>>;
+
+// Right, condition, left: pushed onto a stack in this order, operands are evaluated left, condition, right
+inline std::array<const ExpressionNode*, 3> operands_in_push_order(const ExpressionNode::Operation& op) {
+    return {op.right_.get(), op.condition_.get(), op.left_.get()};
+}
+
+// Number of parent evaluations that need each node's result, counting a node used twice by a parent twice
+PendingUses count_uses(const ExpressionNode& root);
+
+// Frees each operand's result once no other parent still needs it
+template<typename Results>
+void release_operands(const ExpressionNode::Operation& op, PendingUses& pending_uses, Results& results) {
+    for (const ExpressionNode* child : operands_in_push_order(op)) {
+        if (child && --pending_uses.at(child) == 0) {
+            results.erase(child);
+        }
+    }
+}
+
+template<typename Results>
+void push_unevaluated_operands(const ExpressionNode::Operation& op, const Results& results, EvaluationStack& stack) {
+    for (const ExpressionNode* child : operands_in_push_order(op)) {
+        if (child && !results.contains(child)) {
+            stack.emplace_back(child, false);
+        }
+    }
+}
+
+} // namespace expression_detail
+
 template<typename Result, typename OnLeaf, typename BeforeOperation, typename OnOperation>
 Result evaluate_bottom_up(
         const ExpressionNode& root, const OnLeaf& on_leaf, const BeforeOperation& before_operation,
         const OnOperation& on_operation
 ) {
-    const auto operands_of = [](const ExpressionNode::Operation& op) {
-        return std::array<const ExpressionNode*, 3>{op.right_.get(), op.condition_.get(), op.left_.get()};
-    };
-    // Number of parent evaluations that still need each node's result, counting a node used twice by a parent twice
-    ankerl::unordered_dense::map<const ExpressionNode*, size_t> pending_uses{{&root, 0}};
-    std::vector<const ExpressionNode*> to_count{&root};
-    while (!to_count.empty()) {
-        const auto* node = to_count.back();
-        to_count.pop_back();
-        if (const auto* op = std::get_if<ExpressionNode::Operation>(&node->kind_)) {
-            for (const ExpressionNode* child : operands_of(*op)) {
-                if (child) {
-                    const auto [it, first_use] = pending_uses.try_emplace(child, 0);
-                    ++it->second;
-                    if (first_use) {
-                        to_count.push_back(child);
-                    }
-                }
-            }
-        }
-    }
+    auto pending_uses = expression_detail::count_uses(root);
     // Not ankerl: erasing from it needs move-assignment, which results do not have
     std::unordered_map<const ExpressionNode*, Result> results;
     const auto operand = [&results](const std::shared_ptr<ExpressionNode>& child) -> const Result& {
         return results.at(child.get());
     };
-    std::vector<std::pair<const ExpressionNode*, bool>> stack{{&root, false}};
+    // Each entry is a node and whether its operands have been evaluated
+    expression_detail::EvaluationStack stack{{&root, false}};
     while (!stack.empty()) {
         const auto [node, operands_ready] = stack.back();
+        const auto* op = std::get_if<ExpressionNode::Operation>(&node->kind_);
         if (results.contains(node)) {
             stack.pop_back();
-        } else if (const auto* leaf = std::get_if<ExpressionNode::Leaf>(&node->kind_)) {
-            results.emplace(node, on_leaf(*leaf));
+        } else if (!op) {
+            results.emplace(node, on_leaf(std::get<ExpressionNode::Leaf>(node->kind_)));
+            stack.pop_back();
+        } else if (operands_ready) {
+            results.emplace(node, on_operation(*node, *op, operand));
+            stack.pop_back();
+            expression_detail::release_operands(*op, pending_uses, results);
+        } else if (std::optional<Result> known = before_operation(*node)) {
+            results.emplace(node, std::move(*known));
             stack.pop_back();
         } else {
-            const auto& op = std::get<ExpressionNode::Operation>(node->kind_);
-            if (operands_ready) {
-                results.emplace(node, on_operation(*node, op, operand));
-                stack.pop_back();
-                for (const ExpressionNode* child : operands_of(op)) {
-                    if (child && --pending_uses.at(child) == 0) {
-                        results.erase(child);
-                    }
-                }
-            } else if (std::optional<Result> known = before_operation(*node)) {
-                results.emplace(node, std::move(*known));
-                stack.pop_back();
-            } else {
-                stack.back().second = true;
-                for (const ExpressionNode* child : operands_of(op)) {
-                    if (child && !results.contains(child)) {
-                        stack.emplace_back(child, false);
-                    }
-                }
-            }
+            stack.back().second = true;
+            expression_detail::push_unevaluated_operands(*op, results, stack);
         }
     }
     return std::move(results.at(&root));
