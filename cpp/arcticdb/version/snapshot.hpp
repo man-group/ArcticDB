@@ -16,6 +16,8 @@
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/store.hpp>
 
+#include <folly/Function.h>
+
 namespace arcticdb {
 
 void write_snapshot_entry(
@@ -32,7 +34,25 @@ void tombstone_snapshot(
         const std::shared_ptr<stream::StreamSink>& store, storage::KeySegmentPair& key_segment_pair, bool log_changes
 );
 
+// The keys of all snapshots, one per snapshot: its ref key, or its atom key for an old snapshot without a ref key
+std::vector<VariantKey> list_snapshot_keys(const std::shared_ptr<Store>& store);
+
+// Calls visitor with each snapshot key, one at a time. A KeyNotFoundException naming only that snapshot is ignored.
 void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor);
+
+// Called with a snapshot's position in snapshot_keys, its key and its segment. Returns false to stop further reads.
+using SnapshotSegmentCallback = folly::FunctionRef<bool(size_t, const VariantKey&, SegmentInMemory&&)>;
+
+/**
+ * Reads the snapshots and calls on_snapshot with each as it arrives. Snapshots deleted since they were listed are
+ * skipped. The reads are parallel, so on_snapshot may run concurrently on IO threads: it must synchronise what it
+ * shares and must not block on the IO pool. On an IO thread, where blocking on the IO pool could deadlock, the
+ * snapshots are read one at a time.
+ */
+void read_snapshots(
+        const std::shared_ptr<Store>& store, const std::vector<VariantKey>& snapshot_keys,
+        SnapshotSegmentCallback on_snapshot
+);
 
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(
         SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id,
@@ -132,5 +152,18 @@ MasterSnapshotMap get_master_snapshots_map(
  */
 MasterSnapshotMapAndKeys get_master_snapshots_map_and_keys_in_given_snapshot(
         std::shared_ptr<Store> store, const SnapshotVariantKey& given_snapshot
+);
+
+/**
+ * Stream id (symbol) -> the index keys held by snapshots. A snapshot holds at most one index key per symbol.
+ */
+using SnapshottedIndexKeys = std::unordered_map<StreamId, std::unordered_set<IndexTypeKey>>;
+
+/**
+ * The index keys of the given symbols held by any snapshot other than snapshot_to_ignore.
+ */
+SnapshottedIndexKeys get_snapshotted_index_keys(
+        const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& stream_ids,
+        const std::optional<SnapshotId>& snapshot_to_ignore = std::nullopt
 );
 } // namespace arcticdb

@@ -83,6 +83,18 @@ def test_snapshot_metadata(object_version_store):
 
 
 @pytest.mark.storage
+def test_list_snapshots_metadata_of_many_snapshots(object_version_store):
+    lib = object_version_store
+    lib.write("sym", [1, 2, 3])
+    expected = {f"snap_{i}": {"day": i} if i % 3 else None for i in range(20)}
+    for snap_name, metadata in expected.items():
+        lib.snapshot(snap_name, metadata=metadata)
+
+    assert lib.list_snapshots() == expected
+    assert lib.list_snapshots(load_metadata=False) == {snap_name: None for snap_name in expected}
+
+
+@pytest.mark.storage
 def test_snapshots_skip_symbol(object_version_store):
     original_data = [1, 2, 3]
     object_version_store.write("f", original_data)
