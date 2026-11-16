@@ -69,7 +69,8 @@ dependencies:
   - attrs
   - boto3
   - aioboto3 >=9
-  - werkzeug
+  # KeepAliveRequestHandler in storage_fixtures/s3.py relies on werkzeug serving internals
+  - werkzeug <4
   - moto
   - mock
   # msgpack 0.5.0 is required for strict_types argument, needed for correct pickling fallback
