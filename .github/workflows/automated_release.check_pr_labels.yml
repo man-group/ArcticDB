@@ -18,4 +18,4 @@ jobs:
             patch
             minor
             major
-          add_comment: true
+          add_comment: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
