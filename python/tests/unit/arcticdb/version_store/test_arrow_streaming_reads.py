@@ -444,7 +444,19 @@ def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, 
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
+    # Types above selected such that our dynamic schema type promotion behaviour matches Polars'
     expected_df = pl.concat([df0, df1, df2], how="diagonal_relaxed")
+    assert expected_df.schema == pl.Schema(
+        {
+            "present_in_all": pl.UInt32,
+            "present_in_first_only": pl.Int32,
+            "present_in_first_and_second": pl.Int32,
+            "present_in_first_and_third": pl.Float32,
+            "present_in_second_only": pl.Int64,
+            "present_in_second_and_third": pl.Int32,
+            "present_in_third_only": pl.Float64,
+        }
+    )
     generic_streaming_reads_test(lib, sym, [expected_df.slice(idx * 10, 10) for idx in range(3)])
 
 
