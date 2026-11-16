@@ -102,7 +102,7 @@ def test_streaming_reads_with_row_range(in_memory_store_factory):
 def test_streaming_reads_with_row_range_exact_boundaries(in_memory_store_factory):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
-    sym = "test_streaming_reads_with_row_range"
+    sym = "test_streaming_reads_with_row_range_exact_boundaries"
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, df)
     # Omits the first and last chunk exactly
@@ -173,6 +173,81 @@ def test_streaming_reads_with_date_range(in_memory_store_factory):
             expected_slices.append(df.slice((idx + 1) * 10, 10))
     generic_streaming_reads_test(
         lib, sym, expected_slices, date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26"))
+    )
+
+
+def test_streaming_reads_with_date_range_exact_boundaries(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_date_range_exact_boundaries"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    # Omits the first and last chunk exactly
+    generic_streaming_reads_test(
+        lib,
+        sym,
+        [df.slice((idx + 1) * 10, 10) for idx in range(8)],
+        date_range=(pd.Timestamp("2026-01-11"), pd.Timestamp("2026-03-31")),
+    )
+
+
+def test_streaming_reads_with_open_ended_date_range(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_open_ended_date_range"
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)], date_range=(None, None))
+
+
+@pytest.mark.parametrize("date_range", [(None, pd.Timestamp("2026-01-15")), (pd.Timestamp("2026-03-27"), None)])
+def test_streaming_reads_with_funky_date_ranges(in_memory_store_factory, date_range):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_funky_date_ranges"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    expected_slices = (
+        [df.slice(0, 10), df.slice(10, 5)] if date_range[0] is None else [df.slice(85, 5), df.slice(90, 10)]
+    )
+    generic_streaming_reads_test(lib, sym, expected_slices, date_range=date_range)
+
+
+def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_date_range_and_filter"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    # date_range the first and last chunk, and truncates the second and penultimate chunks
+    # query then filters down further
+    q = QueryBuilder()
+    q = q[q["col"] < 28]
+    expected_slices = []
+    for idx in range(8):
+        if idx == 0:
+            expected_slices.append(df.slice(15, 5))
+        elif idx == 1:
+            expected_slices.append(df.slice(20, 8))
+        else:
+            expected_slices.append(df.slice(0, 0))
+    generic_streaming_reads_test(
+        lib, sym, expected_slices, date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26")), query_builder=q
     )
 
 
