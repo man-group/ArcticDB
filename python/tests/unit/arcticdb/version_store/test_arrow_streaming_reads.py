@@ -75,16 +75,39 @@ def test_streaming_reads_col_slicing(in_memory_store_factory, clear_query_stats)
     generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)])
 
 
-def test_streaming_reads_col_filtering(in_memory_store_factory, clear_query_stats):
+@pytest.mark.parametrize("row_filter", [None, "row_range", "date_range"])
+def test_streaming_reads_col_filtering(in_memory_store_factory, clear_query_stats, row_filter):
     lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_col_filtering"
-    df = pl.from_pandas(pd.DataFrame({f"col_{i}": np.arange(i * 20, (i + 1) * 20) for i in range(5)}))
-    lib.write(sym, df)
-    expected_df = df.select("col_1", "col_4")
-    generic_streaming_reads_test(
-        lib, sym, [expected_df.slice(idx * 10, 10) for idx in range(10)], columns=["col_1", "col_4"]
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame(
+            {f"col_{i}": np.arange(i * 100, (i + 1) * 100) for i in range(5)},
+            index=pd.date_range("2026-01-01", periods=100, name="ts"),
+        ),
+        include_index=True,
     )
+    lib.write(sym, df, index_column=True)
+    expected_df = df.select("ts", "col_1", "col_4")
+    kwargs = {"columns": ["col_1", "col_4"]}
+    if row_filter is None:
+        expected_slices = [expected_df.slice(idx * 10, 10) for idx in range(10)]
+    else:
+        expected_df = expected_df.slice(15, 70)
+        if row_filter == "row_range":
+            kwargs["row_range"] = (15, 85)
+        elif row_filter == "date_range":
+            kwargs["date_range"] = (pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26"))
+        expected_slices = []
+        for idx in range(8):
+            if idx == 0:
+                expected_slices.append(expected_df.slice(0, 5))
+            elif idx == 7:
+                expected_slices.append(expected_df.slice(65, 5))
+            else:
+                expected_slices.append(expected_df.slice(idx * 10 - 5, 10))
+    generic_streaming_reads_test(lib, sym, expected_slices, **kwargs)
 
 
 def test_streaming_reads_as_of(in_memory_store_factory, clear_query_stats):
