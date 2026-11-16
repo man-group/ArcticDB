@@ -75,6 +75,18 @@ def test_streaming_reads_col_slicing(in_memory_store_factory, clear_query_stats)
     generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)])
 
 
+def test_streaming_reads_col_filtering(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_col_filtering"
+    df = pl.from_pandas(pd.DataFrame({f"col_{i}": np.arange(i * 20, (i + 1) * 20) for i in range(5)}))
+    lib.write(sym, df)
+    expected_df = df.select("col_1", "col_4")
+    generic_streaming_reads_test(
+        lib, sym, [expected_df.slice(idx * 10, 10) for idx in range(10)], columns=["col_1", "col_4"]
+    )
+
+
 def test_streaming_reads_as_of(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
