@@ -35,6 +35,7 @@ def generic_streaming_reads_test(lib, sym, expected_slices, prefetch_rows=None, 
         with qs.query_stats():
             gen = lib.read_streaming(sym, prefetch_rows=prefetch_rows, **kwargs)
         # No IO yet
+        assert gen.in_flight_rows() == 0
         assert not len(qs.get_query_stats())
         qs.reset_stats()
         with qs.query_stats():
@@ -405,6 +406,34 @@ def test_streaming_reads_io_counts(
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+
+
+@pytest.mark.parametrize("segment_row_size", [7, 13, 20, 100_000])
+@pytest.mark.parametrize("prefetch_rows", [None, 0, 7, 13, 20])
+def test_streaming_reads_prefetch_row_counts(in_memory_store_factory, segment_row_size, prefetch_rows):
+    lib = in_memory_store_factory(segment_row_size=segment_row_size)
+    sym = "test_streaming_reads_prefetch_row_counts"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    gen = lib.read_streaming(sym, prefetch_rows=prefetch_rows)
+    # No IO yet
+    assert gen.in_flight_rows() == 0
+    remaining_rows = len(df)
+    for idx, df_slice in enumerate(gen):
+        assert df_slice.equals(df.slice(idx * segment_row_size, segment_row_size))
+        remaining_rows -= len(df_slice)
+        in_flight_rows = gen.in_flight_rows()
+        if prefetch_rows is None:
+            min_in_flight_rows = remaining_rows
+            max_in_flight_rows = remaining_rows
+        else:
+            min_in_flight_rows = min(remaining_rows, prefetch_rows)
+            max_in_flight_rows = min(
+                remaining_rows,
+                segment_row_size * ((prefetch_rows + segment_row_size) // segment_row_size),
+            )
+        assert min_in_flight_rows <= in_flight_rows <= max_in_flight_rows
+    assert remaining_rows == 0
 
 
 @pytest.mark.parametrize(

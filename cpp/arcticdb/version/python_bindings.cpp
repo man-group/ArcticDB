@@ -225,7 +225,11 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("next",
                  &StreamingReadGenerator::next,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Fetch the next row-slice, and possibly trigger reading of more from disk");
+                 "Fetch the next row-slice, and possibly trigger reading of more from disk")
+            .def("in_flight_rows",
+                 &StreamingReadGenerator::in_flight_rows,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "The number of rows that have started (but not necessarily finished) being read from disk");
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())

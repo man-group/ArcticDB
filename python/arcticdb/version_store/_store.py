@@ -293,6 +293,9 @@ class StreamingReadGenerator:
         self._ensure_read_result()
         return self._versioned_item
 
+    def in_flight_rows(self):
+        return self._generator_impl.in_flight_rows()
+
     def __iter__(self):
         self._ensure_read_result()
         return self

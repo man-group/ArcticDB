@@ -33,6 +33,7 @@ class StreamingReadGenerator {
 
     ReadResult read_result();
     std::optional<ArrowOutputFrame> next();
+    uint64_t in_flight_rows() const { return in_flight_rows_; };
 
   private:
     struct RowSlice {
