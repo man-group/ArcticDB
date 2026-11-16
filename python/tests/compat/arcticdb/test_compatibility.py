@@ -305,7 +305,7 @@ lib._nvs.append("sym", df_2, incomplete=True)
 
 def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
-    dst_lib_name = "local.extra"
+    dst_lib_name = f"{lib_name}_dst"
     with CompatLibrary(old_venv, arctic_uri, [lib_name, dst_lib_name]) as compat:
         df = pd.DataFrame({"col": [1, 2, 3]})
         df_2 = pd.DataFrame({"col": [4, 5, 6]})
