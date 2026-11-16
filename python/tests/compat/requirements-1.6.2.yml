@@ -3,6 +3,8 @@ channels:
   - conda-forge
 dependencies:
   - arcticdb=1.6.2
+  # conda-forge libcxx 23.1.5 rebuilds drop a symbol arcticdb 1.6.2 needs (conda-forge/libcxx-feedstock#308)
+  - sel(osx): libcxx<23
   - numpy<2
   - pandas<2
   - attrs
