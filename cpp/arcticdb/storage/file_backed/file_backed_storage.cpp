@@ -13,6 +13,7 @@
 #include <arcticdb/storage/file_backed/real_posix.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/error_code.hpp>
 
@@ -369,7 +370,6 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     Segment& seg = *key_seg.segment_ptr();
     const std::string tmp_file_name = generate_tmp_file_name();
     const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
-    const fs::path tmp_file_path = storage_dir_ / key_name / tmp_file_name;
 
     bool retried_stale = false;
     while (true) {
@@ -391,7 +391,7 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
 
             if (posix_->renameat(
                         key_type_dir_fd.fd(),
-                        tmp_file_path.c_str(),
+                        tmp_file_name.c_str(),
                         key_type_dir_fd.fd(),
                         maybe_safe_file_name_for_key.c_str()
                 ) != 0) {
@@ -407,14 +407,14 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
             storage_dir_fd.close();
             break;
         } catch (const std::system_error& e) {
-            key_type_dir_fd.unlinkat_swallow_errors(tmp_file_path);
+            key_type_dir_fd.unlinkat_swallow_errors(tmp_file_name);
             if (e.code().value() == ESTALE && !retried_stale) {
                 retried_stale = true;
                 continue;
             }
             throw;
         } catch (...) {
-            key_type_dir_fd.unlinkat_swallow_errors(tmp_file_path);
+            key_type_dir_fd.unlinkat_swallow_errors(tmp_file_name);
             throw;
         }
     }
@@ -483,13 +483,14 @@ bool FileBackedStorage::do_iterate_type_until_match(
     struct dirent* dir_entry = nullptr;
     while ((dir_entry = posix_->readdir(dirp))) {
         std::string_view file_name(dir_entry->d_name);
-        if (!file_name.starts_with(prefix) || skip_during_listing(file_name))
+        if (skip_during_listing(file_name))
             continue;
 
+        const auto prefix_matches = stream_id_prefix_matcher(prefix);
         VariantKey key{variant_key_from_bytes(
                 reinterpret_cast<uint8_t*>(dir_entry->d_name), strlen(dir_entry->d_name), key_type
         )};
-        if (variant_key_type(key) == key_type && visitor(std::move(key)))
+        if (variant_key_type(key) == key_type && prefix_matches(variant_key_id(key)) && visitor(std::move(key)))
             return true;
     }
     // TODO: Need to check errno here. read_dir can return NULL on error too.
