@@ -50,7 +50,7 @@ class Arctic:
     Top-level library management class. Arctic instances can be configured against an S3 environment and enable the creation, deletion and retrieval of Arctic libraries.
     """
 
-    _LIBRARY_ADAPTERS = (
+    _LIBRARY_ADAPTERS = [
         FileLibraryAdapter,
         S3LibraryAdapter,
         GCPXMLLibraryAdapter,
@@ -58,7 +58,7 @@ class Arctic:
         AzureLibraryAdapter,
         MongoLibraryAdapter,
         InMemoryLibraryAdapter,
-    )
+    ]
 
     # This is a hack to allow the tests to access the libs_instances_from_arctic list
     # It is set by the LmdbStorageFixture
@@ -74,42 +74,42 @@ class Arctic:
         ] = ArrowOutputStringFormat.UNSPECIFIED,
     ):
         """
-                Initializes a top-level Arctic library management instance.
+        Initializes a top-level Arctic library management instance.
 
-                For more information on how to use Arctic Library instances please see the documentation on Library.
+        For more information on how to use Arctic Library instances please see the documentation on Library.
 
-                Parameters
-                ----------
+        Parameters
+        ----------
 
-                uri: str
-                    URI specifying the backing store used to access, configure, and create Arctic libraries.
-                    For more details about the parameters, please refer to the [Arctic URI Documentation](./arctic_uri.md).
+        uri: str
+            URI specifying the backing store used to access, configure, and create Arctic libraries.
+            For more details about the parameters, please refer to the [Arctic URI Documentation](./arctic_uri.md).
 
-                encoding_version: EncodingVersion, default = EncodingVersion.V1
-                    When creating new libraries with this Arctic instance, the default encoding version to use.
-                    Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
+        encoding_version: EncodingVersion, default = EncodingVersion.V1
+            When creating new libraries with this Arctic instance, the default encoding version to use.
+            Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
-                output_format: Union[OutputFormat, str], default = OutputFormat.PANDAS
-                    Default output format for all read operations on libraries created from this `Arctic` instance.
-                    Can be overridden per library or per read operation.
-                    See `OutputFormat` documentation for details on available formats.
+        output_format: Union[OutputFormat, str], default = OutputFormat.PANDAS
+            Default output format for all read operations on libraries created from this `Arctic` instance.
+            Can be overridden per library or per read operation.
+            See `OutputFormat` documentation for details on available formats.
 
-                arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"], default = ArrowOutputStringFormat.UNSPECIFIED
-                    Default string column format when using `PYARROW` or `POLARS` output formats.
-                    Can be overridden per library or per read operation.
-                    See `ArrowOutputStringFormat` documentation for details on available string formats.
-        *
-                Examples
-                --------
+        arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"], default = ArrowOutputStringFormat.UNSPECIFIED
+            Default string column format when using `PYARROW` or `POLARS` output formats.
+            Can be overridden per library or per read operation.
+            See `ArrowOutputStringFormat` documentation for details on available string formats.
 
-                >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
-                >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
-                >>> ac = adb.Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig')
-                >>> ac.create_library('travel_data')
-                >>> ac.list_libraries()
-                ['travel_data']
-                >>> travel_library = ac['travel_data']
-                >>> ac.delete_library('travel_data')
+        Examples
+        --------
+
+        >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
+        >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
+        >>> ac = adb.Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig')
+        >>> ac.create_library('travel_data')
+        >>> ac.list_libraries()
+        ['travel_data']
+        >>> travel_library = ac['travel_data']
+        >>> ac.delete_library('travel_data')
         """
         _cls = None
         for adapter_cls in self._LIBRARY_ADAPTERS:

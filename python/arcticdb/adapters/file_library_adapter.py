@@ -10,7 +10,7 @@ from arcticdb_ext.storage import Library, CONFIG_LIBRARY_NAME
 
 
 class FileLibraryAdapter(ArcticLibraryAdapter):
-    REGEX = r"file://(?P<dir_path>[^?]*)(?P<query>\?.*)?"
+    REGEX = r"experimental_file://(?P<dir_path>[^?]*)(?P<query>\?.*)?"
 
     def __init__(self, uri: str, encoding_version: EncodingVersion):
         match = re.match(self.REGEX, uri)
@@ -26,7 +26,7 @@ class FileLibraryAdapter(ArcticLibraryAdapter):
 
     @staticmethod
     def supports_uri(uri: str) -> bool:
-        return uri.startswith("file://")
+        return uri.startswith("experimental_file://")
 
     @property
     def config_library(self) -> Library:

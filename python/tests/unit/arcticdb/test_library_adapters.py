@@ -152,5 +152,5 @@ def test_gcp_path_prefix():
 
 
 def test_file_library_parser():
-    adapter = FileLibraryAdapter("file:///home/some_user/arctic_data", encoding_version=EncodingVersion.V1)
+    adapter = FileLibraryAdapter("experimental_file:///home/some_user/arctic_data", encoding_version=EncodingVersion.V1)
     assert adapter._dir_path == "/home/some_user/arctic_data"
