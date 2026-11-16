@@ -11,14 +11,20 @@
 #include <boost/algorithm/string.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
+#include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 #include <memory>
 #include <optional>
+#include <utility>
+#include <vector>
 
 namespace arcticdb {
 
 using namespace arcticdb::proto::config;
 
+// Read from hot paths on many threads (e.g. VersionMap::has_cached_entry) while set_/unset_ write, so the maps
+// are guarded by a shared_mutex: reads vastly outnumber writes.
 class ConfigsMap {
   public:
     static void init();
@@ -27,28 +33,49 @@ class ConfigsMap {
         return instance_;
     }
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #define HANDLE_TYPE(LABEL, TYPE)                                                                                       \
     void set_##LABEL(const std::string& label, TYPE val) {                                                             \
-        map_of_##LABEL[boost::to_upper_copy<std::string>(label)] = val;                                                \
+        auto key = boost::to_upper_copy<std::string>(label);                                                           \
+        std::unique_lock lock(mutex_);                                                                                 \
+        map_of_##LABEL[std::move(key)] = std::move(val);                                                               \
     }                                                                                                                  \
                                                                                                                        \
     TYPE get_##LABEL(const std::string& label, TYPE default_val) const {                                               \
-        auto it = map_of_##LABEL.find(boost::to_upper_copy<std::string>(label));                                       \
+        const auto key = boost::to_upper_copy<std::string>(label);                                                     \
+        std::shared_lock lock(mutex_);                                                                                 \
+        auto it = map_of_##LABEL.find(key);                                                                            \
         return it == map_of_##LABEL.cend() ? default_val : it->second;                                                 \
     }                                                                                                                  \
                                                                                                                        \
     std::optional<TYPE> get_##LABEL(const std::string& label) const {                                                  \
-        auto it = map_of_##LABEL.find(boost::to_upper_copy<std::string>(label));                                       \
+        const auto key = boost::to_upper_copy<std::string>(label);                                                     \
+        std::shared_lock lock(mutex_);                                                                                 \
+        auto it = map_of_##LABEL.find(key);                                                                            \
         return it == map_of_##LABEL.cend() ? std::nullopt : std::make_optional(it->second);                            \
     }                                                                                                                  \
                                                                                                                        \
-    void unset_##LABEL(const std::string& label) { map_of_##LABEL.erase(boost::to_upper_copy<std::string>(label)); }   \
+    void unset_##LABEL(const std::string& label) {                                                                     \
+        const auto key = boost::to_upper_copy<std::string>(label);                                                     \
+        std::unique_lock lock(mutex_);                                                                                 \
+        map_of_##LABEL.erase(key);                                                                                     \
+    }                                                                                                                  \
                                                                                                                        \
-    const std::unordered_map<std::string, TYPE>& get_all_##LABEL() const { return map_of_##LABEL; }                    \
+    /* A copy, so callers never read the map outside the lock.                 */                                      \
+    std::unordered_map<std::string, TYPE> get_all_##LABEL() const {                                                    \
+        std::shared_lock lock(mutex_);                                                                                 \
+        return map_of_##LABEL;                                                                                         \
+    }                                                                                                                  \
                                                                                                                        \
     void set_all_##LABEL(const std::unordered_map<std::string, TYPE>& entries) {                                       \
+        std::vector<std::pair<std::string, TYPE>> upper;                                                               \
+        upper.reserve(entries.size());                                                                                 \
         for (const auto& [k, v] : entries) {                                                                           \
-            map_of_##LABEL[boost::to_upper_copy<std::string>(k)] = v;                                                  \
+            upper.emplace_back(boost::to_upper_copy<std::string>(k), v);                                               \
+        }                                                                                                              \
+        std::unique_lock lock(mutex_);                                                                                 \
+        for (auto& [k, v] : upper) {                                                                                   \
+            map_of_##LABEL[std::move(k)] = std::move(v);                                                               \
         }                                                                                                              \
     }
 
@@ -57,8 +84,11 @@ class ConfigsMap {
     HANDLE_TYPE(string, std::string)
     HANDLE_TYPE(double, double)
 #undef HANDLE_TYPE
+    // NOLINTEND(bugprone-macro-parentheses)
 
   private:
+    // Guards the maps; mutable so the const getters can take a shared lock.
+    mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, int64_t> map_of_int;
     std::unordered_map<std::string, std::string> map_of_string;
     std::unordered_map<std::string, double> map_of_double;
