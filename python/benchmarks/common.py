@@ -62,9 +62,13 @@ def generate_benchmark_df(n, freq="min", end_timestamp="1/1/2023"):
     k = n // 10
     # Based on https://github.com/duckdblabs/db-benchmark/blob/master/_data/groupby-datagen.R#L19
     dt = pd.DataFrame()
-    dt["id1"] = np.random.choice([f"id{str(i).zfill(3)}" for i in range(1, k + 1)], n)
-    dt["id2"] = np.random.choice([f"id{str(i).zfill(3)}" for i in range(1, k + 1)], n)
-    dt["id3"] = np.random.choice([f"id{str(i).zfill(10)}" for i in range(1, n // k + 1)], n)
+    # Indexing an object array of the pool draws the same values as np.random.choice(pool, n), but keeps
+    # the python strings pandas stores anyway instead of round tripping them through a fixed width array.
+    short_ids = np.asarray([f"id{str(i).zfill(3)}" for i in range(1, k + 1)], dtype=object)
+    long_ids = np.asarray([f"id{str(i).zfill(10)}" for i in range(1, n // k + 1)], dtype=object)
+    dt["id1"] = short_ids[np.random.randint(0, len(short_ids), n)]
+    dt["id2"] = short_ids[np.random.randint(0, len(short_ids), n)]
+    dt["id3"] = long_ids[np.random.randint(0, len(long_ids), n)]
     dt["id4"] = np.random.choice(range(1, k + 1), n)
     dt["id5"] = np.random.choice(range(1, k + 1), n)
     dt["id6"] = np.random.choice(range(1, n // k + 1), n)
