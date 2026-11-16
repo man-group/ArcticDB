@@ -40,10 +40,9 @@ jobs:
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: ./.github/actions/setup_sccache
         with:
-          version: v0.12.0
-          disable_annotations: 'true'
+          version: "0.12.0"
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -128,10 +127,9 @@ jobs:
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: ./.github/actions/setup_sccache
         with:
-          version: v0.12.0
-          disable_annotations: 'true'
+          version: "0.12.0"
 
       - name: Free Disk Space
         if: inputs.free_disk_space
@@ -224,10 +222,9 @@ jobs:
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: ./.github/actions/setup_sccache
         with:
-          version: v0.12.0
-          disable_annotations: 'true'
+          version: "0.12.0"
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8

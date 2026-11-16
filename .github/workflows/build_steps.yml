@@ -45,6 +45,7 @@ jobs:
     runs-on: ${{ matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && matrix.container || null}}
     env:
+      PINNED_CMAKE_VERSION: 3.31.6 # see "Setup cmake"; docker/Dockerfile* pin the same version
       # 0 - uses S3 Cache, 1 - uses GHA cache
       # this way the external PRs can use the GHA cache
       SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY == null}}
@@ -96,11 +97,9 @@ jobs:
           cd ../..
 
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: ./.github/actions/setup_sccache
         with:
-          version: "v0.10.0"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
+          version: "0.10.0"
 
       - name: Setup macOS build environment
         if: matrix.os == 'macos'
@@ -125,11 +124,6 @@ jobs:
           maximum-size: 6GB
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
-
-      - name: Install AWS CLI
-        # For VCPKG source asset upload to cache in S3
-        if: matrix.os == 'linux' && inputs.job_type == 'cpp-tests'
-        run: yum install -y awscli
 
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
@@ -187,7 +181,17 @@ jobs:
           # toolset: 14.41
           # vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
 
+      # The dev images ship the pinned cmake. setup-cmake always queries the GitHub API for the
+      # release list, even on a tool cache hit, and that query intermittently fails (#3413).
+      - name: Check for pinned cmake
+        id: cmake_check
+        run: |
+          if [[ "$(cmake --version 2>/dev/null | head -n1)" == "cmake version $PINNED_CMAKE_VERSION" ]]; then
+            echo "found=true" | tee -a "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup cmake
+        if: steps.cmake_check.outputs.found != 'true'
         uses: jwlawson/actions-setup-cmake@v2
         with:
           # Pin to a known-good release. CMake 4.4.0 made -Werror=<category> validation
@@ -195,7 +199,7 @@ jobs:
           # option and fails CI. Bump deliberately once the port is fixed upstream.
           # NOTE: on macOS this pin only covers the top-level configure; vcpkg picks its
           # own (higher-versioned) cmake for port builds - see the macOS repoint step below.
-          cmake-version: '3.31.6'
+          cmake-version: ${{ env.PINNED_CMAKE_VERSION }}
 
       - name: Use cmake
         run: cmake --version
