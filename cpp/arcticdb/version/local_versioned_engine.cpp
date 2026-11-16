@@ -603,9 +603,9 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, 
                             [&end_index_column, &end_index, row_count = seg.row_count()](auto column_desc_tag) {
                                 using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
                                 if constexpr (is_time_type(type_info::data_type)) {
-                                    // -1 as the end timestamp in the data keys is one nanosecond greater than the last
-                                    // value in the index column
-                                    end_index = *end_index_column.template scalar_at<timestamp>(row_count - 1) - 1;
+                                    end_index = last_index_value_from_end_index(
+                                            *end_index_column.template scalar_at<timestamp>(row_count - 1)
+                                    );
                                 }
                             }
                     );

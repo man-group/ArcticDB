@@ -160,13 +160,14 @@ static TimeseriesDescriptor prepare_append(
                             "Cannot append timeseries: last index value of existing data is unknown"
                     );
                     auto first_index = NumericIndex{frame.index_value_at(0)};
-                    auto prev = std::get<NumericIndex>(*last_existing_index_value);
+                    const auto last_existing =
+                            last_index_value_from_end_index(std::get<NumericIndex>(*last_existing_index_value));
                     util::check(
-                            write_options.ignore_sort_order || prev - 1 <= first_index,
+                            write_options.ignore_sort_order || last_existing <= first_index,
                             "Can't append dataframe with start index {} to existing sequence "
                             "ending at {}",
                             util::format_timestamp(first_index),
-                            util::format_timestamp(prev)
+                            util::format_timestamp(last_existing)
                     );
                 }
             },
@@ -256,7 +257,7 @@ folly::SemiFuture<std::vector<T>> collect_all_then_rethrow(std::vector<folly::Fu
 
 bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.start_; }
 
-bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
+bool is_after(const IndexRange& a, const IndexRange& b) { return a.inclusive_end() > b.inclusive_end(); }
 
 /// Represents all slices which are intersecting (but not overlapping) with range passed to update
 /// First member is a vector of all segments intersecting with the first row-slice of the update range
@@ -1912,8 +1913,7 @@ static void check_incompletes_index_ranges_dont_overlap(
                     "Cannot append staged segments to existing data as existing data is not sorted in ascending order"
             );
             auto last_indexed_slice_and_key = std::prev(pipeline_context->incompletes_begin())->slice_and_key();
-            // -1 as end_time is stored as 1 greater than the last index value in the segment
-            last_existing_index_value = last_indexed_slice_and_key.key().end_time() - 1;
+            last_existing_index_value = last_index_value_from_end_index(last_indexed_slice_and_key.key().end_time());
         }
 
         // Use ordered set so that we only need to compare adjacent elements
@@ -1936,12 +1936,11 @@ static void check_incompletes_index_ranges_dont_overlap(
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     // If the segment is entirely covering a single index value, then duplicates are fine
-                    // -1 as end_time is stored as 1 greater than the last index value in the segment
-                    inserted || key.end_time() - 1 == key.start_time(),
+                    inserted || last_index_value_from_end_index(key.end_time()) == key.start_time(),
                     "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in "
                     "UTC): ({}, {})",
                     util::format_timestamp(key.start_time()),
-                    util::format_timestamp(key.end_time())
+                    util::format_timestamp(last_index_value_from_end_index(key.end_time()))
             );
         }
 
@@ -1949,14 +1948,13 @@ static void check_incompletes_index_ranges_dont_overlap(
             auto next_it = std::next(it);
             if (next_it != unique_timestamp_ranges.end()) {
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                        // -1 as end_time is stored as 1 greater than the last index value in the segment
-                        next_it->first >= it->second - 1,
+                        next_it->first >= last_index_value_from_end_index(it->second),
                         "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): "
                         "({}, {}) intersects ({}, {})",
                         util::format_timestamp(it->first),
-                        util::format_timestamp(it->second - 1),
+                        util::format_timestamp(last_index_value_from_end_index(it->second)),
                         util::format_timestamp(next_it->first),
-                        util::format_timestamp(next_it->second - 1)
+                        util::format_timestamp(last_index_value_from_end_index(next_it->second))
                 );
             }
         }
@@ -2733,7 +2731,8 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                 )
                                         .get();
                 if (compaction_parameters.append_ && update_info.previous_index_key_ && !segments.empty()) {
-                    const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
+                    const timestamp last_index_on_disc =
+                            last_index_value_from_end_index(update_info.previous_index_key_->end_time());
                     const timestamp incomplete_start =
                             std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment(store)));
                     sorting::check<ErrorCode::E_UNSORTED_DATA>(

@@ -96,4 +96,47 @@ TEST_P(BitsetForIndex, DynamicSchemaMatchEndIndex) {
     ASSERT_EQ(bitset->count(), is_read_operation() ? 1 : 0);
 }
 
+TEST_P(BitsetForIndex, SegmentEndingAtInt64Max) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+    constexpr timestamp max = std::numeric_limits<timestamp>::max();
+    for (const bool dynamic_schema : {true, false}) {
+        TestContainer container;
+        container.seg().set_range(max - 10, max - 5);
+        // The last segment's end_index, max + 1, wraps to INT64_MIN
+        container.seg().set_range(max - 5, static_cast<uint64_t>(end_index_from_last_index_value(max)));
+        auto bitset_for = [&](timestamp start, timestamp end) {
+            return build_bitset_for_index<TestContainer, TimeseriesIndex>(
+                    container,
+                    IndexRange(NumericIndex{start}, NumericIndex{end}),
+                    dynamic_schema,
+                    false,
+                    is_read_operation(),
+                    std::unique_ptr<util::BitSet>{}
+            );
+        };
+        auto at_max = bitset_for(max, max);
+        EXPECT_EQ(at_max->count(), 1) << "dynamic_schema=" << dynamic_schema;
+        EXPECT_TRUE((*at_max)[1]) << "dynamic_schema=" << dynamic_schema;
+        EXPECT_EQ(bitset_for(max - 8, max)->count(), 2) << "dynamic_schema=" << dynamic_schema;
+        auto before_last = bitset_for(max - 9, max - 7);
+        EXPECT_EQ(before_last->count(), 1) << "dynamic_schema=" << dynamic_schema;
+        EXPECT_TRUE((*before_last)[0]) << "dynamic_schema=" << dynamic_schema;
+    }
+}
+
+TEST(EndIndex, WrapsAtInt64Max) {
+    using namespace arcticdb::entity;
+    constexpr timestamp max = std::numeric_limits<timestamp>::max();
+    constexpr timestamp min = std::numeric_limits<timestamp>::min();
+    static_assert(end_index_from_last_index_value(max) == min);
+    static_assert(last_index_value_from_end_index(min) == max);
+    static_assert(last_index_value_from_end_index(end_index_from_last_index_value(max - 1)) == max - 1);
+    static_assert(last_index_value_from_end_index(end_index_from_last_index_value(min + 1)) == min + 1);
+    const auto wrapped = segment_index_range(NumericIndex{max - 1}, NumericIndex{min});
+    EXPECT_EQ(std::get<NumericIndex>(wrapped.inclusive_end()), max);
+    const auto normal = segment_index_range(NumericIndex{0}, NumericIndex{10});
+    EXPECT_EQ(std::get<NumericIndex>(normal.inclusive_end()), 9);
+}
+
 INSTANTIATE_TEST_SUITE_P(BitsetForIndexTests, BitsetForIndex, testing::Values(true, false));

@@ -1102,7 +1102,7 @@ std::span<const timestamp>::iterator source_range_start_for_group(
 
 std::span<const timestamp>::iterator source_range_end_for_group(
         std::span<const timestamp> source_index, std::span<const timestamp>::iterator source_range_start,
-        timestamp segment_end, size_t row_slice_group, const std::vector<std::vector<size_t>>& offsets,
+        timestamp segment_last, size_t row_slice_group, const std::vector<std::vector<size_t>>& offsets,
         const std::vector<RangesAndKey>& ranges_and_keys, const MergeStrategy& strategy
 ) {
     // When inserting, unmatched source values in the gap before the next row slice are appended to this one, and
@@ -1111,13 +1111,14 @@ std::span<const timestamp>::iterator source_range_end_for_group(
     if (strategy.insert() && row_slice_group == offsets.size() - 1) {
         return source_index.end();
     }
-    const timestamp effective_segment_end =
-            strategy.insert()
-                    ? std::max(
-                              segment_end, ranges_and_keys[offsets[row_slice_group + 1].front()].key_.time_range().first
-                      )
-                    : segment_end;
-    return std::ranges::upper_bound(source_range_start, source_index.end(), effective_segment_end - 1);
+    const auto segment_range_end = std::ranges::upper_bound(source_range_start, source_index.end(), segment_last);
+    if (!strategy.insert()) {
+        return segment_range_end;
+    }
+    const timestamp next_segment_start = ranges_and_keys[offsets[row_slice_group + 1].front()].key_.time_range().first;
+    return std::max(
+            segment_range_end, std::ranges::lower_bound(source_range_start, source_index.end(), next_segment_start)
+    );
 }
 
 size_t compute_total_upsert_row_count(
@@ -1226,17 +1227,17 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
     std::span<const timestamp> source_index = std::get<std::span<const timestamp>>(get_source_column<IndexType>(0));
     const bool source_ends_before_first_row_slice =
             source_index.back() < ranges_and_keys.begin()->key_.time_range().first;
-    const bool source_starts_after_the_last_row_slice =
-            source_index.front() >= ranges_and_keys.back().key_.time_range().second;
+    const bool source_starts_after_the_last_row_slice = source_index.front() > ranges_and_keys.back().end_time();
     if (strategy_.update_only() && (source_ends_before_first_row_slice || source_starts_after_the_last_row_slice)) {
         ranges_and_keys.clear();
         return {};
     }
 
     for (size_t row_slice_group = 0; row_slice_group < offsets.size(); ++row_slice_group) {
+        // Both ends inclusive
         const TimestampRange time_range{
                 ranges_and_keys.at(offsets.at(row_slice_group).front()).key_.time_range().first,
-                ranges_and_keys.at(offsets.at(row_slice_group).back()).key_.time_range().second
+                ranges_and_keys.at(offsets.at(row_slice_group).back()).end_time()
         };
 
         const auto source_range_start =

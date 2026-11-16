@@ -176,7 +176,9 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         if (slice_and_keys_.empty())
             return unspecified_range();
 
-        return IndexRange{slice_and_keys_.begin()->key().start_index(), slice_and_keys_.rbegin()->key().end_index()};
+        return segment_index_range(
+                slice_and_keys_.begin()->key().start_index(), slice_and_keys_.rbegin()->key().end_index()
+        );
     }
 
     friend void swap(PipelineContext& left, PipelineContext& right) noexcept {

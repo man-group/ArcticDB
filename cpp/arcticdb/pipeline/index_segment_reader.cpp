@@ -40,7 +40,7 @@ bool IndexSegmentReader::empty() const { return seg_.empty(); }
 
 IndexRange get_index_segment_range(const AtomKey& prev_index, const std::shared_ptr<Store>& store) {
     auto isr = get_index_reader(prev_index, store);
-    return IndexRange{isr.begin()->key().start_index(), isr.last()->key().end_index()};
+    return segment_index_range(isr.begin()->key().start_index(), isr.last()->key().end_index());
 }
 
 bool IndexSegmentReader::bucketize_dynamic() const { return tsd().column_groups(); }

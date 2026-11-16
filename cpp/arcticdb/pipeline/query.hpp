@@ -398,8 +398,7 @@ inline std::vector<SliceAndKey> strictly_before(const FilterRange& range, std::s
             },
             [&](const IndexRange& index_range) {
                 std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
-                    // Key's index ranges are end exclusive
-                    return sk.key().index_range().end_ <= index_range.start_;
+                    return sk.key().index_range().inclusive_end() < index_range.start_;
                 });
             },
             [&](const auto&) { util::raise_rte("Expected specified range "); }

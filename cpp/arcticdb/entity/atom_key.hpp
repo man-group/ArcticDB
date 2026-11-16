@@ -44,6 +44,7 @@ class AtomKeyImpl {
     const auto& version_id() const { return version_id_; }
     const auto& gen_id() const { return version_id_; }
     const auto& creation_ts() const { return creation_ts_; }
+    // The second element is the raw end_index, which wraps to INT64_MIN for a segment ending at INT64_MAX
     TimestampRange time_range() const { return {start_time(), end_time()}; }
     timestamp start_time() const {
         if (std::holds_alternative<timestamp>(index_start_))
@@ -62,11 +63,7 @@ class AtomKeyImpl {
     auto& type() { return key_type_; }
     const IndexValue& start_index() const { return index_start_; }
     const IndexValue& end_index() const { return index_end_; }
-    IndexRange index_range() const {
-        IndexRange ir = {index_start_, index_end_};
-        ir.end_closed_ = false;
-        return ir;
-    }
+    IndexRange index_range() const { return segment_index_range(index_start_, index_end_); }
 
     /**
      * Useful for caching/replacing the ID with an existing shared instance.
