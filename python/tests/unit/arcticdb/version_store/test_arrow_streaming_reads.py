@@ -288,51 +288,63 @@ def test_streaming_reads_with_projection(in_memory_store_factory, clear_query_st
     generic_streaming_reads_test(lib, sym, expected_slices, query_builder=q)
 
 
-def test_streaming_reads_with_row_range_and_filter(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory(segment_row_size=10)
+@pytest.mark.parametrize("columns", [None, ["col_0"], ["col_0", "col_9"], ["col_1"], ["col_5", "col_6"]])
+def test_streaming_reads_with_row_range_and_filter(in_memory_store_factory, clear_query_stats, columns):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_row_range_and_filter"
-    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    df = pl.from_pandas(pd.DataFrame({f"col_{idx}": np.arange(idx * 100, (idx + 1) * 100) for idx in range(10)}))
     lib.write(sym, df)
     # row_range the first and last chunk, and truncates the second and penultimate chunks
     # query then filters down further
     q = QueryBuilder()
-    q = q[q["col"] < 28]
+    q = q[q["col_0"] < 28]
+    expected_df = df if columns is None else df.select(*columns)
     expected_slices = []
     for idx in range(8):
         if idx == 0:
-            expected_slices.append(df.slice(15, 5))
+            expected_slices.append(expected_df.slice(15, 5))
         elif idx == 1:
-            expected_slices.append(df.slice(20, 8))
+            expected_slices.append(expected_df.slice(20, 8))
         else:
-            expected_slices.append(df.slice(0, 0))
-    generic_streaming_reads_test(lib, sym, expected_slices, row_range=(15, 85), query_builder=q)
+            expected_slices.append(expected_df.slice(0, 0))
+    generic_streaming_reads_test(lib, sym, expected_slices, row_range=(15, 85), columns=columns, query_builder=q)
 
 
-def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory(segment_row_size=10)
+@pytest.mark.parametrize("columns", [None, ["col_0"], ["col_0", "col_9"], ["col_1"], ["col_5", "col_6"]])
+def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory, clear_query_stats, columns):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_date_range_and_filter"
     # Index last value is 2026-04-10
     df = pl.from_pandas(
-        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        pd.DataFrame(
+            {f"col_{idx}": np.arange(idx * 100, (idx + 1) * 100) for idx in range(10)},
+            index=pd.date_range("2026-01-01", periods=100, name="ts"),
+        ),
         include_index=True,
     )
     lib.write(sym, df, index_column=True)
     # date_range the first and last chunk, and truncates the second and penultimate chunks
     # query then filters down further
     q = QueryBuilder()
-    q = q[q["col"] < 28]
+    q = q[q["col_0"] < 28]
+    expected_df = df if columns is None else df.select("ts", *columns)
     expected_slices = []
     for idx in range(8):
         if idx == 0:
-            expected_slices.append(df.slice(15, 5))
+            expected_slices.append(expected_df.slice(15, 5))
         elif idx == 1:
-            expected_slices.append(df.slice(20, 8))
+            expected_slices.append(expected_df.slice(20, 8))
         else:
-            expected_slices.append(df.slice(0, 0))
+            expected_slices.append(expected_df.slice(0, 0))
     generic_streaming_reads_test(
-        lib, sym, expected_slices, date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26")), query_builder=q
+        lib,
+        sym,
+        expected_slices,
+        date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26")),
+        columns=columns,
+        query_builder=q,
     )
 
 
