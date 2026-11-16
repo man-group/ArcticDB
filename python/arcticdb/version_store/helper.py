@@ -192,7 +192,7 @@ def add_lmdb_library_to_env(cfg, lib_name, env_name, db_dir=Defaults.DATA_DIR, d
 
 
 def add_file_library_to_env(cfg, lib_name, env_name, description=None, *, file_config={}):
-    # type: (EnvironmentConfigsMap, LibName, EnvName, Optional[FilePath], Optional[str], None, Dict[str, Any])->None
+    # type: (EnvironmentConfigsMap, LibName, EnvName, Optional[str], None, Dict[str, Any])->None
     env = cfg.env_by_id[env_name]
     file_config_proto = FileConfig()
     for k, v in file_config.items():
