@@ -407,7 +407,16 @@ def test_streaming_reads_io_counts(
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
 
 
-def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, clear_query_stats):
+@pytest.mark.parametrize(
+    "columns",
+    [
+        None,
+        ["present_in_all"],
+        ["present_in_first_only", "present_in_third_only"],
+        ["present_in_first_and_second", "present_in_first_and_third"],
+    ],
+)
+def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, clear_query_stats, columns):
     lib = in_memory_version_store_dynamic_schema
     lib.set_output_format("polars")
     sym = "test_streaming_reads_dynamic_schema"
@@ -446,18 +455,21 @@ def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, 
     lib.append(sym, df2)
     # Types above selected such that our dynamic schema type promotion behaviour matches Polars'
     expected_df = pl.concat([df0, df1, df2], how="diagonal_relaxed")
-    assert expected_df.schema == pl.Schema(
-        {
-            "present_in_all": pl.UInt32,
-            "present_in_first_only": pl.Int32,
-            "present_in_first_and_second": pl.Int32,
-            "present_in_first_and_third": pl.Float32,
-            "present_in_second_only": pl.Int64,
-            "present_in_second_and_third": pl.Int32,
-            "present_in_third_only": pl.Float64,
-        }
+    global_schema = {
+        "present_in_all": pl.UInt32,
+        "present_in_first_only": pl.Int32,
+        "present_in_first_and_second": pl.Int32,
+        "present_in_first_and_third": pl.Float32,
+        "present_in_second_only": pl.Int64,
+        "present_in_second_and_third": pl.Int32,
+        "present_in_third_only": pl.Float64,
+    }
+    expected_df = expected_df if columns is None else expected_df.select(*columns)
+    expected_schema = pl.Schema(
+        global_schema if columns is None else {k: v for k, v in global_schema.items() if k in columns}
     )
-    generic_streaming_reads_test(lib, sym, [expected_df.slice(idx * 10, 10) for idx in range(3)])
+    assert expected_df.schema == expected_schema
+    generic_streaming_reads_test(lib, sym, [expected_df.slice(idx * 10, 10) for idx in range(3)], columns=columns)
 
 
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
