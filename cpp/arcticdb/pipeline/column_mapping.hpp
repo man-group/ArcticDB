@@ -40,6 +40,7 @@ struct ColumnMapping {
     const size_t offset_bytes_;
     const size_t dest_bytes_;
     const size_t dest_col_;
+    // In frame rows, as Column truncation expects; segment_truncation gives it in this mapping's segment rows
     ColumnTruncation truncate_;
 
     ColumnMapping(SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context);
@@ -89,7 +90,19 @@ void handle_truncation(Column& dest_column, const ColumnTruncation& truncate);
 
 void handle_truncation(Column& dest_column, const ColumnMapping& mapping);
 
-void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate);
+// mapping.truncate_ is in frame rows; this is the same truncation in rows of the mapping's segment
+ColumnTruncation segment_truncation(const ColumnMapping& mapping);
+
+struct PositionsAfterTruncation {
+    ColumnTruncation segment_rows;
+    // Byte offset, in the frame, of the first row kept after truncation
+    size_t extra_buffer_position;
+};
+
+PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& mapping);
+
+// bv covers one segment, so segment_rows is in that segment's rows, as segment_truncation returns
+void truncate_segment_bitset(util::BitSet& bv, const ColumnTruncation& segment_rows);
 
 void create_dense_bitmap(
         size_t offset, const util::BitSet& sparse_map, Column& dest_column, entity::AllocationType allocation_type
