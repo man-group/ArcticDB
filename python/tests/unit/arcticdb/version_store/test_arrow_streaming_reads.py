@@ -38,19 +38,24 @@ def generic_streaming_reads_test(lib, sym, expected_slices, prefetch_rows=None, 
         assert not len(qs.get_query_stats())
         qs.reset_stats()
         with qs.query_stats():
-            dfs = []
-            for idx, df in enumerate(gen):
-                assert df.equals(expected_slices[idx])
-                dfs.append(df)
+            slices = []
+            for idx, slice in enumerate(gen):
+                assert slice.equals(expected_slices[idx])
+                # Exactly one record batch per slice
+                assert slice.n_chunks() == 1
+                slices.append(slice)
         stats = qs.get_query_stats()
+        # Total IO operations match non-streaming reads
         assert_stat_counts_equal(stats, expected_stats)
         qs.reset_stats()
+        # Each slice matches a section of the result of a non-streaming read
         row = 0
-        for df in dfs:
+        for df in slices:
             expected_slice = expected_vit.data.slice(row, len(df))
             assert df.equals(expected_slice)
             row += len(df)
-        df = pl.concat(dfs)
+        # Concatenating together slices gives the same result as a non-streaming read
+        df = pl.concat(slices)
         assert df.equals(expected_vit.data)
         expected_vit.data = None
         assert gen.versioned_item() == expected_vit
