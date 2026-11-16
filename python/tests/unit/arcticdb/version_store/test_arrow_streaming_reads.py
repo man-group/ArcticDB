@@ -66,6 +66,30 @@ def test_streaming_reads_basic(in_memory_store_factory, clear_query_stats, prefe
     generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)], prefetch_rows)
 
 
+def test_streaming_reads_as_of(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_as_of"
+    snap = "test_streaming_reads_as_of_snap"
+    # v0
+    df0 = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    metadata = {"version": "0"}
+    lib.write(sym, df0, metadata=metadata)
+    # v1, kept alive by snapshot
+    df1 = pl.from_pandas(pd.DataFrame({"col": np.arange(100, 200)}))
+    metadata = {"version": "1"}
+    lib.write(sym, df1, metadata=metadata)
+    lib.snapshot(snap)
+    lib.delete_version(sym, 1)
+    # v2, latest
+    df2 = pl.from_pandas(pd.DataFrame({"col": np.arange(200, 300)}))
+    metadata = {"version": "2"}
+    lib.write(sym, df2, metadata=metadata)
+    generic_streaming_reads_test(lib, sym, [df0.slice(idx * 10, 10) for idx in range(10)], as_of=0)
+    generic_streaming_reads_test(lib, sym, [df1.slice(idx * 10, 10) for idx in range(10)], as_of=snap)
+    generic_streaming_reads_test(lib, sym, [df2.slice(idx * 10, 10) for idx in range(10)], as_of=None)
+
+
 def test_streaming_reads_col_slicing(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
     lib.set_output_format("polars")
@@ -108,30 +132,6 @@ def test_streaming_reads_col_filtering(in_memory_store_factory, clear_query_stat
             else:
                 expected_slices.append(expected_df.slice(idx * 10 - 5, 10))
     generic_streaming_reads_test(lib, sym, expected_slices, **kwargs)
-
-
-def test_streaming_reads_as_of(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory(segment_row_size=10)
-    lib.set_output_format("polars")
-    sym = "test_streaming_reads_as_of"
-    snap = "test_streaming_reads_as_of_snap"
-    # v0
-    df0 = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
-    metadata = {"version": "0"}
-    lib.write(sym, df0, metadata=metadata)
-    # v1, kept alive by snapshot
-    df1 = pl.from_pandas(pd.DataFrame({"col": np.arange(100, 200)}))
-    metadata = {"version": "1"}
-    lib.write(sym, df1, metadata=metadata)
-    lib.snapshot(snap)
-    lib.delete_version(sym, 1)
-    # v2, latest
-    df2 = pl.from_pandas(pd.DataFrame({"col": np.arange(200, 300)}))
-    metadata = {"version": "2"}
-    lib.write(sym, df2, metadata=metadata)
-    generic_streaming_reads_test(lib, sym, [df0.slice(idx * 10, 10) for idx in range(10)], as_of=0)
-    generic_streaming_reads_test(lib, sym, [df1.slice(idx * 10, 10) for idx in range(10)], as_of=snap)
-    generic_streaming_reads_test(lib, sym, [df2.slice(idx * 10, 10) for idx in range(10)], as_of=None)
 
 
 def test_streaming_reads_with_row_range(in_memory_store_factory, clear_query_stats):
@@ -182,27 +182,6 @@ def test_streaming_reads_with_funky_row_ranges(in_memory_store_factory, clear_qu
         [df.slice(0, 10), df.slice(10, 5)] if row_range[0] is None else [df.slice(85, 5), df.slice(90, 10)]
     )
     generic_streaming_reads_test(lib, sym, expected_slices, row_range=row_range)
-
-
-def test_streaming_reads_with_row_range_and_filter(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory(segment_row_size=10)
-    lib.set_output_format("polars")
-    sym = "test_streaming_reads_with_row_range_and_filter"
-    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
-    lib.write(sym, df)
-    # row_range the first and last chunk, and truncates the second and penultimate chunks
-    # query then filters down further
-    q = QueryBuilder()
-    q = q[q["col"] < 28]
-    expected_slices = []
-    for idx in range(8):
-        if idx == 0:
-            expected_slices.append(df.slice(15, 5))
-        elif idx == 1:
-            expected_slices.append(df.slice(20, 8))
-        else:
-            expected_slices.append(df.slice(0, 0))
-    generic_streaming_reads_test(lib, sym, expected_slices, row_range=(15, 85), query_builder=q)
 
 
 def test_streaming_reads_with_date_range(in_memory_store_factory, clear_query_stats):
@@ -277,33 +256,6 @@ def test_streaming_reads_with_funky_date_ranges(in_memory_store_factory, clear_q
     generic_streaming_reads_test(lib, sym, expected_slices, date_range=date_range)
 
 
-def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory(segment_row_size=10)
-    lib.set_output_format("polars")
-    sym = "test_streaming_reads_with_date_range_and_filter"
-    # Index last value is 2026-04-10
-    df = pl.from_pandas(
-        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
-        include_index=True,
-    )
-    lib.write(sym, df, index_column=True)
-    # date_range the first and last chunk, and truncates the second and penultimate chunks
-    # query then filters down further
-    q = QueryBuilder()
-    q = q[q["col"] < 28]
-    expected_slices = []
-    for idx in range(8):
-        if idx == 0:
-            expected_slices.append(df.slice(15, 5))
-        elif idx == 1:
-            expected_slices.append(df.slice(20, 8))
-        else:
-            expected_slices.append(df.slice(0, 0))
-    generic_streaming_reads_test(
-        lib, sym, expected_slices, date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26")), query_builder=q
-    )
-
-
 def test_streaming_reads_with_filter(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
@@ -334,6 +286,54 @@ def test_streaming_reads_with_projection(in_memory_store_factory, clear_query_st
     expected_df = pl.from_pandas(pd.DataFrame({"col": np.arange(100), "new_col": np.arange(0, 200, 2)}))
     expected_slices = [expected_df.slice(idx * 10, 10) for idx in range(10)]
     generic_streaming_reads_test(lib, sym, expected_slices, query_builder=q)
+
+
+def test_streaming_reads_with_row_range_and_filter(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_row_range_and_filter"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    # row_range the first and last chunk, and truncates the second and penultimate chunks
+    # query then filters down further
+    q = QueryBuilder()
+    q = q[q["col"] < 28]
+    expected_slices = []
+    for idx in range(8):
+        if idx == 0:
+            expected_slices.append(df.slice(15, 5))
+        elif idx == 1:
+            expected_slices.append(df.slice(20, 8))
+        else:
+            expected_slices.append(df.slice(0, 0))
+    generic_streaming_reads_test(lib, sym, expected_slices, row_range=(15, 85), query_builder=q)
+
+
+def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_date_range_and_filter"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    # date_range the first and last chunk, and truncates the second and penultimate chunks
+    # query then filters down further
+    q = QueryBuilder()
+    q = q[q["col"] < 28]
+    expected_slices = []
+    for idx in range(8):
+        if idx == 0:
+            expected_slices.append(df.slice(15, 5))
+        elif idx == 1:
+            expected_slices.append(df.slice(20, 8))
+        else:
+            expected_slices.append(df.slice(0, 0))
+    generic_streaming_reads_test(
+        lib, sym, expected_slices, date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26")), query_builder=q
+    )
 
 
 @pytest.mark.parametrize("call_versioned_item_before_loop", [True, False])
