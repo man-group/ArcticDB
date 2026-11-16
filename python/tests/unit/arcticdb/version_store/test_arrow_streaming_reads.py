@@ -256,23 +256,25 @@ def test_streaming_reads_with_funky_date_ranges(in_memory_store_factory, clear_q
     generic_streaming_reads_test(lib, sym, expected_slices, date_range=date_range)
 
 
-def test_streaming_reads_with_filter(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory(segment_row_size=10)
+@pytest.mark.parametrize("columns", [None, ["col_0"], ["col_0", "col_9"], ["col_1"], ["col_5", "col_6"]])
+def test_streaming_reads_with_filter(in_memory_store_factory, clear_query_stats, columns):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_filter"
-    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    df = pl.from_pandas(pd.DataFrame({f"col_{idx}": np.arange(idx * 100, (idx + 1) * 100) for idx in range(10)}))
     lib.write(sym, df)
     q = QueryBuilder()
-    q = q[q["col"] < 25]
+    q = q[q["col_0"] < 25]
+    expected_df = df if columns is None else df.select(*columns)
     expected_slices = []
     for idx in range(10):
         if idx < 2:
-            expected_slices.append(df.slice(idx * 10, 10))
+            expected_slices.append(expected_df.slice(idx * 10, 10))
         elif idx == 2:
-            expected_slices.append(df.slice(20, 5))
+            expected_slices.append(expected_df.slice(20, 5))
         else:
-            expected_slices.append(df.slice(0, 0))
-    generic_streaming_reads_test(lib, sym, expected_slices, query_builder=q)
+            expected_slices.append(expected_df.slice(0, 0))
+    generic_streaming_reads_test(lib, sym, expected_slices, columns=columns, query_builder=q)
 
 
 def test_streaming_reads_with_projection(in_memory_store_factory, clear_query_stats):
