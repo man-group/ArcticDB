@@ -79,10 +79,24 @@ def test_streaming_reads_as_of(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_as_of"
-    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
-    metadata = {"hello": "world"}
-    lib.write(sym, df, metadata=metadata)
-    generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)], prefetch_rows)
+    snap = "test_streaming_reads_as_of_snap"
+    # v0
+    df0 = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    metadata = {"version": "0"}
+    lib.write(sym, df0, metadata=metadata)
+    # v1, kept alive by snapshot
+    df1 = pl.from_pandas(pd.DataFrame({"col": np.arange(100, 200)}))
+    metadata = {"version": "1"}
+    lib.write(sym, df1, metadata=metadata)
+    lib.snapshot(snap)
+    lib.delete_version(sym, 1)
+    # v2, latest
+    df2 = pl.from_pandas(pd.DataFrame({"col": np.arange(200, 300)}))
+    metadata = {"version": "2"}
+    lib.write(sym, df2, metadata=metadata)
+    generic_streaming_reads_test(lib, sym, [df0.slice(idx * 10, 10) for idx in range(10)], as_of=0)
+    generic_streaming_reads_test(lib, sym, [df1.slice(idx * 10, 10) for idx in range(10)], as_of=snap)
+    generic_streaming_reads_test(lib, sym, [df2.slice(idx * 10, 10) for idx in range(10)], as_of=None)
 
 
 def test_streaming_reads_with_row_range(in_memory_store_factory, clear_query_stats):
