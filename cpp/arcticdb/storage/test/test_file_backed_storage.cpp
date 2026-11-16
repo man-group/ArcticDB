@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
+#include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/storage/test/faulty_posix.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
@@ -178,6 +179,21 @@ TEST_F(FileStorageApi, ListSymbols) {
         executed_on_missing = true;
     });
     ASSERT_FALSE(executed_on_missing);
+}
+
+TEST_F(FileStorageApi, ListSymbolsWithPrefix) {
+    for (const std::string stream_id : {"symbol_a", "symbol_b", "other"}) {
+        auto key = storage::get_test_key(stream_id, entity::KeyType::VERSION);
+        storage().write(storage::KeySegmentPair(std::move(key), storage::get_test_segment()));
+    }
+
+    std::set<std::string> found;
+    storage().iterate_type(
+            arcticdb::entity::KeyType::VERSION,
+            [&](entity::VariantKey&& found_key) { found.insert(std::get<StringId>(variant_key_id(found_key))); },
+            "symbol"
+    );
+    ASSERT_EQ(found, (std::set<std::string>{"symbol_a", "symbol_b"}));
 }
 
 using FaultParam = std::tuple<SyscallId, std::optional<PosixError>, std::string_view>;
