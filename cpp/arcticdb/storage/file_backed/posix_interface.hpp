@@ -29,6 +29,7 @@ class PosixInterface {
     [[nodiscard]] virtual ssize_t read(int fd, void* buf, size_t count) = 0;
     [[nodiscard]] virtual int fsync(int fd) = 0;
     [[nodiscard]] virtual int rename(const char* oldpath, const char* newpath) = 0;
+    [[nodiscard]] virtual int renameat(int olddirfd, const char* oldpath, int newdirfd, const char* newpath) = 0;
     [[nodiscard]] virtual int link(const char* oldpath, const char* newpath) = 0;
     [[nodiscard]] virtual int mkdir(const char* pathname, mode_t mode) = 0;
     [[nodiscard]] virtual int mkdirat(int fd, const char* pathname, mode_t mode) = 0;

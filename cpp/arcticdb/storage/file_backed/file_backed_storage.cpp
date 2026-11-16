@@ -382,11 +382,23 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
                     *posix_, key_type_dir_fd, tmp_file_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
             );
             size_t segment_size = seg.calculate_size();
+            // TODO: Unnecessary copy
             std::vector<std::uint8_t> buffer(segment_size);
             seg.write_to(buffer.data());
             tmp_key_fd.write_all(*posix_, buffer);
             tmp_key_fd.sync();
             tmp_key_fd.close();
+
+            if (posix_->renameat(
+                        key_type_dir_fd.fd(),
+                        tmp_file_path.c_str(),
+                        key_type_dir_fd.fd(),
+                        maybe_safe_file_name_for_key.c_str()
+                ) != 0) {
+                throw arcticdb::StorageException(fmt::format(
+                        "Failed to move temp file to {}: {}", maybe_safe_file_name_for_key, std::strerror(errno)
+                ));
+            }
 
             // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
             // No-op on NFS.
@@ -406,15 +418,8 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
             throw;
         }
     }
-    // All file descriptors closed before rename.
-    fs::path destination = storage_dir_ / key_name / maybe_safe_file_name_for_key;
-    if (posix_->rename(tmp_file_path.c_str(), destination.c_str())) {
-        ::unlink(tmp_file_path.c_str());
-        throw arcticdb::StorageException(fmt::format(
-                "Failed to move {} to {}: {}", tmp_file_path.c_str(), destination.c_str(), std::strerror(errno)
-        ));
-    }
 }
+
 void FileBackedStorage::do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) {
     storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(
             "Atomic operations not yet supported on file backed storage"

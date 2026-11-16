@@ -99,6 +99,11 @@ int FaultyPosix::rename(const char* oldpath, const char* newpath) {
     return propagate_fault_if_exists(SyscallId::RENAME, res);
 }
 
+int FaultyPosix::renameat(int olddirfd, const char* oldpath, int newdirfd, const char* newpath) {
+    int res = ::renameat(olddirfd, oldpath, newdirfd, newpath);
+    return propagate_fault_if_exists(SyscallId::RENAME, res);
+}
+
 int FaultyPosix::link(const char* oldpath, const char* newpath) {
     int res = ::link(oldpath, newpath);
     return propagate_fault_if_exists(SyscallId::LINK, res);

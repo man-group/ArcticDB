@@ -26,6 +26,9 @@ ssize_t RealPosix::write(int fd, const void* buf, size_t count) { return ::write
 ssize_t RealPosix::read(int fd, void* buf, size_t count) { return ::read(fd, buf, count); }
 int RealPosix::fsync(int fd) { return ::fsync(fd); }
 int RealPosix::rename(const char* oldpath, const char* newpath) { return ::rename(oldpath, newpath); }
+int RealPosix::renameat(int olddirfd, const char* oldpath, int newdirfd, const char* newpath) {
+    return ::renameat(olddirfd, oldpath, newdirfd, newpath);
+}
 int RealPosix::link(const char* oldpath, const char* newpath) { return ::link(oldpath, newpath); }
 int RealPosix::mkdir(const char* pathname, mode_t mode) { return ::mkdir(pathname, mode); }
 int RealPosix::mkdirat(int fd, const char* pathname, mode_t mode) { return ::mkdirat(fd, pathname, mode); }
