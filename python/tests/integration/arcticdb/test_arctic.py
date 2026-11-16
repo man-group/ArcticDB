@@ -1912,3 +1912,27 @@ def test_compact_data(lmdb_library, rows_per_segment, prune_previous_versions):
     assert len(lib._dev_tools.library_tool().read_index(sym)) == max(len(df) // rows_per_segment, 1)
     prune_previous_versions = False if prune_previous_versions is None else prune_previous_versions
     assert len(lib.list_versions(sym)) == (1 if prune_previous_versions else 11)
+
+
+@MONGO_TESTS_MARK
+@pytest.mark.parametrize("corruption", ["data_truncated", "total_size_too_large", "total_size_too_small"])
+def test_mongo_read_rejects_stored_size_not_matching_data(mongo_storage, lib_name, sym, corruption):
+    lib = Arctic(mongo_storage.arctic_uri).create_library(lib_name)
+    lib.write(sym, pd.DataFrame({"a": np.arange(10)}))
+    db = mongo_storage.client["arcticc_" + mongo_storage.prefix[:-1]]
+    query = {"stream_id": sym, "key_type": int(KeyType.TABLE_DATA)}
+    (collection, doc), *others = [
+        (db[name], doc) for name in db.list_collection_names() for doc in db[name].find(query)
+    ]
+    assert not others
+    data_size = len(doc["data"])
+    if corruption == "data_truncated":
+        collection.update_one({"_id": doc["_id"]}, {"$set": {"data": doc["data"][:-16]}})
+        sizes = (data_size, data_size - 16)
+    else:
+        size_delta = 1_000_000 if corruption == "total_size_too_large" else -1
+        collection.update_one({"_id": doc["_id"]}, {"$inc": {"total_size": size_delta}})
+        sizes = (data_size + size_delta, data_size)
+
+    with pytest.raises(InternalException, match=f"total_size {sizes[0]} but its data is {sizes[1]} bytes"):
+        lib.read(sym)

@@ -342,17 +342,18 @@ std::optional<KeySegmentPair> MongoClientImpl::read_segment(
             );
             find_result) {
             const auto& doc = find_result->view();
-            auto size = doc["total_size"].get_int64().value;
+            const auto stored_size = doc["total_size"].get_int64().value;
             entity::VariantKey stored_key{detail::variant_key_from_document(doc, key)};
             util::check(stored_key == key, "Key mismatch: {} != {}");
-            return storage::KeySegmentPair(
-                    std::move(stored_key),
-                    Segment::from_bytes(
-                            const_cast<uint8_t*>(find_result->view()["data"].get_binary().bytes),
-                            std::size_t(size),
-                            true
-                    )
+            const auto data = doc["data"].get_binary();
+            util::check(
+                    stored_size == int64_t(data.size),
+                    "Mongo document for key {} has total_size {} but its data is {} bytes",
+                    key,
+                    stored_size,
+                    data.size
             );
+            return storage::KeySegmentPair(std::move(stored_key), Segment::from_bytes(data.bytes, data.size, true));
         } else {
             // find_one returned nothing, returns null_opt which would be handled by the caller to throw a
             // KeyNotFoundException
