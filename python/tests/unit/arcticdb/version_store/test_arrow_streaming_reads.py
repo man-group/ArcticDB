@@ -66,7 +66,7 @@ def test_streaming_reads_basic(in_memory_store_factory, clear_query_stats, prefe
     generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)], prefetch_rows)
 
 
-def test_streaming_reads_col_slicing(in_memory_store_factory):
+def test_streaming_reads_col_slicing(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_col_slicing"
@@ -75,7 +75,17 @@ def test_streaming_reads_col_slicing(in_memory_store_factory):
     generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)])
 
 
-def test_streaming_reads_with_row_range(in_memory_store_factory):
+def test_streaming_reads_as_of(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_as_of"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    metadata = {"hello": "world"}
+    lib.write(sym, df, metadata=metadata)
+    generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)], prefetch_rows)
+
+
+def test_streaming_reads_with_row_range(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_row_range"
@@ -93,7 +103,7 @@ def test_streaming_reads_with_row_range(in_memory_store_factory):
     generic_streaming_reads_test(lib, sym, expected_slices, row_range=(15, 85))
 
 
-def test_streaming_reads_with_row_range_exact_boundaries(in_memory_store_factory):
+def test_streaming_reads_with_row_range_exact_boundaries(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_row_range_exact_boundaries"
@@ -103,7 +113,7 @@ def test_streaming_reads_with_row_range_exact_boundaries(in_memory_store_factory
     generic_streaming_reads_test(lib, sym, [df.slice((idx + 1) * 10, 10) for idx in range(8)], row_range=(10, 90))
 
 
-def test_streaming_reads_with_open_ended_row_range(in_memory_store_factory):
+def test_streaming_reads_with_open_ended_row_range(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_open_ended_row_range"
@@ -113,7 +123,7 @@ def test_streaming_reads_with_open_ended_row_range(in_memory_store_factory):
 
 
 @pytest.mark.parametrize("row_range", [(None, 15), (None, -85), (85, None), (-15, None)])
-def test_streaming_reads_with_funky_row_ranges(in_memory_store_factory, row_range):
+def test_streaming_reads_with_funky_row_ranges(in_memory_store_factory, clear_query_stats, row_range):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_funky_row_ranges"
@@ -125,7 +135,7 @@ def test_streaming_reads_with_funky_row_ranges(in_memory_store_factory, row_rang
     generic_streaming_reads_test(lib, sym, expected_slices, row_range=row_range)
 
 
-def test_streaming_reads_with_row_range_and_filter(in_memory_store_factory):
+def test_streaming_reads_with_row_range_and_filter(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_row_range_and_filter"
@@ -146,7 +156,7 @@ def test_streaming_reads_with_row_range_and_filter(in_memory_store_factory):
     generic_streaming_reads_test(lib, sym, expected_slices, row_range=(15, 85), query_builder=q)
 
 
-def test_streaming_reads_with_date_range(in_memory_store_factory):
+def test_streaming_reads_with_date_range(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_date_range"
@@ -170,7 +180,7 @@ def test_streaming_reads_with_date_range(in_memory_store_factory):
     )
 
 
-def test_streaming_reads_with_date_range_exact_boundaries(in_memory_store_factory):
+def test_streaming_reads_with_date_range_exact_boundaries(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_date_range_exact_boundaries"
@@ -189,7 +199,7 @@ def test_streaming_reads_with_date_range_exact_boundaries(in_memory_store_factor
     )
 
 
-def test_streaming_reads_with_open_ended_date_range(in_memory_store_factory):
+def test_streaming_reads_with_open_ended_date_range(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_open_ended_date_range"
@@ -202,7 +212,7 @@ def test_streaming_reads_with_open_ended_date_range(in_memory_store_factory):
 
 
 @pytest.mark.parametrize("date_range", [(None, pd.Timestamp("2026-01-15")), (pd.Timestamp("2026-03-27"), None)])
-def test_streaming_reads_with_funky_date_ranges(in_memory_store_factory, date_range):
+def test_streaming_reads_with_funky_date_ranges(in_memory_store_factory, clear_query_stats, date_range):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_funky_date_ranges"
@@ -218,7 +228,7 @@ def test_streaming_reads_with_funky_date_ranges(in_memory_store_factory, date_ra
     generic_streaming_reads_test(lib, sym, expected_slices, date_range=date_range)
 
 
-def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory):
+def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_date_range_and_filter"
@@ -245,7 +255,7 @@ def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory):
     )
 
 
-def test_streaming_reads_with_filter(in_memory_store_factory):
+def test_streaming_reads_with_filter(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_filter"
@@ -264,7 +274,7 @@ def test_streaming_reads_with_filter(in_memory_store_factory):
     generic_streaming_reads_test(lib, sym, expected_slices, query_builder=q)
 
 
-def test_streaming_reads_with_projection(in_memory_store_factory):
+def test_streaming_reads_with_projection(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     lib.set_output_format("polars")
     sym = "test_streaming_reads_with_projection"
