@@ -31,6 +31,7 @@ class RealPosix : public PosixInterface {
     struct dirent* readdir(DIR* dirp) override;
     int closedir(DIR* dirp) override;
     int unlink(const char* pathname) override;
+    int unlinkat(int dirfd, const char* pathname, int flags) override;
 };
 
 } // namespace arcticdb::storage::file_backed

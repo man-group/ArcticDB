@@ -134,6 +134,11 @@ int FaultyPosix::unlink(const char* pathname) {
     return propagate_fault_if_exists(SyscallId::UNLINK, res);
 }
 
+int FaultyPosix::unlinkat(int dirfd, const char* pathname, int flags) {
+    int res = ::unlinkat(dirfd, pathname, flags);
+    return propagate_fault_if_exists(SyscallId::UNLINK, res);
+}
+
 DIR* FaultyPosix::opendir(const char* name) { return ::opendir(name); }
 struct dirent* FaultyPosix::readdir(DIR* dirp) { return ::readdir(dirp); }
 int FaultyPosix::closedir(DIR* dirp) { return ::closedir(dirp); }

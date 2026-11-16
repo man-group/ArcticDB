@@ -39,6 +39,7 @@ class PosixInterface {
     [[nodiscard]] virtual struct dirent* readdir(DIR* dirp) = 0;
     [[nodiscard]] virtual int closedir(DIR* dirp) = 0;
     [[nodiscard]] virtual int unlink(const char* pathname) = 0;
+    [[nodiscard]] virtual int unlinkat(int dirfd, const char* pathname, int flags) = 0;
 };
 
 } // namespace arcticdb::storage::file_backed

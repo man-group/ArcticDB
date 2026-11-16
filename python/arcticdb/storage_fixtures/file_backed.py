@@ -29,7 +29,7 @@ class FileBackedStorageFixture(StorageFixture):
     def __init__(self, db_dir: Optional[str] = None):
         super().__init__()
         self.db_dir = str(db_dir) if db_dir else mkdtemp(suffix="FileBackedStorageFixtureFactory")
-        self.arctic_uri = "lmdb://" + self.db_dir
+        self.arctic_uri = "experimental_file://" + self.db_dir
         self.libs_instances_from_arctic: List[NativeVersionStore] = []
         self.arctic_instances: List[Arctic] = []
 

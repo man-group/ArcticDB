@@ -9,6 +9,7 @@
 #include <arcticdb/storage/file_backed/real_posix.hpp>
 
 #include <cstdio>
+#include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -38,5 +39,6 @@ DIR* RealPosix::opendir(const char* name) { return ::opendir(name); }
 struct dirent* RealPosix::readdir(DIR* dirp) { return ::readdir(dirp); }
 int RealPosix::closedir(DIR* dirp) { return ::closedir(dirp); }
 int RealPosix::unlink(const char* pathname) { return ::unlink(pathname); }
+int RealPosix::unlinkat(int dirfd, const char* pathname, int flags) { return ::unlinkat(dirfd, pathname, flags); }
 
 } // namespace arcticdb::storage::file_backed

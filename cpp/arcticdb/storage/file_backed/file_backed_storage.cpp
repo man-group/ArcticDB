@@ -14,6 +14,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/error_code.hpp>
 
@@ -22,10 +23,8 @@
 
 #include <filesystem>
 #include <random>
-#include <sstream>
 #include <stack>
 #include <system_error>
-#include <unistd.h>
 
 // TODO: Windows will be an entirely separate implementation. Some of the Storage class implementations will be
 //       platform independent, so perhaps it is prudent to introduce some separate TUs per platform.
@@ -36,7 +35,6 @@
 //       check < 0, or I just write if(syscall()) { handle error }.
 #ifndef _WIN32
 #include <fcntl.h>
-#include <linux/limits.h>
 #include <sys/stat.h>
 #endif
 
@@ -68,16 +66,11 @@ void raise_io_error(int error_code, std::string_view message) {
     }
 }
 
+// File name, which is unlikely to collide across consecutive function calls and physical machines.
+// Uses a nanosecond timestamp and a randomly generated value.
 std::string generate_tmp_file_name() {
-    // TODO: Is this enough randomness? Seems legit to me. PID + TID + 32-bit random value ensures
-    // no clashes with local processes. For other machines to clash, they need to accidentally get the same
-    // PID, TID *and* they need to generate the same random value. The seed is also distinct every time.
-    // TODO: On second thought, a timestamp + random value should be a lot more reliable collision-wise.
     static thread_local std::mt19937 gen{std::random_device{}()};
-    std::ostringstream ss;
-    std::uint32_t random_number = gen();
-    ss << TMP_FILE_PREFIX << getpid() << gettid() << random_number;
-    return ss.str();
+    return fmt::format("{}{}_{}", TMP_FILE_PREFIX, util::SysClock::nanos_since_epoch(), gen());
 }
 
 fs::path get_key_subpath(const VariantKey& key) {
@@ -232,7 +225,7 @@ class Directory : public FdHolder {
 
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
     // errors.
-    void unlinkat_swallow_errors(const fs::path& pathname) const { ::unlinkat(fd_, pathname.c_str(), 0); }
+    void unlinkat_swallow_errors(const fs::path& pathname) const { (void)posix_.unlinkat(fd_, pathname.c_str(), 0); }
 };
 
 class File : public FdHolder {

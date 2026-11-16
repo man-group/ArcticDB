@@ -10,7 +10,6 @@
 
 #include <arcticdb/storage/file_backed/posix_interface.hpp>
 
-#include <filesystem>
 #include <mutex>
 #include <optional>
 #include <queue>
@@ -47,6 +46,7 @@ class FaultyPosix : public PosixInterface {
     struct dirent* readdir(DIR* dirp) override;
     int closedir(DIR* dirp) override;
     int unlink(const char* pathname) override;
+    int unlinkat(int dirfd, const char* pathname, int flags) override;
 
   private:
     template<typename ResultType>
