@@ -37,6 +37,7 @@ class FaultyPosix : public PosixInterface {
     ssize_t read(int fd, void* buf, size_t count) override;
     int fsync(int fd) override;
     int rename(const char* oldpath, const char* newpath) override;
+    int renameat(int olddirfd, const char* oldpath, int newdirfd, const char* newpath) override;
     int link(const char* oldpath, const char* newpath) override;
     int mkdir(const char* pathname, mode_t mode) override;
     int mkdirat(int fd, const char* pathname, mode_t mode) override;
