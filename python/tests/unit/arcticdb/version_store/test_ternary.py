@@ -312,6 +312,65 @@ def test_project_ternary_column_sliced(version_store_factory, index, any_output_
     assert_frame_equal(expected, received)
 
 
+def write_float_column_missing_from_second_slice(lib, symbol, dtype):
+    index = pd.date_range("2024-01-01", periods=4)
+    lib.write(
+        symbol, pd.DataFrame({"conditional": [True, False], "col": np.array([1, 2], dtype=dtype)}, index=index[:2])
+    )
+    lib.append(symbol, pd.DataFrame({"conditional": [True, False]}, index=index[2:]))
+    return lib.read(symbol).data
+
+
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
+def test_project_ternary_dynamic_missing_column_python_float_literal(
+    lmdb_version_store_dynamic_schema_v1, any_output_format, dtype
+):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_ternary_dynamic_missing_column_python_float_literal"
+    expected = write_float_column_missing_from_second_slice(lib, symbol, dtype)
+    q = QueryBuilder()
+    q = q.apply("left", where(q["conditional"], 0.05, q["col"])).apply("right", where(q["conditional"], q["col"], 0.05))
+    received = lib.read(symbol, query_builder=q).data
+    expected["left"] = np.where(expected["conditional"], dtype(0.05), expected["col"])
+    expected["right"] = np.where(expected["conditional"], expected["col"], dtype(0.05))
+    assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("literal_branch", ["left", "right"])
+def test_filter_after_project_ternary_dynamic_missing_column_python_float_literal(
+    lmdb_version_store_dynamic_schema_v1, any_output_format, literal_branch
+):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_after_project_ternary_dynamic_missing_column_python_float_literal"
+    df = write_float_column_missing_from_second_slice(lib, symbol, np.float32)
+    q = QueryBuilder()
+    if literal_branch == "left":
+        q = q.apply("projected", where(q["conditional"], 0.05, q["col"]))
+        df["projected"] = np.where(df["conditional"], np.float32(0.05), df["col"])
+    else:
+        q = q.apply("projected", where(~q["conditional"], q["col"], 0.05))
+        df["projected"] = np.where(~df["conditional"], df["col"], np.float32(0.05))
+    q = q[q["projected"] == np.float32(0.05)]
+    assert_frame_equal(df[df["projected"] == np.float32(0.05)], lib.read(symbol, query_builder=q).data)
+
+
+def test_batch_read_ternary_dynamic_missing_column_python_float_literal(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    expected = {}
+    for dtype in [np.float32, np.float64]:
+        symbol = f"test_batch_read_ternary_dynamic_missing_column_python_float_literal_{dtype.__name__}"
+        df = write_float_column_missing_from_second_slice(lib, symbol, dtype)
+        df["projected"] = np.where(df["conditional"], dtype(0.05), df["col"])
+        expected[symbol] = df
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["conditional"], 0.05, q["col"]))
+    received = lib.batch_read(list(expected), query_builder=q)
+    for symbol, df in expected.items():
+        assert_frame_equal(df, received[symbol].data)
+
+
 def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)

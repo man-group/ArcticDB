@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.exceptions import ArcticNativeException, SchemaException, UserInputException
-from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.version_store.processing import QueryBuilder, where
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 
 pytestmark = pytest.mark.pipeline
@@ -455,3 +455,60 @@ def test_projection_repeated_subexpression(lmdb_version_store_v1):
     expected["x"] = (df["a"] + df["b"]) * (df["a"] + df["b"])
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
+
+
+PYTHON_FLOAT_LITERAL_PROJECTIONS = {
+    "mul": (lambda a, lit: a * lit, lambda a, lit: a * lit),
+    "add": (lambda a, lit: lit + a, lambda a, lit: lit + a),
+    "sub": (lambda a, lit: a - lit, lambda a, lit: a - lit),
+    "where_left": (lambda a, lit: where(a < 3, a, lit), lambda a, lit: np.where(a < 3, a, lit)),
+    "where_right": (lambda a, lit: where(a < 3, lit, a), lambda a, lit: np.where(a < 3, lit, a)),
+}
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32, np.int8])
+@pytest.mark.parametrize("literal", [0.05, 123456789.123])
+def test_project_python_float_literal(lmdb_version_store_v1, any_output_format, dtype, literal):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_python_float_literal"
+    df = pd.DataFrame({"a": np.array([1, 2, 3, 100], dtype=dtype)})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    expected = df.copy()
+    for name, (arctic_expression, numpy_expression) in PYTHON_FLOAT_LITERAL_PROJECTIONS.items():
+        q = q.apply(name, arctic_expression(q.a, literal))
+        expected[name] = numpy_expression(df["a"], literal)
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q).data, check_exact=True)
+
+
+def test_project_python_float_literal_only_is_float64(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_project_python_float_literal_only_is_float64"
+    df = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.int8)})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("constant", 0.05).apply("both_branches", where(q.a < 2, 0.05, 1.5))
+    expected = df.copy()
+    expected["constant"] = np.full(3, 0.05)
+    expected["both_branches"] = np.where(df["a"] < 2, 0.05, 1.5)
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q).data, check_exact=True)
+
+
+@pytest.mark.parametrize("first_dtype, appended_dtype", [(np.float32, np.float64), (np.int16, np.float32)])
+def test_project_python_float_literal_after_type_promotion(
+    lmdb_version_store_dynamic_schema_v1, any_output_format, first_dtype, appended_dtype
+):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_python_float_literal_after_type_promotion"
+    lib.write(symbol, pd.DataFrame({"a": np.array([3, 7], dtype=first_dtype)}, index=np.arange(2)))
+    lib.append(symbol, pd.DataFrame({"a": np.array([0.5], dtype=appended_dtype)}, index=np.arange(2, 3)))
+    expected = lib.read(symbol).data
+    # Computed at the precision of the column as read, as NumPy 2 does
+    literal = np.float32(0.1) if expected["a"].dtype == np.float32 else 0.1
+    expected["mul"] = expected["a"] * literal
+    expected["nested"] = literal * (expected["a"] + expected["a"])
+    q = QueryBuilder()
+    q = q.apply("mul", q.a * 0.1).apply("nested", 0.1 * (q.a + q.a))
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q).data, check_exact=True)

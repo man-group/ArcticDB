@@ -127,20 +127,10 @@ StatsComparison adjust_for_missing(StatsComparison result, uint64_t missing_coun
 }
 
 template<typename Func>
-StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value& val_rhs, Func&& func) {
-    if (stats_lhs.column_absent) {
-        return StatsComparison::NONE_MATCH;
-    }
-    if (stats_lhs.only_nulls()) {
-        // Every row is null: `!=` matches all of them, every other comparison matches none.
-        return std::is_same_v<std::remove_cvref_t<Func>, NotEqualsOperator> ? StatsComparison::ALL_MATCH
-                                                                            : StatsComparison::NONE_MATCH;
-    }
-    if (!stats_lhs.min) {
-        return StatsComparison::UNKNOWN;
-    }
-
-    auto result = details::visit_type(stats_lhs.min->data_type(), [&](auto stats_tag) -> StatsComparison {
+StatsComparison compare_min_max_to_value(
+        const ColumnStatsValues& stats_lhs, DataType stats_type, const Value& val_rhs, const Func& func
+) {
+    return details::visit_type(stats_type, [&](auto stats_tag) -> StatsComparison {
         using StatsTag = std::remove_reference_t<decltype(stats_tag)>;
 
         return details::visit_type(val_rhs.data_type(), [&](auto val_tag) -> StatsComparison {
@@ -179,6 +169,33 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
             return StatsComparison::UNKNOWN;
         });
     });
+}
+
+template<typename Func>
+StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value& val_rhs, Func func) {
+    if (stats_lhs.column_absent) {
+        return StatsComparison::NONE_MATCH;
+    }
+    if (stats_lhs.only_nulls()) {
+        // Every row is null: `!=` matches all of them, every other comparison matches none.
+        return std::is_same_v<std::remove_cvref_t<Func>, NotEqualsOperator> ? StatsComparison::ALL_MATCH
+                                                                            : StatsComparison::NONE_MATCH;
+    }
+    if (!stats_lhs.min) {
+        return StatsComparison::UNKNOWN;
+    }
+    const auto stats_type = stats_lhs.min->data_type();
+    auto result = compare_min_max_to_value(stats_lhs, stats_type, val_rhs, func);
+    if (val_rhs.is_python_float() && is_numeric_type(stats_type)) {
+        // The row filter narrows a Python float to FLOAT32 when the column is FLOAT32 in the read's output schema. The
+        // stats type is the column's type in the version the stats belong to, which a read that also takes staged
+        // segments can promote. So keep only results that hold at both precisions; otherwise the row filter decides.
+        const auto float32_result =
+                compare_min_max_to_value(stats_lhs, stats_type, val_rhs.resolved_against(DataType::FLOAT32), func);
+        if (float32_result != result) {
+            result = StatsComparison::UNKNOWN;
+        }
+    }
     return adjust_for_missing<Func>(result, stats_lhs.nan_count + stats_lhs.null_count);
 }
 
