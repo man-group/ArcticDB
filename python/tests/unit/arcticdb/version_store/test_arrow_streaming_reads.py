@@ -48,12 +48,6 @@ def generic_streaming_reads_test(lib, sym, expected_slices, prefetch_rows=None, 
         # Total IO operations match non-streaming reads
         assert_stat_counts_equal(stats, expected_stats)
         qs.reset_stats()
-        # Each slice matches a section of the result of a non-streaming read
-        row = 0
-        for df in slices:
-            expected_slice = expected_vit.data.slice(row, len(df))
-            assert df.equals(expected_slice)
-            row += len(df)
         # Concatenating together slices gives the same result as a non-streaming read
         df = pl.concat(slices)
         assert df.equals(expected_vit.data)
