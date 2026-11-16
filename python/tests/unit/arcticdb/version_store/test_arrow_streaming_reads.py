@@ -407,6 +407,47 @@ def test_streaming_reads_io_counts(
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
 
 
+def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, clear_query_stats):
+    lib = in_memory_version_store_dynamic_schema
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_dynamic_schema"
+    df0 = pl.from_pandas(
+        pd.DataFrame(
+            {
+                "present_in_all": np.arange(0, 10, dtype=np.uint8),
+                "present_in_first_only": np.arange(100, 110, dtype=np.int32),
+                "present_in_first_and_second": np.arange(200, 210, dtype=np.uint16),
+                "present_in_first_and_third": np.arange(300, 310, dtype=np.float32),
+            }
+        )
+    )
+    df1 = pl.from_pandas(
+        pd.DataFrame(
+            {
+                "present_in_all": np.arange(10, 20, dtype=np.uint16),
+                "present_in_first_and_second": np.arange(210, 220, dtype=np.int16),
+                "present_in_second_only": np.arange(410, 420, dtype=np.int64),
+                "present_in_second_and_third": np.arange(510, 520, dtype=np.int16),
+            }
+        )
+    )
+    df2 = pl.from_pandas(
+        pd.DataFrame(
+            {
+                "present_in_all": np.arange(20, 30, dtype=np.uint32),
+                "present_in_first_and_third": np.arange(320, 330, dtype=np.float32),
+                "present_in_second_and_third": np.arange(520, 530, dtype=np.uint16),
+                "present_in_third_only": np.arange(620, 630, dtype=np.float64),
+            }
+        )
+    )
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    expected_df = pl.concat([df0, df1, df2], how="diagonal_relaxed")
+    generic_streaming_reads_test(lib, sym, [expected_df.slice(idx * 10, 10) for idx in range(3)])
+
+
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
 def test_streaming_reads_invalid_prefetch_rows(in_memory_version_store, prefetch_rows):
     lib = in_memory_version_store
