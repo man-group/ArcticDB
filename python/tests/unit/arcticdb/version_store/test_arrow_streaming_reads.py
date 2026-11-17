@@ -378,6 +378,15 @@ def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory, cle
     )
 
 
+def test_streaming_reads_series(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_series"
+    series = pl.from_pandas(pd.Series(np.arange(100)))
+    lib.write(sym, series)
+    generic_streaming_reads_test(lib, sym, [series.slice(idx * 10, 10) for idx in range(10)])
+
+
 @pytest.mark.parametrize("call_versioned_item_before_loop", [True, False])
 @pytest.mark.parametrize("prefetch_rows", [None, 0, 7, 13, 20])
 def test_streaming_reads_io_counts(
