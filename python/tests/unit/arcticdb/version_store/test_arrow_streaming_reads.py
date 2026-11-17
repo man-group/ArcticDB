@@ -285,6 +285,77 @@ def test_streaming_reads_with_date_range_index_values_duplicated_across_segment_
     )
 
 
+def test_streaming_reads_empty_data(in_memory_version_store, clear_query_stats):
+    with config_context("VersionMap.ReloadInterval", 0):
+        lib = in_memory_version_store
+        lib.set_output_format("polars")
+        sym = "test_streaming_reads_empty_data"
+        df = pl.DataFrame({"col": pl.Series(values=[], dtype=pl.Int64)})
+        metadata = "blah"
+        lib.write(sym, df, metadata=metadata)
+        assert not len(lib.read_index(sym))
+        with qs.query_stats():
+            gen = lib.read_streaming(sym)
+        # No IO yet
+        assert gen.in_flight_rows() == 0
+        assert not len(qs.get_query_stats())
+        qs.reset_stats()
+        with qs.query_stats():
+            for _ in gen:
+                # There are no row-slices so we never get here
+                # TODO: As part of 13346982120, return a single record-batch with the correct schema in this case
+                assert False
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+        qs.reset_stats()
+        expected_vit = lib.read(sym)
+        expected_vit.data = None
+        assert gen.versioned_item() == expected_vit
+
+
+@pytest.mark.parametrize("filter_type", ["row_range", "date_range"])
+def test_streaming_reads_all_data_filtered_out_at_index_level(in_memory_version_store, clear_query_stats, filter_type):
+    with config_context("VersionMap.ReloadInterval", 0):
+        lib = in_memory_version_store
+        lib.set_output_format("polars")
+        sym = "test_streaming_reads_all_data_filtered_out_at_index_level"
+        # Index last value is 2026-04-10
+        df = pl.from_pandas(
+            pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+            include_index=True,
+        )
+        metadata = "blah"
+        lib.write(sym, df, metadata=metadata)
+        kwargs = (
+            {"row_range": (200, 201)}
+            if filter_type == "row_range"
+            else {"date_range": (pd.Timestamp("2027-01-01"), None)}
+        )
+        with qs.query_stats():
+            gen = lib.read_streaming(sym, **kwargs)
+        # No IO yet
+        assert gen.in_flight_rows() == 0
+        assert not len(qs.get_query_stats())
+        qs.reset_stats()
+        with qs.query_stats():
+            for _ in gen:
+                # All row-slices are filtered out at the index level, so we never get here
+                # TODO: As part of 13346982120, return a single record-batch with the correct schema in this case
+                assert False
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+        qs.reset_stats()
+        expected_vit = lib.read(sym)
+        expected_vit.data = None
+        assert gen.versioned_item() == expected_vit
+
+
 @pytest.mark.parametrize("columns", [None, ["col_0"], ["col_0", "col_9"], ["col_1"], ["col_5", "col_6"]])
 def test_streaming_reads_with_filter(in_memory_store_factory, clear_query_stats, columns):
     lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
