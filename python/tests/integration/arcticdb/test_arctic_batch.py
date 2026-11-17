@@ -341,6 +341,29 @@ def test_duplicate_symbols_in_modification_methods(in_memory_library, method):
     assert not lib.list_symbols()
 
 
+# Equivalent V1 API test in test_basic_version_store.py
+@pytest.mark.parametrize(
+    "requests",
+    [
+        ["sym1", "sym2", "sym1"],
+        [DeleteRequest("sym1", [0]), DeleteRequest("sym1", [1])],
+        [DeleteRequest("sym1", [0]), "sym2", "sym1"],
+    ],
+    ids=["str", "delete_request", "mixed"],
+)
+def test_delete_batch_duplicate_symbols(in_memory_library, requests):
+    lib = in_memory_library
+    for sym in ["sym1", "sym2"]:
+        for v in range(2):
+            lib.write(sym, pd.DataFrame({"col": [v]}))
+    with pytest.raises(ArcticDuplicateSymbolsInBatchException) as e:
+        lib.delete_batch(requests)
+    assert "sym1" in str(e.value)
+    assert "sym2" not in str(e.value)
+    for sym in ["sym1", "sym2"]:
+        assert sorted(v.version for v in lib.list_versions(sym)) == [0, 1]
+
+
 @marks([Marks.storage, Marks.dedup])
 def test_write_pickle_batch_dataerror(library_factory):
     """Only way to trigger a DataError response with write_pickle_batch is to enable dedup and delete previous version's

@@ -3513,7 +3513,8 @@ class NativeVersionStore:
         Parameters
         ----------
         symbols : `List[str]`
-            Symbols to delete versions for.
+            Symbols to delete versions for. There must not be any duplicate symbols in `symbols`. To delete several
+            versions of one symbol, put them all in its entry of `versions`.
         versions : `List[List[int]]`
             Versions to delete for each symbol.
             If there are no versions left for the symbol, the symbol will be deleted.
@@ -3528,11 +3529,14 @@ class NativeVersionStore:
         ------
         ValueError
             If versions is empty for any symbol.
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in symbols.
         """
         # make sure that the versions are not empty
         for symbol, version_ids in zip(symbols, versions):
             if not version_ids:
                 raise ValueError(f"version_ids cannot be empty for symbol '{symbol}'")
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         return self.version_store.batch_delete(symbols, versions)
 
     def batch_delete_symbols(self, symbols: List[str]) -> List[Optional[DataError]]:
@@ -3546,14 +3550,20 @@ class NativeVersionStore:
         Parameters
         ----------
         symbols : `List[str]`
-            Symbols to delete all versions for.
+            Symbols to delete all versions for. There must not be any duplicate symbols in `symbols`.
 
         Returns
         -------
         `List[DataError]`
             List of DataError objects, one for each symbol that was not deleted due to an error.
             If the symbol was already deleted, there will be no error, just a warning.
+
+        Raises
+        ------
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in symbols.
         """
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         return self.version_store.batch_delete(symbols, [[] for _ in symbols])
 
     def prune_previous_versions(self, symbol: str):
