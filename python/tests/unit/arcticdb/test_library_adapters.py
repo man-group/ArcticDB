@@ -149,3 +149,116 @@ def test_gcp_path_prefix():
         "gcpxml://my_endpoint:my_bucket?aws_auth=true&path_prefix=my_prefix", encoding_version=EncodingVersion.V1
     )
     assert adapter.path_prefix == "my_prefix"
+
+
+@pytest.mark.parametrize(
+    "uri, bucket, region, path_prefix",
+    [
+        ("s3://my-bucket?region=eu-west-2", "my-bucket", "eu-west-2", None),
+        ("s3://my-bucket/?region=eu-west-2", "my-bucket", "eu-west-2", None),
+        ("s3://my-bucket/team/arctic/?region=eu-west-2", "my-bucket", "eu-west-2", "team/arctic"),
+        ("s3s://my-bucket/team?region=us-east-1", "my-bucket", "us-east-1", "team"),
+        ("https://my-bucket.s3.eu-west-2.amazonaws.com", "my-bucket", "eu-west-2", None),
+        ("https://my-bucket.s3.eu-west-2.amazonaws.com/team/arctic", "my-bucket", "eu-west-2", "team/arctic"),
+        ("https://my-bucket.s3-us-gov-west-1.amazonaws.com/team", "my-bucket", "us-gov-west-1", "team"),
+        ("https://s3.ap-southeast-1.amazonaws.com/my-bucket/team", "my-bucket", "ap-southeast-1", "team"),
+        ("https://my-bucket.s3.amazonaws.com/team?region=us-east-1", "my-bucket", "us-east-1", "team"),
+    ],
+)
+def test_s3_standard_uri(uri, bucket, region, path_prefix):
+    assert S3LibraryAdapter.supports_uri(uri)
+    adapter = S3LibraryAdapter(uri, encoding_version=EncodingVersion.V1)
+    assert repr(adapter) == f"S3(endpoint=s3.{region}.amazonaws.com, bucket={bucket})"
+    assert adapter.path_prefix == path_prefix
+
+    override = adapter._get_s3_override()
+    assert override.endpoint == f"s3.{region}.amazonaws.com"
+    assert override.bucket_name == bucket
+    assert override.region == region
+    assert override.https
+    assert override.use_virtual_addressing
+    # like the AWS CLI and boto3, use the default credentials provider chain when no keys are given
+    assert adapter.native_config().as_s3_settings().aws_auth == AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN
+    assert override.credential_name == USE_AWS_CRED_PROVIDERS_TOKEN
+
+
+def test_s3_standard_uri_matches_equivalent_legacy_uri():
+    standard = S3LibraryAdapter("s3://my-bucket/team?region=eu-west-2&aws_auth=true", EncodingVersion.V1)
+    legacy = S3LibraryAdapter(
+        "s3s://s3.eu-west-2.amazonaws.com:my-bucket?path_prefix=team&aws_auth=true", EncodingVersion.V1
+    )
+    for attr in ("endpoint", "bucket_name", "region", "https", "use_virtual_addressing", "credential_name"):
+        assert getattr(standard._get_s3_override(), attr) == getattr(legacy._get_s3_override(), attr), attr
+    assert standard.path_prefix == legacy.path_prefix
+    assert standard.config_library.library_path == "_arctic_cfg"
+
+
+def test_s3_standard_uri_with_keys_and_options():
+    adapter = S3LibraryAdapter(
+        "s3://my-bucket/team?region=eu-west-2&access=my_access&secret=my_secret", EncodingVersion.V1
+    )
+    assert adapter.native_config().as_s3_settings().aws_auth == AWSAuthMethod.DISABLED
+    assert adapter._get_s3_override().credential_name == "my_access"
+
+    adapter = S3LibraryAdapter(
+        "s3://my-bucket?region=eu-west-2&aws_auth=sts&aws_profile=my_profile", EncodingVersion.V1
+    )
+    assert adapter.native_config().as_s3_settings().aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
+    assert adapter.native_config().as_s3_settings().aws_profile == "my_profile"
+
+    with pytest.raises(ValueError, match="Invalid query parameter"):
+        S3LibraryAdapter("s3://my-bucket?region=eu-west-2&not_an_option=1", EncodingVersion.V1)
+
+
+def test_s3_standard_uri_bucket_with_dots_uses_path_style():
+    adapter = S3LibraryAdapter("s3://my.dotted.bucket/team?region=eu-west-2", EncodingVersion.V1)
+    assert adapter._get_s3_override().bucket_name == "my.dotted.bucket"
+    assert not adapter._get_s3_override().use_virtual_addressing
+
+
+def test_s3_standard_uri_region_from_environment(monkeypatch):
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-central-1")
+    assert repr(S3LibraryAdapter("s3://my-bucket", EncodingVersion.V1)) == (
+        "S3(endpoint=s3.eu-central-1.amazonaws.com, bucket=my-bucket)"
+    )
+    monkeypatch.setenv("AWS_REGION", "eu-north-1")
+    assert S3LibraryAdapter("s3://my-bucket", EncodingVersion.V1)._get_s3_override().region == "eu-north-1"
+    # an explicit region wins over the environment
+    assert S3LibraryAdapter("s3://my-bucket?region=us-west-2", EncodingVersion.V1)._get_s3_override().region == (
+        "us-west-2"
+    )
+
+
+def test_s3_standard_uri_errors(monkeypatch):
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+    with pytest.raises(ValueError, match="Can't determine the AWS region"):
+        S3LibraryAdapter("s3://my-bucket/team", EncodingVersion.V1)
+    with pytest.raises(ValueError, match="conflicts with path_prefix"):
+        S3LibraryAdapter("s3://my-bucket/team?region=eu-west-2&path_prefix=other", EncodingVersion.V1)
+    with pytest.raises(ValueError, match="conflicts with region"):
+        S3LibraryAdapter("https://my-bucket.s3.eu-west-2.amazonaws.com?region=us-east-1", EncodingVersion.V1)
+    with pytest.raises(ValueError, match="Invalid S3 URI"):
+        S3LibraryAdapter("s3://Not_A_Valid_Bucket", EncodingVersion.V1)
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "https://example.com/my-bucket",
+        "https://my-bucket.s3.eu-west-2.amazonaws.com.evil.com/x",
+        "http://s3.amazonaws.com/b",
+    ],
+)
+def test_s3_standard_uri_unsupported_https_urls(uri):
+    assert not S3LibraryAdapter.supports_uri(uri)
+
+
+def test_s3_legacy_uri_still_supported():
+    adapter = S3LibraryAdapter("s3://localhost:my-bucket?port=9000&region=eu-west-2", EncodingVersion.V1)
+    assert repr(adapter) == "S3(endpoint=localhost:9000, bucket=my-bucket)"
+    assert not adapter._get_s3_override().https
+    adapter = S3LibraryAdapter("s3s://s3.eu-west-2.amazonaws.com:my-bucket?aws_auth=true", EncodingVersion.V1)
+    assert adapter._get_s3_override().region == "eu-west-2"
+    assert adapter._get_s3_override().use_virtual_addressing

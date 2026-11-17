@@ -6,9 +6,11 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 import re
 import time
 from typing import Optional
+from urllib.parse import urlsplit
 import ssl
 import platform
 
@@ -33,6 +35,69 @@ from dataclasses import dataclass, fields
 
 PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_"
+
+# Standard AWS S3 locations, as used by the AWS CLI, boto3, s3fs, pandas, etc.
+#   s3://bucket[/prefix]
+#   https://bucket.s3.region.amazonaws.com[/prefix]  (virtual-hosted style)
+#   https://s3.region.amazonaws.com/bucket[/prefix]  (path style)
+_STANDARD_S3_URI_REGEX = re.compile(
+    r"s3s?://(?P<bucket>[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9])(?P<path>/[^?]*)?(?P<query>\?.*)?"
+)
+_AWS_REGION_PATTERN = r"[a-z]{2}(?:-[a-z]+)+-\d+"
+_AWS_S3_HOST_REGEX = re.compile(
+    r"(?:(?P<bucket>[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9])\.)?s3(?:[.\-](?P<region>"
+    + _AWS_REGION_PATTERN
+    + r"))?\.amazonaws\.com"
+)
+
+
+@dataclass
+class _StandardS3Location:
+    bucket: str
+    path_prefix: Optional[str]
+    region: Optional[str]
+    query: Optional[str]
+
+
+def _is_legacy_s3_uri(uri: str) -> bool:
+    # ArcticDB's own format is s3(s)://<endpoint>:<bucket>, so the part before the query contains a ':'
+    authority_and_path = uri.split("://", 1)[1].split("?", 1)[0]
+    return ":" in authority_and_path
+
+
+def _parse_standard_s3_uri(uri: str) -> Optional[_StandardS3Location]:
+    """Parse a standard AWS S3 location. Returns None if the URI is not in one of the standard forms."""
+    if uri.startswith(("s3://", "s3s://")):
+        if _is_legacy_s3_uri(uri):
+            return None
+        match = _STANDARD_S3_URI_REGEX.fullmatch(uri)
+        if not match:
+            return None
+        return _StandardS3Location(
+            bucket=match["bucket"],
+            path_prefix=(match["path"] or "").strip("/") or None,
+            region=None,
+            query=match["query"],
+        )
+    if uri.startswith("https://"):
+        parts = urlsplit(uri)
+        host_match = _AWS_S3_HOST_REGEX.fullmatch(parts.hostname or "")
+        if not host_match or parts.port or parts.fragment:
+            return None
+        path = parts.path.strip("/")
+        bucket = host_match["bucket"]
+        if not bucket:
+            # path style: the bucket is the first path segment
+            bucket, _, path = path.partition("/")
+            if not bucket:
+                return None
+        return _StandardS3Location(
+            bucket=bucket,
+            path_prefix=path or None,
+            region=host_match["region"],
+            query=f"?{parts.query}" if parts.query else None,
+        )
+    return None
 
 
 @dataclass
@@ -67,16 +132,29 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
     @staticmethod
     def supports_uri(uri: str) -> bool:
+        if uri.startswith("https://"):
+            return _parse_standard_s3_uri(uri) is not None
         return uri.startswith("s3://") or uri.startswith("s3s://")
 
     def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
-        match = re.match(self.REGEX, uri)
-        match_groups = match.groupdict()
+        standard_location = _parse_standard_s3_uri(uri)
+        if standard_location:
+            self._init_from_standard_location(standard_location)
+        else:
+            match = re.match(self.REGEX, uri)
+            if not match:
+                raise ValueError(
+                    f"Invalid S3 URI '{uri}'. Expected s3://<bucket>[/<prefix>][?<options>] for AWS S3, "
+                    "an https://<bucket>.s3.<region>.amazonaws.com[/<prefix>] URL, "
+                    "or s3(s)://<endpoint>:<bucket>[?<options>] for other S3 compatible storages."
+                )
+            match_groups = match.groupdict()
 
-        self._endpoint = match_groups["endpoint"]
-        self._bucket = match_groups["bucket"]
+            self._endpoint = match_groups["endpoint"]
+            self._bucket = match_groups["bucket"]
 
-        self._query_params: ParsedQuery = self._parse_query(match["query"])
+            self._query_params: ParsedQuery = self._parse_query(match["query"])
+            self._https = uri.startswith("s3s")
 
         if self._query_params.force_uri_lib_config is False:
             raise ValueError(
@@ -87,7 +165,6 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         if self._query_params.port:
             self._endpoint += f":{self._query_params.port}"
 
-        self._https = uri.startswith("s3s")
         self._encoding_version = encoding_version
         if platform.system() != "Linux" and (self._query_params.CA_cert_path or self._query_params.CA_cert_dir):
             raise ValueError(
@@ -110,6 +187,49 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             self._configure_aws()
 
         super().__init__(uri, self._encoding_version)
+
+    def _init_from_standard_location(self, location: _StandardS3Location):
+        """
+        Standard AWS S3 URIs always point at AWS: the endpoint is derived from the region, HTTPS is used, and,
+        as with the AWS CLI and boto3, the default AWS credentials provider chain is used unless keys are given.
+        """
+        query_params = self._parse_query(location.query)
+        if location.path_prefix:
+            if query_params.path_prefix and query_params.path_prefix != location.path_prefix:
+                raise ValueError(
+                    f"Invalid S3 URI. The path prefix '{location.path_prefix}' in the URI conflicts with "
+                    f"path_prefix='{query_params.path_prefix}' in the query parameters."
+                )
+            query_params.path_prefix = location.path_prefix
+
+        if query_params.region and location.region and query_params.region != location.region:
+            raise ValueError(
+                f"Invalid S3 URI. The region '{location.region}' in the URL conflicts with "
+                f"region='{query_params.region}' in the query parameters."
+            )
+        region = (
+            query_params.region
+            or location.region
+            or os.environ.get("AWS_REGION")
+            or os.environ.get("AWS_DEFAULT_REGION")
+        )
+        if not region:
+            raise ValueError(
+                f"Can't determine the AWS region for bucket '{location.bucket}'. Add it to the URI "
+                f"(e.g. s3://{location.bucket}?region=us-east-1) or set the AWS_REGION environment variable."
+            )
+        query_params.region = region
+
+        if query_params.aws_auth == AWSAuthMethod.DISABLED and not (query_params.access or query_params.secret):
+            query_params.aws_auth = AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN
+
+        # Virtual-hosted style is what AWS recommends, but TLS certificates don't cover bucket names with dots
+        query_params.use_virtual_addressing = "." not in location.bucket
+
+        self._query_params = query_params
+        self._bucket = location.bucket
+        self._endpoint = f"s3.{region}.amazonaws.com"
+        self._https = True
 
     def native_config(self):
         if self._test_only_is_nfs_layout:
