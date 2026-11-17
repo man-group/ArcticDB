@@ -199,6 +199,35 @@ def test_delete_snapshot_key_shared_with_another_snapshot(version_store_factory)
     assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) == 0
 
 
+@pytest.mark.parametrize("delayed_deletes", [False, True])
+@pytest.mark.parametrize("delete_method", ["delete_version", "delete"])
+def test_add_to_snapshot_keeps_deleted_version_it_already_holds(version_store_factory, delete_method, delayed_deletes):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=delayed_deletes)
+    df = pd.DataFrame({"col": [0]}, index=pd.DatetimeIndex([pd.Timestamp("2020-01-01")]))
+    for sym in ["readded", "replaced"]:
+        lib.write(sym, df)  # v0
+    lib.snapshot("snap")
+    for sym in ["readded", "replaced"]:
+        if delete_method == "delete_version":
+            lib.write(sym, df + 1)  # v1
+            lib.delete_version(sym, 0)
+        else:
+            lib.delete(sym)
+            lib.write(sym, df + 1)  # v1
+
+    # Replacing snap's v0 of "readded" with itself must not delete it. Replacing "replaced" deletes its v0, unless
+    # deletes are delayed.
+    lib.add_to_snapshot("snap", ["readded", "replaced"], [0, 1])
+
+    assert_frame_equal(lib.read("readded", as_of="snap").data, df)
+    assert_frame_equal(lib.read("replaced", as_of="snap").data, df + 1)
+    # With delayed deletes the replaced version is left for a later cleanup
+    lib_tool = lib.library_tool()
+    expected_index_versions = [0, 1] if delayed_deletes else [1]
+    index_versions = sorted(k.version_id for k in lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "replaced"))
+    assert index_versions == expected_index_versions
+
+
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
     lib = lmdb_version_store_prune_previous
     assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True
