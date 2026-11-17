@@ -270,9 +270,10 @@ class VersionedItem:
 
 
 class StreamingReadGenerator:
-    def __init__(self, nvs, generator_impl):
+    def __init__(self, nvs, generator_impl, output_format):
         self._nvs = nvs
         self._generator_impl = generator_impl
+        self._output_format = output_format
         self._read_result = None
         self._versioned_item = None
 
@@ -305,7 +306,7 @@ class StreamingReadGenerator:
         if data is None:
             raise StopIteration
         return self._nvs._adapt_frame_data(
-            data, self._read_result.norm, OutputFormat.POLARS, self._read_result.sort_order
+            data, self._read_result.norm, self._output_format, self._read_result.sort_order
         )
 
 
@@ -2632,7 +2633,6 @@ class NativeVersionStore:
         columns = self._resolve_empty_columns(columns, implement_read_index)
         # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
         query_builder = copy.deepcopy(query_builder)
-        kwargs["output_format"] = OutputFormat.POLARS
         version_query, read_options, read_query, output_format = self._get_queries(
             as_of=as_of,
             date_range=date_range,
@@ -2649,7 +2649,7 @@ class NativeVersionStore:
         )
 
         generator = self.version_store.read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
-        return StreamingReadGenerator(self, generator)
+        return StreamingReadGenerator(self, generator, output_format)
 
     def rename_columns_arrow_compat(
         self,

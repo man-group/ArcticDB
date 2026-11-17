@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import polars as pl
+import pyarrow as pa
 import pytest
 
 from arcticdb import QueryBuilder
@@ -43,14 +44,14 @@ def generic_streaming_reads_test(lib, sym, expected_slices, prefetch_rows=None, 
             for idx, slice in enumerate(gen):
                 assert slice.equals(expected_slices[idx])
                 # Exactly one record batch per slice
-                assert slice.n_chunks() == 1
+                assert (len(slice.to_batches()) if isinstance(slice, pa.Table) else slice.n_chunks()) == 1
                 slices.append(slice)
         stats = qs.get_query_stats()
         # Total IO operations match non-streaming reads
         assert_stat_counts_equal(stats, expected_stats)
         qs.reset_stats()
         # Concatenating together slices gives the same result as a non-streaming read
-        df = pl.concat(slices)
+        df = pa.concat_tables(slices) if isinstance(slices[0], pa.Table) else pl.concat(slices)
         assert df.equals(expected_vit.data)
         expected_vit.data = None
         assert gen.versioned_item() == expected_vit
@@ -387,6 +388,15 @@ def test_streaming_reads_series(in_memory_store_factory, clear_query_stats):
     generic_streaming_reads_test(lib, sym, [series.slice(idx * 10, 10) for idx in range(10)])
 
 
+def test_streaming_reads_pyarrow_table(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("pyarrow")
+    sym = "test_streaming_reads_pyarrow_table"
+    table = pa.Table.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, table)
+    generic_streaming_reads_test(lib, sym, [table.slice(idx * 10, 10) for idx in range(10)])
+
+
 @pytest.mark.parametrize("call_versioned_item_before_loop", [True, False])
 @pytest.mark.parametrize("prefetch_rows", [None, 0, 7, 13, 20])
 def test_streaming_reads_io_counts(
@@ -395,6 +405,7 @@ def test_streaming_reads_io_counts(
     # Forces version map reload when reading, otherwise cached info is used
     with config_context("VersionMap.ReloadInterval", 0):
         lib = in_memory_store_factory(segment_row_size=10)
+        lib.set_output_format("polars")
         sym = "test_streaming_reads_io_counts"
         df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
         lib.write(sym, df)
@@ -448,6 +459,7 @@ def test_streaming_reads_io_counts(
 @pytest.mark.parametrize("prefetch_rows", [None, 0, 7, 13, 20])
 def test_streaming_reads_prefetch_row_counts(in_memory_store_factory, segment_row_size, prefetch_rows):
     lib = in_memory_store_factory(segment_row_size=segment_row_size)
+    lib.set_output_format("polars")
     sym = "test_streaming_reads_prefetch_row_counts"
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, df)
