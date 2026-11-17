@@ -257,6 +257,33 @@ def test_streaming_reads_with_funky_date_ranges(in_memory_store_factory, clear_q
     generic_streaming_reads_test(lib, sym, expected_slices, date_range=date_range)
 
 
+def test_streaming_reads_with_date_range_index_values_duplicated_across_segment_boundaries(
+    in_memory_store_factory, clear_query_stats
+):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_date_range_index_values_duplicated_across_segment_boundaries"
+    unique_index_values = pd.date_range("2026-01-01", periods=15)
+    index = []
+    for ts in unique_index_values:
+        index.extend(7 * [ts])
+    index = pd.DatetimeIndex(index, name="ts")
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(105)}, index=index), include_index=True)
+    lib.write(sym, df, index_column=True)
+    # Omits the first and last chunk, and truncates the second and penultimate chunks
+    expected_slices = []
+    for idx in range(9):
+        if idx == 0:
+            expected_slices.append(df.slice(14, 6))
+        elif idx == 8:
+            expected_slices.append(df.slice(90, 8))
+        else:
+            expected_slices.append(df.slice((idx + 1) * 10, 10))
+    generic_streaming_reads_test(
+        lib, sym, expected_slices, date_range=(pd.Timestamp("2026-01-03"), pd.Timestamp("2026-01-14"))
+    )
+
+
 @pytest.mark.parametrize("columns", [None, ["col_0"], ["col_0", "col_9"], ["col_1"], ["col_5", "col_6"]])
 def test_streaming_reads_with_filter(in_memory_store_factory, clear_query_stats, columns):
     lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
