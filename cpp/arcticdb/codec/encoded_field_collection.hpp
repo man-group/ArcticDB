@@ -22,6 +22,30 @@ constexpr TypeDescriptor encoded_fields_type_desc() {
     return TypeDescriptor{DataType::UINT8, Dimension::Dim0};
 }
 
+// Encoded fields may come from storage, and ChunkedBuffer::ptr_cast only bounds-checks in debug builds. Check that the
+// field header at bytes_pos, and the blocks its stored counts describe, lie within the buffer before they are read.
+inline void check_encoded_field_in_bounds(const ChunkedBuffer& buffer, size_t bytes_pos) {
+    const size_t total = buffer.bytes();
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            bytes_pos <= total && EncodedFieldImpl::Size <= total - bytes_pos,
+            "Corrupt segment: encoded field at {} overruns its {}-byte buffer",
+            bytes_pos,
+            total
+    );
+    const auto& field =
+            *reinterpret_cast<const EncodedFieldImpl*>(buffer.ptr_cast<const uint8_t>(bytes_pos, EncodedFieldImpl::Size)
+            );
+    const size_t num_blocks = static_cast<size_t>(static_cast<uint32_t>(field.shapes_size())) +
+                              static_cast<size_t>(static_cast<uint32_t>(field.values_size()));
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            num_blocks <= (total - bytes_pos - EncodedFieldImpl::Size) / sizeof(EncodedBlock),
+            "Corrupt segment: encoded field at {} declares {} blocks, more than fit in its {}-byte buffer",
+            bytes_pos,
+            num_blocks,
+            total
+    );
+}
+
 class EncodedFieldCollection {
     ChunkedBuffer data_;
     Buffer offsets_;
@@ -36,6 +60,7 @@ class EncodedFieldCollection {
         explicit EncodedFieldCollectionIterator(ChunkedBuffer* buffer) : buffer_(buffer) {}
 
         [[nodiscard]] EncodedFieldImpl& current() const {
+            check_encoded_field_in_bounds(*buffer_, pos_);
             return *reinterpret_cast<EncodedFieldImpl*>(buffer_->ptr_cast<uint8_t>(pos_, EncodedFieldImpl::Size));
         }
 
@@ -96,12 +121,14 @@ class EncodedFieldCollection {
     }
 
     [[nodiscard]] const EncodedFieldImpl& to_field(size_t bytes_pos) const {
+        check_encoded_field_in_bounds(data_, bytes_pos);
         return *reinterpret_cast<const EncodedFieldImpl*>(
                 data_.ptr_cast<const uint8_t>(bytes_pos, EncodedFieldImpl::Size)
         );
     }
 
     [[nodiscard]] EncodedFieldImpl& to_field(size_t bytes_pos) {
+        check_encoded_field_in_bounds(data_, bytes_pos);
         return *reinterpret_cast<EncodedFieldImpl*>(data_.ptr_cast<uint8_t>(bytes_pos, EncodedFieldImpl::Size));
     }
 

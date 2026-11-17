@@ -13,6 +13,7 @@
 #include <arcticdb/util/lambda_inlining.hpp>
 #include <arcticdb/util/string_utils.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -42,6 +43,7 @@ void ArrowStringHandler::handle_type(
     ARCTICDB_DEBUG(log::version(), "String handler got encoded field: {}", field.DebugString());
     const auto& ndarray = field.ndarray();
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+    check_decoded_bytes_fit_rows(bytes, m);
 
     Column decoded_data{
             m.source_type_desc_,
@@ -55,6 +57,7 @@ void ArrowStringHandler::handle_type(
     );
     // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
     // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    util::check_sparse_map_within_rows(decoded_data.opt_sparse_map(), m.num_rows_);
     decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
@@ -377,6 +380,8 @@ void ArrowStringHandler::convert_type(
         const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData&,
         std::any&, const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) const {
+    // Guard before the encoders dereference the pool, so a corrupt segment raises instead of crashing.
+    check_string_pool_for_column(string_pool.get(), source_column);
     auto string_format = read_options.arrow_string_format_for_column(mapping.frame_field_descriptor_.name());
     switch (string_format) {
     case ArrowOutputStringFormat::CATEGORICAL:
@@ -449,6 +454,7 @@ void ArrowBoolHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
+    util::check_sparse_map_within_rows(decoded_data.opt_sparse_map(), m.num_rows_);
     decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
@@ -520,6 +526,8 @@ void ArrowTimestampHandler::handle_type(
         if (is_sparse) {
             return Column(m.source_type_desc_, num_non_empty_rows, AllocationType::DYNAMIC, Sparsity::PERMITTED);
         } else {
+            // The stored size must not exceed the rows reserved in the destination we decode straight into.
+            check_decoded_bytes_fit_rows(bytes, m);
             Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
             // When the column is not sparse we can decode directly onto the destination buffer. So, we make
             // decoded_data hold a non-owning pointer to the destination buffer.
@@ -531,6 +539,7 @@ void ArrowTimestampHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
+    util::check_sparse_map_within_rows(decoded_data.opt_sparse_map(), m.num_rows_);
     decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);

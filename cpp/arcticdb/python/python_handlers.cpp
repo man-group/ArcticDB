@@ -127,6 +127,7 @@ void PythonBoolHandler::handle_type(
     );
     // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
     // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    util::check_sparse_map_within_rows(decoded_data.opt_sparse_map(), m.num_rows_);
     decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
@@ -193,6 +194,8 @@ void PythonStringHandler::handle_type(
         if (auto dense_size = bytes / get_type_size(m.source_type_desc_.data_type()); dense_size < m.num_rows_) {
             return Column(m.source_type_desc_, dense_size, AllocationType::DYNAMIC, Sparsity::PERMITTED);
         } else {
+            // Decoding straight into the destination: the stored size must not exceed the rows reserved for it.
+            check_decoded_bytes_fit_rows(bytes, m);
             Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
             column.buffer().add_external_block(dest_column.bytes_at(m.offset_bytes_, bytes), bytes);
             return column;
@@ -204,6 +207,7 @@ void PythonStringHandler::handle_type(
     );
     // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
     // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    util::check_sparse_map_within_rows(decoded_data.opt_sparse_map(), m.num_rows_);
     decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     if (is_dynamic_string_type(m.dest_type_desc_.data_type())) {
@@ -222,7 +226,7 @@ void PythonStringHandler::convert_type(
             ptr_dest,
             source_column,
             mapping,
-            *string_pool,
+            string_pool,
             shared_data,
             cast_handler_data(handler_data),
             read_options.pandas_none_value_for_type(mapping.source_type_desc_)
@@ -263,6 +267,7 @@ void PythonArrayHandler::handle_type(
     data += decode_field(m.source_type_desc_, field, data, column, column.opt_sparse_map(), encoding_version);
     // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
     // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    util::check_sparse_map_within_rows(column.opt_sparse_map(), m.num_rows_);
     column.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(column, dest_column, m, shared_data, any, string_pool, read_options);

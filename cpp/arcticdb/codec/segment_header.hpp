@@ -201,7 +201,7 @@ class SegmentHeader {
 
     [[nodiscard]] bool has_field(FieldOffset field_offset) const { return data_.fields_ & field_mask(field_offset); }
 
-    void deserialize_from_bytes(const uint8_t* data, bool copy_data);
+    void deserialize_from_bytes(const uint8_t* data, size_t header_bytes, bool copy_data);
 
     [[nodiscard]] const EncodedFieldCollection& body_fields() const { return body_fields_; }
 

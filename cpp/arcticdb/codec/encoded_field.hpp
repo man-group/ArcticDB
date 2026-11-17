@@ -11,6 +11,7 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/storage/memory_layout.hpp>
 
+#include <cstring>
 #include <utility>
 #include <boost/iterator/iterator_facade.hpp>
 namespace arcticdb {
@@ -101,6 +102,14 @@ struct EncodedBlock : Block {
     EncodedBlock() = default;
 
     [[nodiscard]] bool has_codec() const { return codecs_[0].codec_ != Codec::PASS; }
+
+    // is_shape_ is read from stored bytes, so load its byte: a bool holding anything but 0 or 1 is undefined
+    [[nodiscard]] uint8_t stored_is_shape() const {
+        static_assert(sizeof(is_shape_) == sizeof(uint8_t));
+        uint8_t raw;
+        std::memcpy(&raw, &is_shape_, sizeof(raw));
+        return raw;
+    }
 
     [[nodiscard]] auto encoder_version() const { return encoder_version_; }
 
@@ -269,7 +278,7 @@ struct EncodedFieldImpl : public EncodedField {
     void validate() const {
         size_t shapes_count = 0;
         for (const auto& shape : shapes()) {
-            util::check(shape.is_shape_, "Expected shape to have is_shape_set");
+            util::check(shape.stored_is_shape() == 1, "Expected shape to have is_shape_set");
             util::check(shape.codecs_[0].codec_ != Codec::UNKNOWN, "Unknown shape codec");
             ++shapes_count;
         }
@@ -282,7 +291,7 @@ struct EncodedFieldImpl : public EncodedField {
 
         size_t values_count = 0;
         for (const auto& value : values()) {
-            util::check(!value.is_shape_, "Value has is_shape set");
+            util::check(value.stored_is_shape() == 0, "Value has is_shape set");
             util::check(value.codec().codec_type() != Codec::UNKNOWN, "Unknown codec in block {}", values_count);
             ++values_count;
         }

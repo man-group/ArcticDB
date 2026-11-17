@@ -13,9 +13,41 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
+#include <cstdint>
 #include <numeric>
 
 namespace arcticdb::encoding_sizes {
+
+// A block's decoded size is stored, and callers size allocations from it before anything is decompressed. No codec can
+// expand its stored bytes beyond a fixed ratio, so a larger decoded size is corrupt. A codec that decode_block cannot
+// decode has no bound, so it is rejected here too.
+template<typename BlockType>
+void check_block_decoded_size(const BlockType& block) {
+    uint64_t max_expansion = 1; // passthrough copies its stored bytes
+    if (block.has_codec()) {
+        switch (block.codec().codec_type()) {
+        case Codec::LZ4:
+            max_expansion = 255; // a match's length grows by at most 255 per stored byte
+            break;
+        case Codec::ZSTD:
+            max_expansion = 32768; // an RLE block expands 4 stored bytes to at most 128 KiB
+            break;
+        default:
+            codec::raise<ErrorCode::E_DECODE_ERROR>(
+                    "Corrupt segment: unsupported block codec {}", codec_type_to_string(block.codec().codec_type())
+            );
+        }
+    }
+    constexpr uint64_t slack = 64; // fixed per-block overhead of a tiny compressed block
+    const uint64_t decoded_bytes = block.in_bytes();
+    const uint64_t stored_bytes = block.out_bytes();
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            decoded_bytes <= stored_bytes * max_expansion + slack,
+            "Corrupt segment: block of {} stored bytes decodes to {} bytes",
+            stored_bytes,
+            decoded_bytes
+    );
+}
 
 template<typename NDArrayEncodedFieldType>
 std::size_t shape_compressed_size(const NDArrayEncodedFieldType& nda) {
@@ -43,7 +75,10 @@ std::size_t shape_uncompressed_size(const NDArrayEncodedFieldType& nda) {
             std::begin(nda.shapes()),
             std::end(nda.shapes()),
             size_t(0),
-            [](size_t a, const auto& block) { return a + block.in_bytes(); }
+            [](size_t a, const auto& block) {
+                check_block_decoded_size(block);
+                return a + block.in_bytes();
+            }
     );
 }
 
@@ -53,7 +88,10 @@ std::size_t data_uncompressed_size(const NDArrayEncodedFieldType& nda) {
             std::begin(nda.values()),
             std::end(nda.values()),
             size_t(0),
-            [](size_t a, const auto& block) { return a + block.in_bytes(); }
+            [](size_t a, const auto& block) {
+                check_block_decoded_size(block);
+                return a + block.in_bytes();
+            }
     );
 }
 

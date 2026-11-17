@@ -44,12 +44,14 @@ inline size_t get_max_string_size(
     auto offset = first_context_row(context_row.slice_and_key(), first_row_in_frame);
     auto num_rows = context_row.slice_and_key().slice_.row_range.diff();
     size_t max_length{0u};
+    const bool has_string_pool = context_row.has_string_pool();
 
     for (auto row = 0u; row < num_rows; ++row) {
         auto offset_val = get_offset_string_at(offset + row, src);
         if (offset_val == nan_placeholder() || offset_val == not_a_string())
             continue;
 
+        check_string_pool_present(has_string_pool);
         max_length = std::max(max_length, get_string_from_pool(offset_val, context_row.string_pool()).size());
     }
     return max_length;

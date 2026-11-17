@@ -21,6 +21,7 @@
 #include <fmt/ranges.h>
 
 #include <bitmagic/bmserial.h>
+#include <stdexcept>
 
 namespace arcticdb::util {
 
@@ -59,14 +60,40 @@ void densify_buffer_using_bitmap(
     }
 }
 
+/// A sparse map decoded from storage drives writes into a destination of num_rows rows; reject any set bit past it.
+inline void check_sparse_map_within_rows(const std::optional<BitMagic>& sparse_map, size_t num_rows) {
+    if (BitMagic::size_type last_set_bit; sparse_map && sparse_map->find_reverse(last_set_bit)) {
+        codec::check<ErrorCode::E_DECODE_ERROR>(
+                last_set_bit < num_rows,
+                "Corrupt segment: sparse map sets row {} but the column has {} rows",
+                last_set_bit,
+                num_rows
+        );
+    }
+}
+
 /// Expand packed source-type values to their bitmap positions in the expanded_ptr, casting to DestType.
+/// The bitmap may come from storage, so every set bit is checked against both buffers before the write: it must address
+/// an existing dense value and a row below expanded_count. The check is inside the existing loop so it costs no extra
+/// pass over the bitmap.
 template<typename SrcType, typename DestType = SrcType>
-void expand_dense_buffer_and_promote_type(const BitMagic& bv, const uint8_t* dense_ptr, uint8_t* expanded_ptr) {
+void expand_dense_buffer_and_promote_type(
+        const BitMagic& bv, const uint8_t* dense_ptr, size_t dense_count, uint8_t* expanded_ptr, size_t expanded_count
+) {
     util::check(dense_ptr != expanded_ptr, "Expansion of dense buffer is not safe inline");
     auto src = reinterpret_cast<const SrcType*>(dense_ptr);
     auto dst = reinterpret_cast<DestType*>(expanded_ptr);
     size_t dense_pos = 0;
     for (auto en = bv.first(), en_end = bv.end(); en != en_end; ++en, ++dense_pos) {
+        if (ARCTICDB_UNLIKELY(*en >= expanded_count || dense_pos >= dense_count)) {
+            codec::raise<ErrorCode::E_DECODE_ERROR>(
+                    "Corrupt segment: sparse map entry {} (row {}) is outside {} dense values or {} rows",
+                    dense_pos,
+                    *en,
+                    dense_count,
+                    expanded_count
+            );
+        }
         dst[*en] = static_cast<DestType>(src[dense_pos]);
     }
 }
@@ -135,7 +162,21 @@ ChunkedBuffer scan_floating_point_to_sparse(RawType* ptr, size_t rows_to_write, 
 
 inline util::BitMagic deserialize_bytes_to_bitmap(const std::uint8_t*& input, size_t bytes_in_sparse_bitmap) {
     util::BitMagic bv;
-    bm::deserialize(bv, input);
+    // BitMagic's deserializer takes no length, so a malformed bitmap is not prevented from reading past the stored
+    // region; it is only detected here, after the fact. Callers check that the stored region fits the segment. Some
+    // valid formats report one byte less than stored, so only flag consuming more than the stored size.
+    size_t consumed;
+    try {
+        consumed = bm::deserialize(bv, input);
+    } catch (const std::logic_error& e) {
+        codec::raise<ErrorCode::E_DECODE_ERROR>("Corrupt segment: sparse map failed to deserialize: {}", e.what());
+    }
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            consumed <= bytes_in_sparse_bitmap,
+            "Corrupt segment: sparse map deserialized {} bytes but only {} were stored",
+            consumed,
+            bytes_in_sparse_bitmap
+    );
     ARCTICDB_DEBUG(log::version(), "count in bitvector while decoding: {}", bv.count());
     input += bytes_in_sparse_bitmap;
     return bv;

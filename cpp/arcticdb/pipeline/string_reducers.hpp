@@ -79,7 +79,7 @@ class FixedStringReducer : public StringReducer {
     void reduce(pipelines::PipelineContextRow& context_row, size_t) override {
         size_t end = context_row.slice_and_key().slice_.row_range.second - frame_.offset();
         for (; row_ < end; ++row_) {
-            auto val = get_string_from_buffer(row_, src_buffer_, context_row.string_pool());
+            auto val = get_string_from_buffer(row_, src_buffer_, context_row.string_pool_ptr().get());
             util::variant_match(
                     val,
                     [&](std::string_view sv) { std::memcpy(dst_, sv.data(), sv.size()); },
@@ -107,7 +107,7 @@ class UnicodeConvertingStringReducer : public StringReducer {
     void reduce(pipelines::PipelineContextRow& context_row, size_t) override {
         size_t end = context_row.slice_and_key().slice_.row_range.second - frame_.offset();
         for (; row_ < end; ++row_) {
-            auto val = get_string_from_buffer(row_, src_buffer_, context_row.string_pool());
+            auto val = get_string_from_buffer(row_, src_buffer_, context_row.string_pool_ptr().get());
             util::variant_match(
                     val,
                     [&](std::string_view sv) {

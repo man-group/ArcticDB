@@ -419,7 +419,13 @@ void Column::unsparsify(size_t num_rows) {
         auto dest = alloc_type == AllocationType::DETACHABLE ? ChunkedBuffer(dest_bytes, AllocationType::DETACHABLE)
                                                              : ChunkedBuffer::presized(dest_bytes);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
-        util::expand_dense_buffer_and_promote_type<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
+        util::expand_dense_buffer_and_promote_type<RawType>(
+                sparse_map_.value(),
+                data_.buffer().data(),
+                data_.buffer().bytes() / sizeof(RawType),
+                dest.data(),
+                num_rows
+        );
         std::swap(dest, data_.buffer());
     });
     sparse_map_ = std::nullopt;

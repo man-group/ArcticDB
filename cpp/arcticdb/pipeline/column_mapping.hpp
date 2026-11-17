@@ -9,6 +9,7 @@
 #pragma once
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <optional>
 
 namespace arcticdb::pipelines {
@@ -54,6 +55,17 @@ struct ColumnMapping {
 
     bool requires_truncation() const { return truncate_.requires_truncation(); }
 };
+
+// A column decoded straight into the destination must not store more bytes than the rows reserved for it.
+inline void check_decoded_bytes_fit_rows(size_t bytes, const ColumnMapping& m) {
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            bytes <= m.num_rows_ * get_type_size(m.source_type_desc_.data_type()),
+            "Corrupt segment: column {} holds {} bytes but only {} rows are expected",
+            m.frame_field_descriptor_.name(),
+            bytes,
+            m.num_rows_
+    );
+}
 
 struct StaticColumnMappingIterator {
     const size_t index_fieldcount_;

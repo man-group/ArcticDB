@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
@@ -107,6 +108,15 @@ class StringBlock {
     }
 
     [[nodiscard]] const StringHead* const_head_at(position_t pos) const {
+        // pos comes from a stored string column; the buffer's own bound check is debug-only.
+        const auto pool_bytes = data_.buffer().bytes();
+        codec::check<ErrorCode::E_DECODE_ERROR>(
+                pos >= 0 && static_cast<size_t>(pos) <= pool_bytes &&
+                        sizeof(StringHead) <= pool_bytes - static_cast<size_t>(pos),
+                "Corrupt segment: string offset {} is outside the {}-byte string pool",
+                pos,
+                pool_bytes
+        );
         auto data = data_.buffer().internal_ptr_cast<uint8_t>(pos, sizeof(StringHead));
         auto head = reinterpret_cast<const StringHead*>(data);
         data_.buffer().assert_size(pos + StringHead::calc_size(head->size()));
@@ -118,6 +128,13 @@ class StringBlock {
 };
 
 class OffsetString;
+
+// Raises a decode error when a string column needs a string pool the segment does not have.
+inline void check_string_pool_present(bool has_string_pool) {
+    codec::check<ErrorCode::E_DECODE_ERROR>(
+            has_string_pool, "Corrupt segment: string column references a missing string pool"
+    );
+}
 
 /*****************
  *  StringPool  *
