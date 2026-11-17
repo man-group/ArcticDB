@@ -67,6 +67,9 @@ class S3ClientTestWrapper : public S3ClientInterface {
 
     void add_list_objects_failure_unretryable(Aws::S3::S3Errors error);
 
+    // Like an S3 directory (express) bucket, reject every listing whose prefix does not end in '/' with INVALID_REQUEST
+    void simulate_directory_bucket() { directory_bucket_ = true; }
+
     // Makes the next `times` delete_objects calls report the objects whose name contains `s3_object_name_substring`
     // (e.g. a symbol name) as per-object failures with the given S3 error code (e.g. "InternalError"), while the
     // request itself succeeds. Not thread-safe, so only use it in tests which delete from a single thread.
@@ -86,6 +89,7 @@ class S3ClientTestWrapper : public S3ClientInterface {
     // mechanism. Allow setting a list of failure modes for list_objects calls. This list will be popped from until
     // empty, at which point the listing operation will succeed.
     mutable std::deque<std::pair<Aws::S3::S3Errors, bool>> list_objects_failures_;
+    bool directory_bucket_{false};
     // s3_object_name_substring -> (error_code, remaining number of delete_objects calls to fail it in)
     std::map<std::string, std::pair<std::string, size_t>> delete_objects_failures_;
 };
