@@ -514,7 +514,6 @@ ColumnTruncation get_truncate_range(
                 }
             },
             [&truncate_rows, &adjusted_row_range, &first_row_offset, &read_query](const auto&) {
-                // TODO: Make less hacky
                 if (std::holds_alternative<RowRange>(read_query.row_range)) {
                     const auto& row_filter = std::get<RowRange>(read_query.row_range);
                     // The row_filter is with respect to global offset. Column truncation works on column row indices.

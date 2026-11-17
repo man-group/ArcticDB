@@ -131,7 +131,6 @@ void StreamingReadGenerator::ensure_index_information() {
         );
     }
     if (auto row_filter = read_query_->convert_to_positive_row_filter(isr.tsd().total_rows()); row_filter.has_value()) {
-        // TODO: Make this more efficient
         for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
             if (row_slice->row_range_.second <= row_filter->first) {
                 row_slice = to_process_.erase(row_slice);
@@ -155,7 +154,6 @@ void StreamingReadGenerator::ensure_index_information() {
             std::holds_alternative<timestamp>(index_range.end_)) {
             auto start_ts = std::get<timestamp>(index_range.start_);
             auto end_ts = std::get<timestamp>(index_range.end_);
-            // TODO: Make this more efficient
             for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
                 if (row_slice->end_index_ <= start_ts) {
                     row_slice = to_process_.erase(row_slice);

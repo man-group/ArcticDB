@@ -33,7 +33,6 @@ void ReadQuery::add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses) {
     clauses_ = plan_query(std::move(clauses));
 }
 
-// TODO: Rename this method
 std::optional<RowRange> ReadQuery::convert_to_positive_row_filter(int64_t total_rows) {
     return util::variant_match(
             row_range,

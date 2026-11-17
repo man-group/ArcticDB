@@ -38,7 +38,6 @@ class StreamingReadGenerator {
   private:
     struct RowSlice {
         RowRange row_range_;
-        // TODO: What about other index types?
         timestamp start_index_;
         timestamp end_index_;
         std::optional<folly::Future<ArrowOutputFrame>> opt_arrow_output_frame_fut_;
