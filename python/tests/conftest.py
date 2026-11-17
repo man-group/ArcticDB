@@ -62,6 +62,7 @@ from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORT
 from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
+from tests.util.stress_heavy_lock import serialise_stress_heavy_tests  # noqa: F401 (autouse fixture)
 from .util.mark import (
     EXTENDED_MARKS,
     LMDB_TESTS_MARK,
