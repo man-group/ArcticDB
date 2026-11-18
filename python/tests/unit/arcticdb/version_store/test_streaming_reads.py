@@ -707,41 +707,91 @@ def test_streaming_reads_deleted_symbol(in_memory_version_store):
         lib.read_streaming(sym).versioned_item()
 
 
-def test_streaming_reads_recursively_normalized_data(in_memory_version_store):
+def test_streaming_reads_recursively_normalized_data(in_memory_version_store, clear_query_stats):
     lib = in_memory_version_store
     sym = "test_streaming_reads_recursively_normalized_data"
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, [df], recursive_normalizers=True)
     assert not lib.is_symbol_pickled(sym)
-    with pytest.raises(SchemaException):
-        gen = lib.read_streaming(sym)
-        for _ in gen:
-            pass
-    with pytest.raises(SchemaException):
-        lib.read_streaming(sym).versioned_item()
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming(sym)
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming(sym).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
 
 
-def test_streaming_reads_pickled_data(in_memory_version_store):
+def test_streaming_reads_pickled_data(in_memory_version_store, clear_query_stats):
     lib = in_memory_version_store
     sym = "test_streaming_reads_pickled_data"
     lib.write(sym, "hello")
     assert lib.is_symbol_pickled(sym)
-    with pytest.raises(SchemaException):
-        gen = lib.read_streaming(sym)
-        for _ in gen:
-            pass
-    with pytest.raises(SchemaException):
-        lib.read_streaming(sym).versioned_item()
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming(sym)
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming(sym).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
 
 
-def test_streaming_reads_numpy_array(in_memory_version_store):
+def test_streaming_reads_numpy_array(in_memory_version_store, clear_query_stats):
     lib = in_memory_version_store
     sym = "test_streaming_reads_numpy_array"
     lib.write(sym, np.arange(200_000))
     assert not lib.is_symbol_pickled(sym)
-    with pytest.raises(SchemaException):
-        gen = lib.read_streaming(sym)
-        for _ in gen:
-            pass
-    with pytest.raises(SchemaException):
-        lib.read_streaming(sym).versioned_item()
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming(sym)
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming(sym).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+
+
+def test_streaming_reads_date_range_non_timeseries(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_date_range_non_timeseries"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1)))
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1))).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+
+
+def test_streaming_reads_date_range_unsorted_timeseries(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_date_range_unsorted_timeseries"
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(2)}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(0)], name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df)
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1)))
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1))).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0

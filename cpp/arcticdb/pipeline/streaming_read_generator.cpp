@@ -164,6 +164,15 @@ void StreamingReadGenerator::ensure_index_information() {
             }
         }
     } else if (std::holds_alternative<IndexRange>(read_query_->row_filter)) {
+        schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+                isr.has_timestamp_index(), "Cannot apply date range filter to symbol with non-timestamp index"
+        );
+        const auto sorted_value = isr.sorted();
+        sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING,
+                "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
+                "it is not sorted in ascending order and cannot therefore filter the data using date_range."
+        );
         auto index_range = std::get<IndexRange>(read_query_->row_filter);
         if (std::holds_alternative<timestamp>(index_range.start_) &&
             std::holds_alternative<timestamp>(index_range.end_)) {
