@@ -1,3 +1,4 @@
+import os
 import re
 
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
@@ -17,7 +18,7 @@ class FileLibraryAdapter(ArcticLibraryAdapter):
         if match is None:
             raise ValueError(f"uri {uri} does not match FileLibraryAdapter regex {self.REGEX}")
 
-        self._dir_path = match.group("dir_path")
+        self._dir_path = os.path.abspath(match.group("dir_path"))
         self._query = match.group("query")
         self._encoding_version = encoding_version
 
