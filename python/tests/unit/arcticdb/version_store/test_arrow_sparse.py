@@ -450,6 +450,30 @@ def test_sparse_append_all_nulls(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
+@pytest.mark.parametrize("column_group_size", [1, 3, 13, 100, 127, 400])
+@pytest.mark.parametrize("segment_row_size", [1, 3, 100])
+def test_sparse_write_many_all_null_columns(
+    version_store_factory, encoding_version, column_group_size, segment_row_size
+):
+    lib = version_store_factory(
+        encoding_version=int(encoding_version), column_group_size=column_group_size, segment_row_size=segment_row_size
+    )
+    num_rows = 5
+    table = pa.table({f"c_{i}": pa.array([i if i % 20 == 0 else None] * num_rows, pa.int64()) for i in range(400)})
+    lib.write("sym", table, index_column=False)
+    assert table.equals(lib.read("sym", output_format="pyarrow").data)
+
+
+@pytest.mark.parametrize("num_dense_columns", [50, 100, 126])
+def test_sparse_read_trailing_all_null_column(version_store_factory, encoding_version, num_dense_columns):
+    # LMDB rather than in-memory storage, so that a V1 read decodes the segment's protobuf header
+    lib = version_store_factory(encoding_version=int(encoding_version))
+    dense = {f"c_{i}": pa.array([i, i], pa.int64()) for i in range(num_dense_columns)}
+    table = pa.table({**dense, "all_null": pa.array([None, None], pa.int64())})
+    lib.write("sym", table, index_column=False)
+    assert table.equals(lib.read("sym", output_format="pyarrow").data)
+
+
 @pytest.mark.parametrize("write_sparse", [True, False])
 @pytest.mark.parametrize("update_sparse", [True, False])
 @pytest.mark.parametrize(

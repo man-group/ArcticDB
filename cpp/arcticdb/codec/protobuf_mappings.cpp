@@ -131,15 +131,8 @@ SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encod
 
 size_t calc_proto_encoded_blocks_size(const arcticdb::proto::encoding::SegmentHeader& hdr) {
     size_t bytes{};
-    for (const auto& field : hdr.fields()) {
-        bytes += EncodedFieldImpl::Size;
-        if (field.has_ndarray()) {
-            const auto& ndarray = field.ndarray();
-            const auto shapes_size = sizeof(EncodedBlock) * ndarray.shapes_size();
-            const auto values_size = sizeof(EncodedBlock) * ndarray.values_size();
-            bytes += shapes_size + values_size;
-        }
-    }
+    for (const auto& field : hdr.fields())
+        bytes += calc_field_bytes(field.has_ndarray() ? num_blocks(field) : 0);
     return bytes;
 }
 

@@ -189,21 +189,11 @@ static void encode_index_descriptors(
 }
 
 [[nodiscard]] size_t calc_column_blocks_size(const Column& col) {
-    size_t bytes = EncodedFieldImpl::Size;
-    if (col.type().dimension() != entity::Dimension::Dim0)
-        bytes += sizeof(EncodedBlock);
-
-    bytes += sizeof(EncodedBlock) * col.num_blocks();
+    const auto has_shapes = col.type().dimension() != entity::Dimension::Dim0;
+    const auto bytes = calc_field_bytes(col.num_blocks() + has_shapes);
     ARCTICDB_TRACE(
-            log::version(),
-            "Encoded block size: {} + shapes({}) + {} * {} = {}",
-            EncodedFieldImpl::Size,
-            col.type().dimension() != entity::Dimension::Dim0 ? sizeof(EncodedBlock) : 0u,
-            sizeof(EncodedBlock),
-            col.num_blocks(),
-            bytes
+            log::version(), "Encoded block size: {} blocks ({} shapes) = {}", col.num_blocks(), has_shapes, bytes
     );
-
     return bytes;
 }
 
