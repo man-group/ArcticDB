@@ -16,7 +16,6 @@
 #include <variant>
 
 namespace arcticdb::pipelines {
-using FilterRange = std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>;
 
 struct SignedRowRange {
     std::optional<int64_t> start_;
@@ -28,7 +27,8 @@ struct ReadQuery {
     // empty vector -> only the index
     mutable std::optional<std::vector<std::string>> columns;
     std::variant<std::monostate, SignedRowRange, RowRange> row_range;
-    FilterRange row_filter; // no filter by default
+    // row_range now handled by the above, so in practice this is always a date_range
+    std::optional<IndexRange> row_filter; // no filter by default
     std::vector<std::shared_ptr<Clause>> clauses_;
     bool needs_post_processing{true};
 

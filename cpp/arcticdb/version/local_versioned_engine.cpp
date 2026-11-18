@@ -1819,7 +1819,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
         // An update replaces a range of the symbol with what it was given.
         // With no rows and no date range there is no range to replace. We use async_write_metadata_impl to avoid
         // deleting the placeholder timestamp==0.
-        const bool replaces_nothing = frame->empty() && std::holds_alternative<std::monostate>(query.row_filter);
+        const bool replaces_nothing = frame->empty() && !query.row_filter.has_value();
         index_key_fut = replaces_nothing
                                 ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
                                 : async_update_impl(store(), update_info, query, frame, write_options_, dynamic_schema);

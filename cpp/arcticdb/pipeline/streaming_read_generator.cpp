@@ -164,7 +164,7 @@ void StreamingReadGenerator::ensure_index_information() {
                 ++row_slice;
             }
         }
-    } else if (std::holds_alternative<IndexRange>(read_query_->row_filter)) {
+    } else if (read_query_->row_filter.has_value()) {
         schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
                 isr.has_timestamp_index(), "Cannot apply date range filter to symbol with non-timestamp index"
         );
@@ -174,7 +174,7 @@ void StreamingReadGenerator::ensure_index_information() {
                 "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
                 "it is not sorted in ascending order and cannot therefore filter the data using date_range."
         );
-        auto index_range = std::get<IndexRange>(read_query_->row_filter);
+        const auto& index_range = *read_query_->row_filter;
         if (std::holds_alternative<timestamp>(index_range.start_) &&
             std::holds_alternative<timestamp>(index_range.end_)) {
             auto start_ts = std::get<timestamp>(index_range.start_);

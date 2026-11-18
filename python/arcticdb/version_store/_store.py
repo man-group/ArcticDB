@@ -2912,15 +2912,17 @@ class NativeVersionStore:
                     row_range = (0, head)
                 elif tail:
                     row_range = (-tail, None)
-                elif isinstance(read_query.row_filter, _RowRange):
+                elif isinstance(read_query.row_range, _RowRange):
                     # Compute n_rows from the filter, clamped to the total symbol row count.
                     # This helps us to match _denormalize_single_index.
                     total_rows = read_result.frame_data.row_count
-                    n_rows = max(0, min(read_query.row_filter.end, total_rows) - read_query.row_filter.start)
+                    n_rows = max(0, min(read_query.row_range.end, total_rows) - read_query.row_range.start)
                     row_range = (0, n_rows)
                 return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
-            if read_query.row_filter is not None and read_query.needs_post_processing:
+            if (
+                read_query.row_filter is not None or isinstance(read_query.row_range, _RowRange)
+            ) and read_query.needs_post_processing:
                 # post filter
                 start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
                 row_count = end_idx - start_idx
@@ -2961,9 +2963,9 @@ class NativeVersionStore:
 
     def _compute_filter_start_end_row(self, read_result, read_query):
         start_idx = end_idx = None
-        if isinstance(read_query.row_filter, _RowRange):
-            start_idx = read_query.row_filter.start - read_result.frame_data.offset
-            end_idx = read_query.row_filter.end - read_result.frame_data.offset
+        if isinstance(read_query.row_range, _RowRange):
+            start_idx = read_query.row_range.start - read_result.frame_data.offset
+            end_idx = read_query.row_range.end - read_result.frame_data.offset
         elif isinstance(read_query.row_filter, _IndexRange):
             index = read_result.frame_data.data[0]
             if len(index) != 0:

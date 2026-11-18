@@ -40,10 +40,8 @@ std::optional<RowRange> ReadQuery::convert_to_positive_row_filter(int64_t total_
             [](const RowRange& row_range) -> std::optional<RowRange> { return row_range; },
             [this, total_rows](const SignedRowRange& signed_row_range) -> std::optional<RowRange> {
                 int64_t supplied_start = signed_row_range.start_.value_or(0);
-
                 size_t start = supplied_start >= 0 ? std::min(supplied_start, total_rows)
                                                    : std::max(total_rows + supplied_start, static_cast<int64_t>(0));
-
                 int64_t supplied_end = signed_row_range.end_.value_or(total_rows);
                 size_t end = supplied_end >= 0 ? std::min(supplied_end, total_rows)
                                                : std::max(total_rows + supplied_end, static_cast<int64_t>(0));
@@ -51,19 +49,6 @@ std::optional<RowRange> ReadQuery::convert_to_positive_row_filter(int64_t total_
                 return std::get<RowRange>(this->row_range);
             }
     );
-    //    if (!row_range) {
-    //        return std::nullopt;
-    //    }
-    //
-    //    int64_t supplied_start = row_range->start_.value_or(0);
-    //
-    //    size_t start = supplied_start >= 0 ? std::min(supplied_start, total_rows)
-    //                                       : std::max(total_rows + supplied_start, static_cast<int64_t>(0));
-    //
-    //    int64_t supplied_end = row_range->end_.value_or(total_rows);
-    //    size_t end = supplied_end >= 0 ? std::min(supplied_end, total_rows)
-    //                                   : std::max(total_rows + supplied_end, static_cast<int64_t>(0));
-    //    return pipelines::RowRange(start, end);
 }
 
 } // namespace arcticdb::pipelines
