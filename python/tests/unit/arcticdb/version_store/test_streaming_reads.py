@@ -320,7 +320,7 @@ def test_streaming_reads_empty_data(in_memory_version_store, clear_query_stats):
         with qs.query_stats():
             for _ in gen:
                 # There are no row-slices so we never get here
-                # TODO: As part of 13346982120, return a single record-batch with the correct schema in this case
+                # TODO 13346982120: Return a single record-batch with the correct schema in this case
                 assert False
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
@@ -360,7 +360,7 @@ def test_streaming_reads_all_data_filtered_out_at_index_level(in_memory_version_
         with qs.query_stats():
             for _ in gen:
                 # All row-slices are filtered out at the index level, so we never get here
-                # TODO: As part of 13346982120, return a single record-batch with the correct schema in this case
+                # TODO 13346982120: Return a single record-batch with the correct schema in this case
                 assert False
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1

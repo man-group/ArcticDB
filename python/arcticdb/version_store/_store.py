@@ -2407,8 +2407,8 @@ class NativeVersionStore:
                 **kwargs,
             )
             if streaming_read and output_format.lower() == OutputFormat.PANDAS.lower():
-                # TODO: As part of 13346982120, consider raising if the user explicitly requested Pandas output format
-                #  in the method call?
+                # TODO 13346982120: Consider raising if the user explicitly requested Pandas output format in the method
+                #  call?
                 output_format = (
                     self._runtime_options.output_format
                     if (

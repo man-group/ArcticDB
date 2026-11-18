@@ -102,6 +102,9 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
             row_slice.opt_arrow_output_frame_fut_.has_value(),
             "StreamingReadGenerator::next(): unexpected unscheduled future"
     );
+    // TODO 13346982120: If there is an exception thrown during reading/processing, it will be re-raised on this call to
+    // get(). We should clear to_process_, wait for all in-flight futures in being_processed_ (otherwise their memory
+    // will leak), and then re-raise the exception.
     auto res = std::move(*row_slice.opt_arrow_output_frame_fut_).get();
     prefetch_slices();
     return res;
