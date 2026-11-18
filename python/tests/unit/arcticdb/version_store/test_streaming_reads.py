@@ -13,7 +13,7 @@ import pyarrow as pa
 import pytest
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import ArcticNativeException, SchemaException, UserInputException
+from arcticdb.exceptions import ArcticNativeException, MissingDataException, SchemaException, UserInputException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import config_context, query_stats_operation_count
 
@@ -684,9 +684,31 @@ def test_streaming_reads_with_invalid_clauses(in_memory_store_factory):
         lib.read_streaming("sym", query_builder=q)
 
 
-def test_streaming_reads_recursively_normalized_data(in_memory_version_store, clear_query_stats):
+def test_streaming_reads_non_existent_symbol(in_memory_version_store):
     lib = in_memory_version_store
-    lib.set_output_format("polars")
+    with pytest.raises(MissingDataException):
+        gen = lib.read_streaming("non_existent")
+        for _ in gen:
+            pass
+    with pytest.raises(MissingDataException):
+        lib.read_streaming("non_existent").versioned_item()
+
+
+def test_streaming_reads_deleted_symbol(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_deleted_symbol"
+    lib.write(sym, "hello")
+    lib.delete(sym)
+    with pytest.raises(MissingDataException):
+        gen = lib.read_streaming(sym)
+        for _ in gen:
+            pass
+    with pytest.raises(MissingDataException):
+        lib.read_streaming(sym).versioned_item()
+
+
+def test_streaming_reads_recursively_normalized_data(in_memory_version_store):
+    lib = in_memory_version_store
     sym = "test_streaming_reads_recursively_normalized_data"
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, [df], recursive_normalizers=True)
