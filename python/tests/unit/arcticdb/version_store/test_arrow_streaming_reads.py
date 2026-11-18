@@ -44,15 +44,32 @@ def generic_streaming_reads_test(lib, sym, expected_slices, prefetch_rows=None, 
             for idx, slice in enumerate(gen):
                 assert slice.equals(expected_slices[idx])
                 # Exactly one record batch per slice
-                assert (len(slice.to_batches()) if isinstance(slice, pa.Table) else slice.n_chunks()) == 1
+                if isinstance(slice, pa.Table):
+                    num_record_batches = len(slice.to_batches())
+                elif isinstance(slice, pa.ChunkedArray):
+                    num_record_batches = slice.num_chunks
+                elif isinstance(slice, (pl.DataFrame, pl.Series)):
+                    num_record_batches = slice.n_chunks()
+                else:
+                    assert False
+                assert num_record_batches == 1
                 slices.append(slice)
         stats = qs.get_query_stats()
         # Total IO operations match non-streaming reads
         assert_stat_counts_equal(stats, expected_stats)
         qs.reset_stats()
         # Concatenating together slices gives the same result as a non-streaming read
-        df = pa.concat_tables(slices) if isinstance(slices[0], pa.Table) else pl.concat(slices)
-        assert df.equals(expected_vit.data)
+        if isinstance(slices[0], pa.Table):
+            combined_data = pa.concat_tables(slices)
+        elif isinstance(slices[0], pa.ChunkedArray):
+            # concat_arrays copies into a pa.Array, which fails the equals check due to type mismatch, so wrap in a
+            # ChunkedArray
+            combined_data = pa.chunked_array([pa.concat_arrays(slice.chunks[0] for slice in slices)])
+        elif isinstance(slices[0], (pl.DataFrame, pl.Series)):
+            combined_data = pl.concat(slices)
+        else:
+            assert False
+        assert combined_data.equals(expected_vit.data)
         expected_vit.data = None
         assert gen.versioned_item() == expected_vit
 
@@ -466,6 +483,15 @@ def test_streaming_reads_pyarrow_table(in_memory_store_factory, clear_query_stat
     table = pa.Table.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, table)
     generic_streaming_reads_test(lib, sym, [table.slice(idx * 10, 10) for idx in range(10)])
+
+
+def test_streaming_reads_pyarrow_chunked_array(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("pyarrow")
+    sym = "test_streaming_reads_pyarrow_chunked_array"
+    arr = pa.chunked_array([range(100)])
+    lib.write(sym, arr)
+    generic_streaming_reads_test(lib, sym, [arr.slice(idx * 10, 10) for idx in range(10)])
 
 
 @pytest.mark.parametrize("call_versioned_item_before_loop", [True, False])
