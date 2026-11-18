@@ -197,7 +197,7 @@ TEST_F(FileStorageApi, IterateTypeWithPrefix) {
 }
 
 TEST_F(FileStorageApi, IterateTypeWithSpecialNames) {
-    // If the file encoding scheme is careless, users can use symbol names which look like special files, which
+    // If the file encoding scheme is careless, users can use symbol names, which look like special files that
     // would be invisible to iterate_type().
     for (const std::string stream_id : {".tmp_symbol", ".nfs_symbol"}) {
         auto key = storage::get_test_key(stream_id, entity::KeyType::VERSION);
@@ -208,7 +208,7 @@ TEST_F(FileStorageApi, IterateTypeWithSpecialNames) {
     storage().iterate_type(arcticdb::entity::KeyType::VERSION, [&](entity::VariantKey&& found_key) {
         found.insert(std::get<StringId>(variant_key_id(found_key)));
     });
-    ASSERT_EQ(found, (std::set<std::string>{{".tmp_symbol", ".nfs_symbol"}}));
+    ASSERT_EQ(found, (std::set<std::string>{".tmp_symbol", ".nfs_symbol"}));
 }
 
 using FaultParam = std::tuple<SyscallId, std::optional<PosixError>, std::string_view>;
