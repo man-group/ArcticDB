@@ -2397,14 +2397,31 @@ class NativeVersionStore:
         return read_queries
 
     def _get_read_options_and_output_format(
-        self, **kwargs
+        self, streaming_read=False, **kwargs
     ) -> Tuple[_PythonVersionStoreReadOptions, Union[OutputFormat, str]]:
+        def resolve_output_format(streaming_read, **kwargs):
+            output_format = self.resolve_runtime_defaults(
+                "output_format",
+                proto_cfg,
+                global_default=OutputFormat.POLARS if streaming_read else OutputFormat.PANDAS,
+                **kwargs,
+            )
+            if streaming_read and output_format.lower() == OutputFormat.PANDAS.lower():
+                output_format = (
+                    self._runtime_options.output_format
+                    if (
+                        self._runtime_options is not None
+                        and self._runtime_options.output_format.lower() != OutputFormat.PANDAS.lower()
+                    )
+                    else OutputFormat.POLARS
+                )
+                log.info(f"read_streaming does not support Pandas output, defaulting to {output_format}")
+            return output_format
+
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
-        output_format = self.resolve_runtime_defaults(
-            "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
-        )
+        output_format = resolve_output_format(streaming_read, **kwargs)
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
@@ -2502,7 +2519,7 @@ class NativeVersionStore:
         self, as_of, date_range, row_range, columns=None, query_builder=None, streaming_read=False, **kwargs
     ):
         version_query = self._get_version_query(as_of, **kwargs)
-        read_options, output_format = self._get_read_options_and_output_format(**kwargs)
+        read_options, output_format = self._get_read_options_and_output_format(streaming_read, **kwargs)
         read_query = self._get_read_query(
             date_range=date_range,
             row_range=row_range,

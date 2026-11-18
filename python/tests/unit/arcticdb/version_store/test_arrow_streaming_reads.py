@@ -494,6 +494,25 @@ def test_streaming_reads_pyarrow_chunked_array(in_memory_store_factory, clear_qu
     generic_streaming_reads_test(lib, sym, [arr.slice(idx * 10, 10) for idx in range(10)])
 
 
+@pytest.mark.parametrize("lib_setting", [None, "pandas", "pyarrow", "polars"])
+@pytest.mark.parametrize("method_arg", [None, "pandas", "pyarrow", "polars"])
+def test_streaming_reads_pandas_output_format(in_memory_version_store, lib_setting, method_arg):
+    lib = in_memory_version_store
+    if lib_setting is not None:
+        lib.set_output_format(lib_setting)
+    sym = "test_streaming_reads_pandas_output_format"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    gen = lib.read_streaming(sym, output_format=method_arg)
+    expected_output_type = pa.Table if lib_setting == "pyarrow" else pl.DataFrame
+    if method_arg == "pyarrow":
+        expected_output_type = pa.Table
+    elif method_arg == "polars":
+        expected_output_type = pl.DataFrame
+    for slice in gen:
+        assert isinstance(slice, expected_output_type)
+
+
 @pytest.mark.parametrize("call_versioned_item_before_loop", [True, False])
 @pytest.mark.parametrize("prefetch_rows", [None, 0, 7, 13, 20])
 def test_streaming_reads_io_counts(
@@ -649,12 +668,14 @@ def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, 
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
 def test_streaming_reads_invalid_prefetch_rows(in_memory_version_store, prefetch_rows):
     lib = in_memory_version_store
+    lib.set_output_format("polars")
     with pytest.raises(ArcticNativeException if isinstance(prefetch_rows, int) else TypeError):
         lib.read_streaming("sym", prefetch_rows=prefetch_rows)
 
 
 def test_streaming_reads_with_invalid_clauses(in_memory_store_factory):
     lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
     q = QueryBuilder().groupby("group").agg({"agg": "sum"})
     with pytest.raises(UserInputException):
         lib.read_streaming("sym", query_builder=q)
