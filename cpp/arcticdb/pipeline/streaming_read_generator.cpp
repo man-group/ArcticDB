@@ -190,6 +190,7 @@ void StreamingReadGenerator::ensure_index_information() {
             }
         }
     }
+    // TODO 13346982120: Better heuristic when user doesn't specify, and a way to say "prefetch everything"
     prefetch_rows_ = prefetch_rows_.value_or(1'000'000);
 }
 } // namespace arcticdb::version_store
