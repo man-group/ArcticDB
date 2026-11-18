@@ -16,6 +16,7 @@ import math
 import pytest
 import requests
 import pandas as pd
+import polars as pl
 import numpy as np
 from datetime import datetime, timedelta
 from typing import List
@@ -1894,3 +1895,17 @@ def test_compact_data(lmdb_library, rows_per_segment, prune_previous_versions):
     assert len(lib._dev_tools.library_tool().read_index(sym)) == max(len(df) // rows_per_segment, 1)
     prune_previous_versions = False if prune_previous_versions is None else prune_previous_versions
     assert len(lib.list_versions(sym)) == (1 if prune_previous_versions else 11)
+
+
+def test_read_streaming(lmdb_library):
+    lib = lmdb_library
+    sym = "test_read_streaming"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    for i in range(10):
+        lib.append(sym, df.slice(i * 10, 10))
+    gen = lib.read_streaming(sym)
+    for i, slice in enumerate(gen):
+        assert slice.equals(df.slice(i * 10, 10))
+    expected_vit = lib.read(sym)
+    expected_vit.data = None
+    assert gen.versioned_item() == expected_vit

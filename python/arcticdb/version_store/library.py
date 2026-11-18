@@ -42,6 +42,7 @@ from arcticdb.version_store._store import (
     VersionQueryInput,
     MergeStrategy,
     MergeAction,
+    StreamingReadGenerator,
 )
 from arcticdb_ext.version_store import (
     CompactDataInfo,
@@ -2247,6 +2248,34 @@ class Library:
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
             )
+
+    def read_streaming(
+        self,
+        symbol: str,
+        as_of: Optional[AsOf] = None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
+        prefetch_rows: Optional[int] = None,
+    ) -> StreamingReadGenerator:
+        return self._nvs.read_streaming(
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            prefetch_rows=prefetch_rows,
+            output_format=output_format,
+            arrow_string_format_default=arrow_string_format_default,
+            arrow_string_format_per_column=arrow_string_format_per_column,
+            implement_read_index=True,
+            iterate_snapshots_if_tombstoned=False,
+        )
 
     def read_batch(
         self,
