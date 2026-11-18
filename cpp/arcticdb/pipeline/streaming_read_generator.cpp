@@ -138,6 +138,7 @@ void StreamingReadGenerator::ensure_index_information() {
             "read_streaming not supported with numpy arrays"
     );
     for (const auto& slice_and_key : isr) {
+        // We can extract all the row-slices from the first column slice
         if (!to_process_.empty() && slice_and_key.slice().rows().first < to_process_.back().row_range_.second) {
             break;
         }

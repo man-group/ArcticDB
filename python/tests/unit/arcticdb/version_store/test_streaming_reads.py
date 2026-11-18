@@ -345,7 +345,7 @@ def test_streaming_reads_all_data_filtered_out_at_index_level(in_memory_version_
             include_index=True,
         )
         metadata = "blah"
-        lib.write(sym, df, metadata=metadata)
+        lib.write(sym, df, metadata=metadata, index_column=True)
         kwargs = (
             {"row_range": (200, 201)}
             if filter_type == "row_range"
