@@ -126,6 +126,9 @@ void StreamingReadGenerator::ensure_index_information() {
     );
     index_information_ = fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get();
     pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+            !isr.is_pickled(), "read_streaming not supported with pickled data"
+    );
     for (const auto& slice_and_key : isr) {
         if (!to_process_.empty() && slice_and_key.slice().rows().first < to_process_.back().row_range_.second) {
             break;
