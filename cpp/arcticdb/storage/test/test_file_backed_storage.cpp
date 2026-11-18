@@ -160,7 +160,7 @@ TEST_F(FileStorageApi, KeysDoNotCollide) {
     }
 }
 
-TEST_F(FileStorageApi, ListSymbols) {
+TEST_F(FileStorageApi, IterateType) {
     Segment segment{storage::get_test_segment()};
     auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
     storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
@@ -181,7 +181,7 @@ TEST_F(FileStorageApi, ListSymbols) {
     ASSERT_FALSE(executed_on_missing);
 }
 
-TEST_F(FileStorageApi, ListSymbolsWithPrefix) {
+TEST_F(FileStorageApi, IterateTypeWithPrefix) {
     for (const std::string stream_id : {"symbol_a", "symbol_b", "other"}) {
         auto key = storage::get_test_key(stream_id, entity::KeyType::VERSION);
         storage().write(storage::KeySegmentPair(std::move(key), storage::get_test_segment()));
@@ -194,6 +194,21 @@ TEST_F(FileStorageApi, ListSymbolsWithPrefix) {
             "symbol"
     );
     ASSERT_EQ(found, (std::set<std::string>{"symbol_a", "symbol_b"}));
+}
+
+TEST_F(FileStorageApi, IterateTypeWithSpecialNames) {
+    // If the file encoding scheme is careless, users can use symbol names which look like special files, which
+    // would be invisible to iterate_type().
+    for (const std::string stream_id : {".tmp_symbol", ".nfs_symbol"}) {
+        auto key = storage::get_test_key(stream_id, entity::KeyType::VERSION);
+        storage().write(storage::KeySegmentPair(std::move(key), storage::get_test_segment()));
+    }
+
+    std::set<std::string> found;
+    storage().iterate_type(arcticdb::entity::KeyType::VERSION, [&](entity::VariantKey&& found_key) {
+        found.insert(std::get<StringId>(variant_key_id(found_key)));
+    });
+    ASSERT_EQ(found, (std::set<std::string>{{".tmp_symbol", ".nfs_symbol"}}));
 }
 
 using FaultParam = std::tuple<SyscallId, std::optional<PosixError>, std::string_view>;
@@ -255,7 +270,10 @@ INSTANTIATE_TEST_SUITE_P(
         FileStorageResilience, RetryableFault,
         testing::Values(
                 FaultParam(SyscallId::READ, ESTALE, "StaleFdOnRead"sv),
-                FaultParam(SyscallId::WRITE, ESTALE, "StaleFdOnWrite"sv)
+                FaultParam(SyscallId::WRITE, ESTALE, "StaleFdOnWrite"sv),
+                // mkdir doesn't even need to be retried, we just need resilience.
+                FaultParam(SyscallId::MKDIR, EEXIST, "KeyDirExistsOnWrite"sv)
+                // FaultParam(SyscallId::OPEN, EEXIST, "TmpExistsOnWrite"sv)
         ),
         [](const testing::TestParamInfo<FaultInjection::ParamType>& info) {
             return std::string(std::get<2>(info.param));

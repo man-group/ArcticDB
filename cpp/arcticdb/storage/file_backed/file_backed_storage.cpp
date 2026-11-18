@@ -48,29 +48,31 @@ static constexpr std::string_view TMP_FILE_PREFIX(".tmp");
 static constexpr std::string_view SILLY_RENAME_FILE_PREFIX(".nfs");
 
 using namespace arcticdb;
-using arcticdb::storage::file_backed::PosixInterface;
+using storage::file_backed::PosixInterface;
 
+// TODO: Now that everything in here is built on raise<>, it makes sense for arguments to be Args...&&
 void raise_io_error(int error_code, std::string_view message) {
     switch (error_code) {
     case EACCES:
     case EPERM:
     case EROFS:
-        arcticdb::storage::raise<arcticdb::ErrorCode::E_PERMISSION>(
-                fmt::format("{}: {}", message, std::strerror(error_code))
-        );
+        storage::raise<ErrorCode::E_PERMISSION>("{}: {}", message, std::strerror(error_code));
+        break;
     case ENOSPC:
     case EDQUOT:
-        arcticdb::storage::raise<arcticdb::ErrorCode::E_QUOTA_EXCEEDED>(message);
+        storage::raise<ErrorCode::E_QUOTA_EXCEEDED>(message);
+        break;
     default:
-        throw arcticdb::StorageException(fmt::format("{}: {}", message, std::strerror(error_code)));
+        storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>("{}: {}", message, std::strerror(error_code));
+        break;
     }
 }
 
-// File name, which is unlikely to collide across consecutive function calls and physical machines.
-// Uses a nanosecond timestamp and a randomly generated value.
+// File name, which is unlikely to collide across consecutive function calls. The pid is useful because a
+// forked process would inherit this particular generator's seed and produce an identical sequence of values.
 std::string generate_tmp_file_name() {
-    static thread_local std::mt19937 gen{std::random_device{}()};
-    return fmt::format("{}{}_{}", TMP_FILE_PREFIX, util::SysClock::nanos_since_epoch(), gen());
+    static thread_local std::mt19937_64 gen{std::random_device{}()};
+    return fmt::format("{}_{}_{}", TMP_FILE_PREFIX, getpid(), gen());
 }
 
 fs::path get_key_subpath(const VariantKey& key) {
@@ -254,13 +256,13 @@ class File : public FdHolder {
         }
     }
 
-    std::shared_ptr<arcticdb::Buffer> read_all() const {
+    std::shared_ptr<Buffer> read_all() const {
         struct stat st;
         int stat_res = posix_.fstat(fd_, &st);
         if (stat_res != 0)
             throw std::system_error(errno, std::generic_category(), "stat failed");
         const size_t buffer_size = st.st_size;
-        auto buffer = std::make_shared<arcticdb::Buffer>(buffer_size);
+        auto buffer = std::make_shared<Buffer>(buffer_size);
         size_t read = 0;
         while (read < buffer_size) {
             const ssize_t n = posix_.read(fd_, buffer->data() + read, buffer_size - read);
@@ -304,7 +306,7 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
             } else if (e.code().value() == ENOENT) {
                 throw storage::KeyNotFoundException(variant_key);
             } else
-                throw arcticdb::StorageException(fmt::format("read failed: {}", std::strerror(e.code().value())));
+                raise_io_error(e.code().value(), std::strerror(e.code().value()));
         }
     }
 }
@@ -367,7 +369,6 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     bool retried_stale = false;
     while (true) {
         Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
-        // TODO: What do we do if we fail to mkdir and open? Also seems very unlikely.
         storage_dir_fd.mkdir(key_name, new_dir_mode_);
         Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
         try {
@@ -388,9 +389,7 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
                         key_type_dir_fd.fd(),
                         maybe_safe_file_name_for_key.c_str()
                 ) != 0) {
-                throw arcticdb::StorageException(fmt::format(
-                        "Failed to move temp file to {}: {}", maybe_safe_file_name_for_key, std::strerror(errno)
-                ));
+                raise_io_error(errno, fmt::format("Failed to move temp file to {}", maybe_safe_file_name_for_key));
             }
 
             // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
