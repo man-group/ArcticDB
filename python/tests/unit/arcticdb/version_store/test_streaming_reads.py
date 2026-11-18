@@ -732,3 +732,16 @@ def test_streaming_reads_pickled_data(in_memory_version_store):
             pass
     with pytest.raises(SchemaException):
         lib.read_streaming(sym).versioned_item()
+
+
+def test_streaming_reads_numpy_array(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_numpy_array"
+    lib.write(sym, np.arange(200_000))
+    assert not lib.is_symbol_pickled(sym)
+    with pytest.raises(SchemaException):
+        gen = lib.read_streaming(sym)
+        for _ in gen:
+            pass
+    with pytest.raises(SchemaException):
+        lib.read_streaming(sym).versioned_item()
