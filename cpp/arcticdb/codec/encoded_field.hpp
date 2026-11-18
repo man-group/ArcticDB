@@ -11,6 +11,7 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/storage/memory_layout.hpp>
 
+#include <algorithm>
 #include <utility>
 #include <boost/iterator/iterator_facade.hpp>
 namespace arcticdb {
@@ -345,9 +346,14 @@ struct EncodedFieldImpl : public EncodedField {
 
 static_assert(EncodedFieldImpl::Size == sizeof(EncodedFieldImpl) - sizeof(EncodedBlock));
 
-inline size_t calc_field_bytes(size_t num_blocks) {
-    return EncodedFieldImpl::Size + (sizeof(EncodedBlock) * num_blocks);
+// Returns the number of bytes to allocate for a field with this number of blocks.
+// For a field with zero blocks it still reserves space for 1 EncodedBlock.
+// Otherwise the EncodedFieldImpl default constructor would initialize blocks_[0], writing to unallocated memory.
+constexpr size_t calc_field_bytes(size_t num_blocks) {
+    return EncodedFieldImpl::Size + (sizeof(EncodedBlock) * std::max<size_t>(num_blocks, 1));
 }
+
+static_assert(calc_field_bytes(0) >= sizeof(EncodedFieldImpl));
 
 inline size_t encoded_field_bytes(const EncodedField& encoded_field) {
     return calc_field_bytes(encoded_field.shapes_count_ + encoded_field.values_count_);
