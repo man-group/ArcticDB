@@ -120,6 +120,10 @@ void StreamingReadGenerator::ensure_index_information() {
             version_query_,
             stream_id_
     );
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+            opt_versioned_item->key_.type() != KeyType::MULTI_KEY,
+            "read_streaming not supported with recursively normalized data"
+    );
     index_information_ = fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get();
     pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
     for (const auto& slice_and_key : isr) {

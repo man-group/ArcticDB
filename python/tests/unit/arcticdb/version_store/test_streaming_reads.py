@@ -13,7 +13,7 @@ import pyarrow as pa
 import pytest
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import ArcticNativeException, UserInputException
+from arcticdb.exceptions import ArcticNativeException, SchemaException, UserInputException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import config_context, query_stats_operation_count
 
@@ -682,3 +682,18 @@ def test_streaming_reads_with_invalid_clauses(in_memory_store_factory):
     q = QueryBuilder().resample("1s").agg({"agg": "sum"})
     with pytest.raises(UserInputException):
         lib.read_streaming("sym", query_builder=q)
+
+
+def test_streaming_reads_recursively_normalized_data(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_recursively_normalized_data"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, [df], recursive_normalizers=True)
+    assert not lib.is_symbol_pickled(sym)
+    with pytest.raises(SchemaException):
+        gen = lib.read_streaming(sym)
+        for _ in gen:
+            pass
+    with pytest.raises(SchemaException):
+        lib.read_streaming(sym).versioned_item()
