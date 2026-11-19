@@ -820,7 +820,7 @@ void decode_into_frame_dynamic(
 
         // We decode only the columns in `seg` and they are truncated during decoding. We need to truncate the
         // remaining columns in `frame` that were not present in `seg`.
-        if (!std::holds_alternative<std::monostate>(read_query.row_range) || read_query.row_filter.has_value()) {
+        if (read_query.has_row_filtering()) {
             for (auto frame_col = index_fieldcount; frame_col < frame.descriptor().field_count(); ++frame_col) {
                 if (!truncated_column_indices.contains(frame_col)) {
                     auto& column = frame.column(static_cast<position_t>(frame_col));

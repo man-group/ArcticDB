@@ -32,6 +32,10 @@ struct ReadQuery {
     std::vector<std::shared_ptr<Clause>> clauses_;
     bool needs_post_processing{true};
 
+    bool has_row_filtering() const {
+        return row_filter.has_value() || !std::holds_alternative<std::monostate>(row_range);
+    }
+
     ReadQuery() = default;
 
     ReadQuery clone() const;

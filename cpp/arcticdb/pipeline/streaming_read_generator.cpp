@@ -58,7 +58,7 @@ void StreamingReadGenerator::fetch_next_slice() {
                          // Copy will be unavoidable as there will be many calls to read_frame_for_version in-flight at
                          // once when reading ahead
                          auto read_query_copy = std::make_shared<ReadQuery>(read_query_->clone());
-                         read_query_copy->row_range = SignedRowRange{row_range.first, row_range.second};
+                         read_query_copy->row_range = RowRange{row_range.first, row_range.second};
                          return read_frame_for_version(
                                  engine_->store(), index_information_copy, read_query_copy, read_options_, handler_data_
                          );

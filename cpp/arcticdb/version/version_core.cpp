@@ -1662,10 +1662,7 @@ void check_can_perform_processing(
         check_multi_key_is_not_index_only(*pipeline_context, read_query);
     }
 
-    const bool is_query_empty =
-            (!read_query.columns && std::holds_alternative<std::monostate>(read_query.row_range) &&
-             std::holds_alternative<std::monostate>(read_query.row_range) && !read_query.row_filter.has_value() &&
-             read_query.clauses_.empty());
+    const bool is_query_empty = (!read_query.columns && !read_query.has_row_filtering() && read_query.clauses_.empty());
     const bool is_pickled = pipeline_context->has_normalization() && pipeline_context->is_pickled();
     const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->is_numpy_array();
     // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
@@ -2294,8 +2291,7 @@ void create_column_stats_impl(
 ) {
     using namespace arcticdb::pipelines;
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
-    const bool range_given =
-            !std::holds_alternative<std::monostate>(read_query->row_range) || read_query->row_filter.has_value();
+    const bool range_given = read_query->has_row_filtering();
 
     auto index_future = store->read(versioned_item.key_);
     std::optional<folly::Try<std::pair<VariantKey, SegmentInMemory>>> column_stats_try;
