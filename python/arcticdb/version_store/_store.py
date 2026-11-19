@@ -268,6 +268,24 @@ class VersionedItem:
         return iter(attr.astuple(self))
 
 
+@dataclass
+class VersionedItemWithJoin:
+    """
+    Return type for operations that join multiple symbols together to produce a single output DataFrame.
+
+    Attributes
+    ----------
+    versions: List[VersionedItem]
+        The individual version information about the symbols that were joined together.
+        The data field of these versioned items will be None.
+    data: Any
+        The joined together data.
+    """
+
+    versions: List[VersionedItem]
+    data: Any
+
+
 class StreamingReadGenerator:
     # TODO 13346982120: Is this pattern Pythonic? Or should a different object be returned by __iter__? The current
     # implementation is destructive, but is reusing an object of this class useful?
@@ -312,24 +330,6 @@ class StreamingReadGenerator:
         return self._nvs._adapt_frame_data(
             data, self._read_result.norm, self._output_format, self._read_result.sort_order
         )
-
-
-@dataclass
-class VersionedItemWithJoin:
-    """
-    Return type for operations that join multiple symbols together to produce a single output DataFrame.
-
-    Attributes
-    ----------
-    versions: List[VersionedItem]
-        The individual version information about the symbols that were joined together.
-        The data field of these versioned items will be None.
-    data: Any
-        The joined together data.
-    """
-
-    versions: List[VersionedItem]
-    data: Any
 
 
 def _env_config_from_lib_config(lib_cfg, env):
@@ -2663,6 +2663,11 @@ class NativeVersionStore:
                 output_format_kwarg.lower() != OutputFormat.PANDAS.lower(),
                 "read_streaming does not support Pandas output format",
             )
+        check(
+            prefetch_rows is None or prefetch_rows >= 0,
+            "prefetch_rows must be None or a positive integer, received {}",
+            prefetch_rows,
+        )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
@@ -2676,11 +2681,6 @@ class NativeVersionStore:
             query_builder=query_builder,
             streaming_read=True,
             **kwargs,
-        )
-        check(
-            prefetch_rows is None or prefetch_rows >= 0,
-            "prefetch_rows must be None or a positive integer, received {}",
-            prefetch_rows,
         )
 
         generator = self.version_store._read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
