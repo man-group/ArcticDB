@@ -24,12 +24,12 @@ StreamingReadGenerator::StreamingReadGenerator(
     read_options_(read_options),
     prefetch_rows_(prefetch_rows),
     handler_data_(handler_data) {
-    log::version().debug("StreamingReadGenerator initialised");
+    log::version().debug("StreamingReadGenerator initialised for version {} of {}", version_query_, stream_id_);
 }
 
 ReadResult StreamingReadGenerator::read_result() {
     py::gil_scoped_release release_gil;
-    log::version().debug("StreamingReadGenerator::read_result() called");
+    log::version().debug("StreamingReadGenerator::read_result() called for {}", stream_id_);
     ensure_index_information();
     VersionedItem versioned_item{to_atom(index_information_->index_.first)};
     const auto& tsd = index_information_->index_.second.index_descriptor();
@@ -44,6 +44,7 @@ ReadResult StreamingReadGenerator::read_result() {
 }
 
 void StreamingReadGenerator::fetch_next_slice() {
+    log::version().debug("StreamingReadGenerator::fetch_next_slice() called for {}", stream_id_);
     auto row_slice = std::move(to_process_.front());
     in_flight_rows_ += row_slice.row_count();
     to_process_.pop_front();
@@ -81,6 +82,7 @@ void StreamingReadGenerator::prefetch_slices() {
 
 std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     py::gil_scoped_release release_gil;
+    log::version().debug("StreamingReadGenerator::next() called for {}", stream_id_);
     ensure_index_information();
     if (being_processed_.empty() && to_process_.empty()) {
         return std::nullopt;
@@ -105,15 +107,18 @@ std::optional<ArrowOutputFrame> StreamingReadGenerator::next() {
     // TODO 13346982120: If there is an exception thrown during reading/processing, it will be re-raised on this call to
     // get(). We should clear to_process_, wait for all in-flight futures in being_processed_ (otherwise their memory
     // will leak), and then re-raise the exception.
+    // Similarly, how should we handle a loop in the Python layer calling break?
     auto res = std::move(*row_slice.opt_arrow_output_frame_fut_).get();
     prefetch_slices();
     return res;
 }
 
 void StreamingReadGenerator::ensure_index_information() {
+    // TODO 13346982120: Consider thread-safety of all methods in this class, but particularly this one
     if (index_information_) {
         return;
     }
+    log::version().debug("StreamingReadGenerator: fetching index key for {}", stream_id_);
     auto opt_versioned_item = engine_->get_version_to_read(stream_id_, version_query_);
     // E_NO_SUCH_VERSION probably more appropriate as we are not supporting incompletes, but this matches the regular
     // read path
@@ -198,5 +203,8 @@ void StreamingReadGenerator::ensure_index_information() {
     );
     // TODO 13346982120: Better heuristic when user doesn't specify, and a way to say "prefetch everything"
     prefetch_rows_ = prefetch_rows_.value_or(1'000'000);
+    log::version().debug(
+            "StreamingReadGenerator: index filtered down to {} row-slices for {}", to_process_.size(), stream_id_
+    );
 }
 } // namespace arcticdb::version_store

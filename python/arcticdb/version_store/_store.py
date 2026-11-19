@@ -269,6 +269,11 @@ class VersionedItem:
 
 
 class StreamingReadGenerator:
+    # TODO 13346982120: Is this pattern Pythonic? Or should a different object be returned by __iter__? The current
+    # implementation is destructive, but is reusing an object of this class useful?
+    # Also consider implementing __len__
+    # This also only works with "range-based" for loops, not indexing, although this is probably for the best with the
+    # read-ahead strategy
     def __init__(self, nvs, generator_impl, output_format):
         self._nvs = nvs
         self._generator_impl = generator_impl
