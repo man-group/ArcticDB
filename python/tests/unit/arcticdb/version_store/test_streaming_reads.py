@@ -600,6 +600,7 @@ def test_streaming_reads_prefetch_row_counts(in_memory_store_factory, segment_ro
     assert remaining_rows == 0
 
 
+@pytest.mark.parametrize("row_range", [None, (5, 15)])
 @pytest.mark.parametrize(
     "columns",
     [
@@ -609,7 +610,7 @@ def test_streaming_reads_prefetch_row_counts(in_memory_store_factory, segment_ro
         ["present_in_first_and_second", "present_in_first_and_third"],
     ],
 )
-def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, clear_query_stats, columns):
+def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, clear_query_stats, row_range, columns):
     lib = in_memory_version_store_dynamic_schema
     lib.set_output_format("polars")
     sym = "test_streaming_reads_dynamic_schema"
@@ -662,7 +663,12 @@ def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, 
         global_schema if columns is None else {k: v for k, v in global_schema.items() if k in columns}
     )
     assert expected_df.schema == expected_schema
-    generic_streaming_reads_test(lib, sym, [expected_df.slice(idx * 10, 10) for idx in range(3)], columns=columns)
+    expected_slices = (
+        [expected_df.slice(idx * 10, 10) for idx in range(3)]
+        if row_range is None
+        else [expected_df.slice(5, 5), expected_df.slice(10, 5)]
+    )
+    generic_streaming_reads_test(lib, sym, expected_slices, row_range=row_range, columns=columns)
 
 
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
