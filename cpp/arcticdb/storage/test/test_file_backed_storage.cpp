@@ -273,7 +273,7 @@ INSTANTIATE_TEST_SUITE_P(
                 FaultParam(SyscallId::WRITE, ESTALE, "StaleFdOnWrite"sv),
                 // mkdir doesn't even need to be retried, we just need resilience.
                 FaultParam(SyscallId::MKDIR, EEXIST, "KeyDirExistsOnWrite"sv)
-                // FaultParam(SyscallId::OPEN, EEXIST, "TmpExistsOnWrite"sv)
+                // FaultParam(SyscallId::OPEN, EEXIST, "TmpAlreadyExistsOnWrite"sv)
         ),
         [](const testing::TestParamInfo<FaultInjection::ParamType>& info) {
             return std::string(std::get<2>(info.param));

@@ -8,6 +8,7 @@
 
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
+#include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
 #include <arcticdb/storage/file_backed/posix_interface.hpp>
 #include <arcticdb/storage/file_backed/real_posix.hpp>
@@ -89,7 +90,7 @@ bool skip_during_listing(std::string_view file_name) noexcept {
 }
 
 void refresh_directory(PosixInterface& posix, const fs::path& dir) {
-    int fd = posix.open(dir.c_str(), O_RDONLY | O_DIRECTORY, 0);
+    int fd = posix.open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
     if (fd >= 0)
         (void)posix.close(fd);
 }
@@ -101,7 +102,7 @@ void refresh_directory(PosixInterface& posix, const fs::path& dir) {
  */
 void refresh_ancestors(PosixInterface& posix, const fs::path& dir, const fs::path& subpath) {
     fs::path to_check = subpath;
-    assert(to_check.has_parent_path());
+    assert(to_check.has_parent_path() && dir.is_absolute() && subpath.is_absolute());
     while (to_check != dir) {
         // TODO: The stopping condition here can be relaxed. The only reason we traverse parents one by one
         //       is because of the possibility that they are **all missing**. If one of them successfully opens,
@@ -135,8 +136,10 @@ class FdHolder {
     // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
     FdHolder(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
         posix_(posix) {
+        assert((flags & O_CLOEXEC) != 0 && "For fork safety, mode O_CLOEXEC should always be set");
         fd_ = posix.open(pathname.c_str(), flags, mode);
-        // TODO: Use a retry wrapper
+        // TODO: Use a retry wrapper. Note that whether we are creating a new file or trying to open an existing one
+        //       makes a difference to the decision!
         if (fd_ < 0) {
             if (errno == ENOENT) {
                 refresh_ancestors(posix, storage_dir, pathname);
@@ -181,7 +184,9 @@ class FdHolder {
     // errors.
     void close_swallow_errors() {
         assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
-        (void)posix_.close(fd_);
+        int res = posix_.close(fd_);
+        if (res != 0)
+            log::storage().warn("Failed to close file: {}", std::strerror(errno));
         fd_ = -1;
     }
 
@@ -202,7 +207,7 @@ class FdHolder {
 
   protected:
     PosixInterface& posix_;
-    int fd_;
+    int fd_ = -1;
 };
 
 class Directory : public FdHolder {
@@ -227,7 +232,11 @@ class Directory : public FdHolder {
 
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
     // errors.
-    void unlinkat_swallow_errors(const fs::path& pathname) const { (void)posix_.unlinkat(fd_, pathname.c_str(), 0); }
+    void unlinkat_swallow_errors(const fs::path& pathname) const {
+        int res = posix_.unlinkat(fd_, pathname.c_str(), 0);
+        if (res != 0)
+            log::storage().warn("Failed to delete file {}: {}", pathname.c_str(), std::strerror(errno));
+    }
 };
 
 class File : public FdHolder {
