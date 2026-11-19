@@ -33,22 +33,34 @@ void ReadQuery::add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses) {
     clauses_ = plan_query(std::move(clauses));
 }
 
-std::optional<RowRange> ReadQuery::convert_to_positive_row_filter(int64_t total_rows) {
-    return util::variant_match(
-            row_range,
-            [](const std::monostate&) -> std::optional<RowRange> { return std::nullopt; },
-            [](const RowRange& row_range) -> std::optional<RowRange> { return row_range; },
-            [this, total_rows](const SignedRowRange& signed_row_range) -> std::optional<RowRange> {
-                int64_t supplied_start = signed_row_range.start_.value_or(0);
-                size_t start = supplied_start >= 0 ? std::min(supplied_start, total_rows)
-                                                   : std::max(total_rows + supplied_start, static_cast<int64_t>(0));
-                int64_t supplied_end = signed_row_range.end_.value_or(total_rows);
-                size_t end = supplied_end >= 0 ? std::min(supplied_end, total_rows)
-                                               : std::max(total_rows + supplied_end, static_cast<int64_t>(0));
-                this->row_range = RowRange(start, end);
-                return std::get<RowRange>(this->row_range);
-            }
-    );
+void ReadQuery::convert_to_positive_row_filter(int64_t total_rows) {
+    if (const auto* signed_row_range = std::get_if<SignedRowRange>(&row_range)) {
+        int64_t supplied_start = signed_row_range->start_.value_or(0);
+        size_t start = supplied_start >= 0 ? std::min(supplied_start, total_rows)
+                                           : std::max(total_rows + supplied_start, static_cast<int64_t>(0));
+        int64_t supplied_end = signed_row_range->end_.value_or(total_rows);
+        size_t end = supplied_end >= 0 ? std::min(supplied_end, total_rows)
+                                       : std::max(total_rows + supplied_end, static_cast<int64_t>(0));
+        row_range = RowRange(start, end);
+    }
+}
+
+bool ReadQuery::has_row_filtering() const {
+    return row_filter.has_value() || !std::holds_alternative<std::monostate>(row_range);
+}
+
+std::variant<std::monostate, RowRange, IndexRange> ReadQuery::post_processing_filter() const {
+    if (row_filter.has_value()) {
+        util::check(
+                std::holds_alternative<std::monostate>(row_range),
+                "ReadQuery::post_processing_filter() expects only one of row range or date range to be set"
+        );
+        return *row_filter;
+    } else if (std::holds_alternative<RowRange>(row_range)) {
+        return std::get<RowRange>(row_range);
+    } else {
+        return std::monostate();
+    }
 }
 
 } // namespace arcticdb::pipelines

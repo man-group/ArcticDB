@@ -26,15 +26,12 @@ struct ReadQuery {
     // std::nullopt -> all columns
     // empty vector -> only the index
     mutable std::optional<std::vector<std::string>> columns;
+    // row_range and row_filter are only both set by read_streaming, otherwise they are mutually exclusive
     std::variant<std::monostate, SignedRowRange, RowRange> row_range;
     // row_range now handled by the above, so in practice this is always a date_range
     std::optional<IndexRange> row_filter; // no filter by default
     std::vector<std::shared_ptr<Clause>> clauses_;
     bool needs_post_processing{true};
-
-    bool has_row_filtering() const {
-        return row_filter.has_value() || !std::holds_alternative<std::monostate>(row_range);
-    }
 
     ReadQuery() = default;
 
@@ -44,7 +41,11 @@ struct ReadQuery {
 
     void add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses);
 
-    std::optional<RowRange> convert_to_positive_row_filter(int64_t total_rows);
+    void convert_to_positive_row_filter(int64_t total_rows);
+
+    bool has_row_filtering() const;
+
+    std::variant<std::monostate, RowRange, IndexRange> post_processing_filter() const;
 };
 
 } // namespace arcticdb::pipelines

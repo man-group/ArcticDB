@@ -146,50 +146,56 @@ void StreamingReadGenerator::ensure_index_information() {
                 slice_and_key.slice().rows(), slice_and_key.key().start_time(), slice_and_key.key().end_time()
         );
     }
-    if (auto row_filter = read_query_->convert_to_positive_row_filter(isr.tsd().total_rows()); row_filter.has_value()) {
-        for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
-            if (row_slice->row_range_.second <= row_filter->first) {
-                row_slice = to_process_.erase(row_slice);
-            } else if (row_slice->row_range_.first >= row_filter->second) {
-                row_slice = to_process_.erase(row_slice);
-            } else if (row_slice->row_range_.first <= row_filter->first &&
-                       row_filter->first < row_slice->row_range_.second) {
-                row_slice->row_range_.first = row_filter->first;
-                ++row_slice;
-            } else if (row_slice->row_range_.first < row_filter->second &&
-                       row_filter->second <= row_slice->row_range_.second) {
-                row_slice->row_range_.second = row_filter->second;
-                ++row_slice;
-            } else {
-                ++row_slice;
-            }
-        }
-    } else if (read_query_->row_filter.has_value()) {
-        schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-                isr.has_timestamp_index(), "Cannot apply date range filter to symbol with non-timestamp index"
-        );
-        const auto sorted_value = isr.sorted();
-        sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING,
-                "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
-                "it is not sorted in ascending order and cannot therefore filter the data using date_range."
-        );
-        const auto& index_range = *read_query_->row_filter;
-        if (std::holds_alternative<timestamp>(index_range.start_) &&
-            std::holds_alternative<timestamp>(index_range.end_)) {
-            auto start_ts = std::get<timestamp>(index_range.start_);
-            auto end_ts = std::get<timestamp>(index_range.end_);
-            for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
-                if (row_slice->end_index_ <= start_ts) {
-                    row_slice = to_process_.erase(row_slice);
-                } else if (row_slice->start_index_ > end_ts) {
-                    row_slice = to_process_.erase(row_slice);
-                } else {
-                    ++row_slice;
+    read_query_->convert_to_positive_row_filter(isr.tsd().total_rows());
+    util::variant_match(
+            read_query_->post_processing_filter(),
+            [&](const RowRange& row_range) {
+                for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
+                    if (row_slice->row_range_.second <= row_range.first) {
+                        row_slice = to_process_.erase(row_slice);
+                    } else if (row_slice->row_range_.first >= row_range.second) {
+                        row_slice = to_process_.erase(row_slice);
+                    } else if (row_slice->row_range_.first <= row_range.first &&
+                               row_range.first < row_slice->row_range_.second) {
+                        row_slice->row_range_.first = row_range.first;
+                        ++row_slice;
+                    } else if (row_slice->row_range_.first < row_range.second &&
+                               row_range.second <= row_slice->row_range_.second) {
+                        row_slice->row_range_.second = row_range.second;
+                        ++row_slice;
+                    } else {
+                        ++row_slice;
+                    }
                 }
-            }
-        }
-    }
+            },
+            [&](const IndexRange& index_range) {
+                schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+                        isr.has_timestamp_index(), "Cannot apply date range filter to symbol with non-timestamp index"
+                );
+                const auto sorted_value = isr.sorted();
+                sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                        sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING,
+                        "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB "
+                        "believes "
+                        "it is not sorted in ascending order and cannot therefore filter the data using date_range."
+                );
+                if (std::holds_alternative<timestamp>(index_range.start_) &&
+                    std::holds_alternative<timestamp>(index_range.end_)) {
+                    auto start_ts = std::get<timestamp>(index_range.start_);
+                    auto end_ts = std::get<timestamp>(index_range.end_);
+                    for (auto row_slice = to_process_.begin(); row_slice != to_process_.end();) {
+                        if (row_slice->end_index_ <= start_ts) {
+                            row_slice = to_process_.erase(row_slice);
+                        } else if (row_slice->start_index_ > end_ts) {
+                            row_slice = to_process_.erase(row_slice);
+                        } else {
+                            ++row_slice;
+                        }
+                    }
+                }
+            },
+            [](const std::monostate&) {}
+    );
     // TODO 13346982120: Better heuristic when user doesn't specify, and a way to say "prefetch everything"
     prefetch_rows_ = prefetch_rows_.value_or(1'000'000);
 }

@@ -2920,9 +2920,7 @@ class NativeVersionStore:
                     row_range = (0, n_rows)
                 return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
-            if (
-                read_query.row_filter is not None or isinstance(read_query.row_range, _RowRange)
-            ) and read_query.needs_post_processing:
+            if read_query.post_processing_filter() is not None and read_query.needs_post_processing:
                 # post filter
                 start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
                 row_count = end_idx - start_idx
@@ -2963,16 +2961,17 @@ class NativeVersionStore:
 
     def _compute_filter_start_end_row(self, read_result, read_query):
         start_idx = end_idx = None
-        if isinstance(read_query.row_range, _RowRange):
-            start_idx = read_query.row_range.start - read_result.frame_data.offset
-            end_idx = read_query.row_range.end - read_result.frame_data.offset
+        row_filter = read_query.post_processing_filter()
+        if isinstance(row_filter, _RowRange):
+            start_idx = row_filter.start - read_result.frame_data.offset
+            end_idx = row_filter.end - read_result.frame_data.offset
         elif isinstance(read_query.row_filter, _IndexRange):
             index = read_result.frame_data.data[0]
             if len(index) != 0:
-                start_idx = index.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
-                end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
-        else:
-            raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+                start_idx = index.searchsorted(datetime64(row_filter.start_ts, "ns"), side="left")
+                end_idx = index.searchsorted(datetime64(row_filter.end_ts, "ns"), side="right")
+        elif row_filter is not None:
+            raise ArcticNativeException(f"Unrecognised row_filter type: {type(read_query.row_filter)}")
         # Resolve start_idx/end_idx (may be negative or beyond row_count) into valid bounds within [0, row_count].
         start, stop, _ = slice(start_idx, end_idx).indices(read_result.frame_data.row_count)
         return (start, stop)
