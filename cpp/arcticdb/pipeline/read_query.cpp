@@ -33,6 +33,16 @@ void ReadQuery::add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses) {
     clauses_ = plan_query(std::move(clauses));
 }
 
+void ReadQuery::set_row_range(std::optional<int64_t> start, std::optional<int64_t> end) {
+    util::check(!row_filter.has_value(), "Cannot set row_range and date_range");
+    row_range = SignedRowRange(start, end);
+}
+
+void ReadQuery::set_row_filter(const IndexRange& index_range) {
+    util::check(std::holds_alternative<std::monostate>(row_range), "Cannot set row_range and date_range");
+    row_filter = index_range;
+}
+
 void ReadQuery::convert_to_positive_row_filter(int64_t total_rows) {
     if (const auto* signed_row_range = std::get_if<SignedRowRange>(&row_range)) {
         int64_t supplied_start = signed_row_range->start_.value_or(0);

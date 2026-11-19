@@ -70,7 +70,6 @@ from arcticdb_ext.types import IndexKind
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
-from arcticdb_ext.version_store import SignedRowRange as _SignedRowRange
 from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
 from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
@@ -2319,10 +2318,10 @@ class NativeVersionStore:
             read_query.add_clauses(query_builder.clauses, streaming_read)
 
         if row_range is not None:
-            read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
+            read_query.set_row_range(row_range[0], row_range[1])
 
         if date_range is not None:
-            read_query.row_filter = _normalize_dt_range(date_range)
+            read_query.set_row_filter(_normalize_dt_range(date_range))
 
         read_query.columns = columns
 
@@ -2965,7 +2964,7 @@ class NativeVersionStore:
         if isinstance(row_filter, _RowRange):
             start_idx = row_filter.start - read_result.frame_data.offset
             end_idx = row_filter.end - read_result.frame_data.offset
-        elif isinstance(read_query.row_filter, _IndexRange):
+        elif isinstance(row_filter, _IndexRange):
             index = read_result.frame_data.data[0]
             if len(index) != 0:
                 start_idx = index.searchsorted(datetime64(row_filter.start_ts, "ns"), side="left")

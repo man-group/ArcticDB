@@ -41,6 +41,10 @@ struct ReadQuery {
 
     void add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses);
 
+    void set_row_range(std::optional<int64_t> start, std::optional<int64_t> end);
+
+    void set_row_filter(const IndexRange& index_range);
+
     void convert_to_positive_row_filter(int64_t total_rows);
 
     bool has_row_filtering() const;
