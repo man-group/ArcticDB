@@ -17,6 +17,8 @@ from arcticdb.exceptions import ArcticNativeException, MissingDataException, Sch
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import config_context, query_stats_operation_count
 
+from python.arcticdb.options import OutputFormat
+
 
 # Comparing dict equality relies on timings matching
 def assert_stat_counts_equal(left, right):
@@ -495,7 +497,20 @@ def test_streaming_reads_pyarrow_chunked_array(in_memory_store_factory, clear_qu
 
 
 @pytest.mark.parametrize("lib_setting", [None, "pandas", "pyarrow", "polars"])
-@pytest.mark.parametrize("method_arg", [None, "pandas", "pyarrow", "polars"])
+@pytest.mark.parametrize(
+    "method_arg",
+    [
+        None,
+        "pandas",
+        "pyarrow",
+        "polars",
+        "PANDAS",
+        "PoLArs",
+        OutputFormat.PANDAS,
+        OutputFormat.POLARS,
+        OutputFormat.PYARROW,
+    ],
+)
 def test_streaming_reads_pandas_output_format(in_memory_version_store, lib_setting, method_arg):
     lib = in_memory_version_store
     if lib_setting is not None:
@@ -503,11 +518,20 @@ def test_streaming_reads_pandas_output_format(in_memory_version_store, lib_setti
     sym = "test_streaming_reads_pandas_output_format"
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, df)
-    gen = lib.read_streaming(sym, output_format=method_arg)
+    if method_arg is None:
+        gen = lib.read_streaming(sym)
+        # Just so we can call .lower() below with an is not None check
+        method_arg = "None"
+    elif method_arg.lower() == "pandas":
+        with pytest.raises(ArcticNativeException):
+            lib.read_streaming(sym, output_format=method_arg)
+        return
+    else:
+        gen = lib.read_streaming(sym, output_format=method_arg)
     expected_output_type = pa.Table if lib_setting == "pyarrow" else pl.DataFrame
-    if method_arg == "pyarrow":
+    if method_arg.lower() == "pyarrow":
         expected_output_type = pa.Table
-    elif method_arg == "polars":
+    elif method_arg.lower() == "polars":
         expected_output_type = pl.DataFrame
     for slice in gen:
         assert isinstance(slice, expected_output_type)

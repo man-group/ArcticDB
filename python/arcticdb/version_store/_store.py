@@ -2411,8 +2411,6 @@ class NativeVersionStore:
                 **kwargs,
             )
             if streaming_read and output_format.lower() == OutputFormat.PANDAS.lower():
-                # TODO 13346982120: Consider raising if the user explicitly requested Pandas output format in the method
-                #  call?
                 output_format = (
                     self._runtime_options.output_format
                     if (
@@ -2659,6 +2657,12 @@ class NativeVersionStore:
             ),
             kwargs,
         )
+        output_format_kwarg = kwargs.get("output_format", None)
+        if output_format_kwarg is not None:
+            check(
+                output_format_kwarg.lower() != OutputFormat.PANDAS.lower(),
+                "read_streaming does not support Pandas output format",
+            )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
