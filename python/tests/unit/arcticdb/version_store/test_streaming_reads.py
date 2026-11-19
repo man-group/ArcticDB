@@ -671,6 +671,16 @@ def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, 
     generic_streaming_reads_test(lib, sym, expected_slices, row_range=row_range, columns=columns)
 
 
+# Except for "blah", these are kwargs allowed by read but disallowed by read_streaming
+@pytest.mark.parametrize(
+    "kwarg", ["blah", "force_string_to_object", "dynamic_schema", "set_tz", "allow_sparse", "incomplete"]
+)
+def test_streaming_reads_with_invalid_kwargs(in_memory_version_store, kwarg):
+    lib = in_memory_version_store
+    with pytest.raises(ArcticNativeException):
+        lib.read_streaming("sym", **{kwarg: 0})
+
+
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
 def test_streaming_reads_invalid_prefetch_rows(in_memory_version_store, prefetch_rows):
     lib = in_memory_version_store

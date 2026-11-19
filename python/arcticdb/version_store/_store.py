@@ -2650,7 +2650,15 @@ class NativeVersionStore:
         prefetch_rows: Optional[int] = None,
         **kwargs,
     ) -> StreamingReadGenerator:
-        self._validate_kwargs("read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+        # The kwargs allowed by read but disallowed here are either legacy and scheduled for deprecation,
+        # Pandas-specific, or not supported with streaming reads (incomplete)
+        self._validate_kwargs(
+            "read_streaming",
+            self._valid_read_kwargs.union({"implement_read_index"}).difference(
+                {"force_string_to_object", "dynamic_schema", "set_tz", "allow_sparse", "incomplete"}
+            ),
+            kwargs,
+        )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
