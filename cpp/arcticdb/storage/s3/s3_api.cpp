@@ -139,7 +139,7 @@ void ArcticCurlHttpClientFactory::CleanupStaticState() {
 #endif // WIN32
 
 uint16_t event_loop_thread_count_from_config() {
-    const auto configured = ConfigsMap::instance()->get_int("AWS.EventLoopThreads", 0);
+    const auto configured = ConfigsMap::instance()->get_int("AWS.EventLoopThreads", 1);
     return static_cast<uint16_t>(std::clamp<int64_t>(configured, 0, std::numeric_limits<uint16_t>::max()));
 }
 
@@ -164,6 +164,8 @@ S3ApiInstance::S3ApiInstance(
     // that have special characters (eg ':').
     options_.httpOptions.compliantRfc3986Encoding = true;
 
+    // Left unset, Aws::InitAPI builds a ClientBootstrap with one AWS CRT event-loop thread per two logical
+    // processors, which ArcticDB's S3Client has no use for - its HTTP transport is never CRT-backed.
     options_.ioOptions.clientBootstrap_create_fn = make_client_bootstrap_factory(event_loop_thread_count);
 
     if (log_level_ > Aws::Utils::Logging::LogLevel::Off) {
