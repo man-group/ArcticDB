@@ -1545,28 +1545,6 @@ class TimeFrameNormalizer(Normalizer):
         )
 
 
-class KnownTypeFallbackOnError(Normalizer):
-    def __init__(self, delegate, nfh):
-        # type: (Normalizer, Normalizer)->None
-        self._delegate = delegate
-        self._failure_handler = nfh
-
-    def set_skip_df_consolidation(self):
-        if isinstance(self._delegate, DataFrameNormalizer):
-            self._delegate.set_skip_df_consolidation()
-
-    def normalize(self, item, enable_python_native_pickling=None, **kwargs):
-        try:
-            return self._delegate.normalize(item, **kwargs)
-        except:
-            log.error("First class type({}) normalization failed, falling back to generic serialization.", type(item))
-            log.debug("item {}:", item)
-            return self._failure_handler.normalize(item, enable_python_native_pickling=enable_python_native_pickling)
-
-    def denormalize(self, item, norm_meta):
-        return self._delegate.denormalize(item, norm_meta)
-
-
 class CompositeNormalizer(Normalizer):
     def __init__(self, fallback_normalizer=None):
         self.df = DataFrameNormalizer()
