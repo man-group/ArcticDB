@@ -23,6 +23,7 @@
 #include <spdlog/sinks/base_sink.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <string>
@@ -1004,12 +1005,11 @@ size_t open_file_descriptors() {
 size_t occupy_io_threads(size_t tasks) {
     std::atomic<size_t> started{0};
     std::atomic<size_t> finished{0};
-    std::atomic<bool> release{false};
+    std::atomic_flag release{};
     for (size_t i = 0; i < tasks; ++i) {
         async::io_executor().add([&] {
             ++started;
-            while (!release)
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            release.wait(false);
             ++finished;
         });
     }
@@ -1017,7 +1017,8 @@ size_t occupy_io_threads(size_t tasks) {
     while (started < tasks && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     const size_t result = started;
-    release = true;
+    release.test_and_set();
+    release.notify_all();
     // Wait for every task, including any still queued after a timeout, since they reference this frame
     while (finished < tasks)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));

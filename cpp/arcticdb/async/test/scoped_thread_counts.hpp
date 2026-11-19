@@ -12,24 +12,32 @@
 #include <arcticdb/util/configs_map.hpp>
 
 #include <cstdint>
+#include <optional>
+#include <utility>
 
 namespace arcticdb::async {
 
 // Resizes the task scheduler's pools for one scope. The config is restored first and the scheduler is then rebuilt
 // with the defaults, on every exit path, so later tests in the binary don't inherit the resized pools.
 class ScopedThreadCounts {
-    struct ReplaceSchedulerOnScopeExit {
-        ~ReplaceSchedulerOnScopeExit() { TaskScheduler::replace_instance_for_testing(); }
-    };
-
-    ReplaceSchedulerOnScopeExit replace_guard_; // declared first, so destroyed after config_
-    ScopedConfig config_;
+    std::optional<ScopedConfig> config_;
 
   public:
     explicit ScopedThreadCounts(int64_t cpu = 1, int64_t io = 1) :
-        config_({{"VersionStore.NumCPUThreads", cpu}, {"VersionStore.NumIOThreads", io}}) {
+        config_(std::in_place,
+                ScopedConfig::ConfigOptions{{"VersionStore.NumCPUThreads", cpu}, {"VersionStore.NumIOThreads", io}}) {
         TaskScheduler::replace_instance_for_testing();
     }
+
+    ~ScopedThreadCounts() {
+        config_.reset();
+        TaskScheduler::replace_instance_for_testing();
+    }
+
+    ScopedThreadCounts(const ScopedThreadCounts&) = delete;
+    ScopedThreadCounts& operator=(const ScopedThreadCounts&) = delete;
+    ScopedThreadCounts(ScopedThreadCounts&&) = delete;
+    ScopedThreadCounts& operator=(ScopedThreadCounts&&) = delete;
 };
 
 } // namespace arcticdb::async
