@@ -2567,6 +2567,30 @@ class NativeVersionStore:
             columns = None
         return columns
 
+    def _read_preamble(
+        self,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+        streaming_read: bool = False,
+        **kwargs,
+    ):
+        implement_read_index = kwargs.get("implement_read_index", False)
+        columns = self._resolve_empty_columns(columns, implement_read_index)
+        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
+        return (implement_read_index,) + self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            streaming_read=streaming_read,
+            **kwargs,
+        )
+
     def read(
         self,
         symbol: str,
@@ -2620,18 +2644,8 @@ class NativeVersionStore:
         self._validate_kwargs(
             "read", self._valid_read_kwargs.union({"implement_read_index", "allow_secondary"}), kwargs
         )
-
-        implement_read_index = kwargs.get("implement_read_index", False)
-        columns = self._resolve_empty_columns(columns, implement_read_index)
-        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
-        query_builder = copy.deepcopy(query_builder)
-        version_query, read_options, read_query, output_format = self._get_queries(
-            as_of=as_of,
-            date_range=date_range,
-            row_range=row_range,
-            columns=columns,
-            query_builder=query_builder,
-            **kwargs,
+        implement_read_index, version_query, read_options, read_query, output_format = self._read_preamble(
+            as_of, date_range, row_range, columns, query_builder, streaming_read=False, **kwargs
         )
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
@@ -2668,21 +2682,9 @@ class NativeVersionStore:
             "prefetch_rows must be None or a positive integer, received {}",
             prefetch_rows,
         )
-
-        implement_read_index = kwargs.get("implement_read_index", False)
-        columns = self._resolve_empty_columns(columns, implement_read_index)
-        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
-        query_builder = copy.deepcopy(query_builder)
-        version_query, read_options, read_query, output_format = self._get_queries(
-            as_of=as_of,
-            date_range=date_range,
-            row_range=row_range,
-            columns=columns,
-            query_builder=query_builder,
-            streaming_read=True,
-            **kwargs,
+        _, version_query, read_options, read_query, output_format = self._read_preamble(
+            as_of, date_range, row_range, columns, query_builder, streaming_read=True, **kwargs
         )
-
         generator = self.version_store._read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
         return StreamingReadGenerator(self, generator, output_format)
 
@@ -2830,13 +2832,14 @@ class NativeVersionStore:
         VersionedItem
         """
         self._validate_kwargs("head", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
-
-        implement_read_index = kwargs.get("implement_read_index", False)
-        columns = self._resolve_empty_columns(columns, implement_read_index)
-        q = QueryBuilder()
-        q = q.head(n)
-        version_query, read_options, read_query, output_format = self._get_queries(
-            as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
+        implement_read_index, version_query, read_options, read_query, output_format = self._read_preamble(
+            as_of,
+            date_range=None,
+            row_range=None,
+            columns=columns,
+            query_builder=QueryBuilder().head(n),
+            streaming_read=False,
+            **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(
@@ -2866,13 +2869,14 @@ class NativeVersionStore:
         VersionedItem
         """
         self._validate_kwargs("tail", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
-
-        implement_read_index = kwargs.get("implement_read_index", False)
-        columns = self._resolve_empty_columns(columns, implement_read_index)
-        q = QueryBuilder()
-        q = q.tail(n)
-        version_query, read_options, read_query, output_format = self._get_queries(
-            as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
+        implement_read_index, version_query, read_options, read_query, output_format = self._read_preamble(
+            as_of,
+            date_range=None,
+            row_range=None,
+            columns=columns,
+            query_builder=QueryBuilder().tail(n),
+            streaming_read=False,
+            **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(
