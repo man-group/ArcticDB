@@ -44,9 +44,16 @@ ReadResult StreamingReadGenerator::read_result() {
 }
 
 void StreamingReadGenerator::fetch_next_slice() {
-    log::version().debug("StreamingReadGenerator::fetch_next_slice() called for {}", stream_id_);
     auto row_slice = std::move(to_process_.front());
     in_flight_rows_ += row_slice.row_count();
+    log::version().debug(
+            "StreamingReadGenerator::fetch_next_slice() called for row-slice [{}, {}) of {}. Total in-flight rows now "
+            "{}",
+            row_slice.row_range_.first,
+            row_slice.row_range_.second,
+            stream_id_,
+            in_flight_rows_
+    );
     to_process_.pop_front();
     row_slice.opt_arrow_output_frame_fut_
             .emplace(folly::via(&async::cpu_executor(), [this, row_range = row_slice.row_range_] {
@@ -120,28 +127,10 @@ void StreamingReadGenerator::ensure_index_information() {
     }
     log::version().debug("StreamingReadGenerator: fetching index key for {}", stream_id_);
     auto opt_versioned_item = engine_->get_version_to_read(stream_id_, version_query_);
-    // E_NO_SUCH_VERSION probably more appropriate as we are not supporting incompletes, but this matches the regular
-    // read path
-    missing_data::check<ErrorCode::E_NO_SYMBOL_DATA>(
-            opt_versioned_item.has_value(),
-            "StreamingReadGenerator: no data for version {} of symbol {}",
-            version_query_,
-            stream_id_
-    );
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
-            opt_versioned_item->key_.type() != KeyType::MULTI_KEY,
-            "read_streaming not supported with recursively normalized data"
-    );
+    validate_versioned_item(opt_versioned_item);
     index_information_ = fetch_index_and_column_stats(engine_->store(), *opt_versioned_item, *read_query_).get();
     pipelines::index::IndexSegmentReader isr{index_information_->index_.second.clone()};
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
-            !isr.is_pickled(), "read_streaming not supported with pickled data"
-    );
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
-            isr.tsd().proto().normalization().input_type_case() !=
-                    arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kNp,
-            "read_streaming not supported with numpy arrays"
-    );
+    validate_data_format_and_query(isr);
     for (const auto& slice_and_key : isr) {
         // We can extract all the row-slices from the first column slice
         if (!to_process_.empty() && slice_and_key.slice().rows().first < to_process_.back().row_range_.second) {
@@ -151,7 +140,7 @@ void StreamingReadGenerator::ensure_index_information() {
                 slice_and_key.slice().rows(), slice_and_key.key().start_time(), slice_and_key.key().end_time()
         );
     }
-    read_query_->convert_to_positive_row_filter(isr.tsd().total_rows());
+
     util::variant_match(
             read_query_->post_processing_filter(),
             [&](const RowRange& row_range) {
@@ -174,16 +163,6 @@ void StreamingReadGenerator::ensure_index_information() {
                 }
             },
             [&](const IndexRange& index_range) {
-                schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-                        isr.has_timestamp_index(), "Cannot apply date range filter to symbol with non-timestamp index"
-                );
-                const auto sorted_value = isr.sorted();
-                sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                        sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING,
-                        "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB "
-                        "believes "
-                        "it is not sorted in ascending order and cannot therefore filter the data using date_range."
-                );
                 if (std::holds_alternative<timestamp>(index_range.start_) &&
                     std::holds_alternative<timestamp>(index_range.end_)) {
                     auto start_ts = std::get<timestamp>(index_range.start_);
@@ -206,5 +185,43 @@ void StreamingReadGenerator::ensure_index_information() {
     log::version().debug(
             "StreamingReadGenerator: index filtered down to {} row-slices for {}", to_process_.size(), stream_id_
     );
+}
+
+void StreamingReadGenerator::validate_versioned_item(const std::optional<VersionedItem> opt_versioned_item) const {
+    // E_NO_SUCH_VERSION probably more appropriate as we are not supporting incompletes, but this matches the regular
+    // read path
+    missing_data::check<ErrorCode::E_NO_SYMBOL_DATA>(
+            opt_versioned_item.has_value(),
+            "StreamingReadGenerator: no data for version {} of symbol {}",
+            version_query_,
+            stream_id_
+    );
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+            opt_versioned_item->key_.type() != KeyType::MULTI_KEY,
+            "read_streaming not supported with recursively normalized data"
+    );
+}
+
+void StreamingReadGenerator::validate_data_format_and_query(const pipelines::index::IndexSegmentReader& isr) {
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+            !isr.is_pickled(), "read_streaming not supported with pickled data"
+    );
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
+            isr.tsd().proto().normalization().input_type_case() !=
+                    arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kNp,
+            "read_streaming not supported with numpy arrays"
+    );
+    read_query_->convert_to_positive_row_filter(isr.tsd().total_rows());
+    if (read_query_->row_filter.has_value()) {
+        schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+                isr.has_timestamp_index(), "Cannot apply date range filter to symbol with non-timestamp index"
+        );
+        const auto sorted_value = isr.sorted();
+        sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING,
+                "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
+                "it is not sorted in ascending order and cannot therefore filter the data using date_range."
+        );
+    }
 }
 } // namespace arcticdb::version_store

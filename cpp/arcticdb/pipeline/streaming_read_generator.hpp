@@ -46,6 +46,8 @@ class StreamingReadGenerator {
     };
 
     void ensure_index_information();
+    void validate_versioned_item(const std::optional<VersionedItem> opt_versioned_item) const;
+    void validate_data_format_and_query(const pipelines::index::IndexSegmentReader& isr);
     void fetch_next_slice();
     void prefetch_slices();
 
