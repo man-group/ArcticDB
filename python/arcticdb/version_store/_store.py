@@ -292,6 +292,7 @@ class StreamingReadGenerator:
     # Also consider implementing __len__
     # This also only works with "range-based" for loops, not indexing, although this is probably for the best with the
     # read-ahead strategy
+    # Add a docstring once form is finalized
     def __init__(self, nvs, generator_impl, output_format):
         self._nvs = nvs
         self._generator_impl = generator_impl
@@ -2662,6 +2663,77 @@ class NativeVersionStore:
         prefetch_rows: Optional[int] = None,
         **kwargs,
     ) -> StreamingReadGenerator:
+        """
+        Return a generator for iterating through the row-slices of a symbol.
+
+        This API is experimental, and subject to change at any time, not following semver.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        as_of : `Optional[VersionQueryInput]`, default=None
+            Return the data as it was as_of the point in time. Defaults to getting the latest version.
+            `int` : specific version number. Negative indexing is supported, with -1 representing the latest version, -2
+                    the version before that, etc.
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        date_range: `Optional[DateRangeInput]`, default=None
+            DateRange to read data for. Inclusive both for lower and upper bounds. Applicable only for dataframes with
+            a DateTime index. Returns only the part of the data that falls within the given range.
+            The same effect can  be achieved by using the date_range clause of the QueryBuilder class, which will be
+            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
+            details.
+            Only one of date_range or row_range can be provided.
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
+            the handling of negative start/end values.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
+            Only one of date_range or row_range can be provided.
+        columns: `Optional[List[str]]`, default=None
+            Applicable only for dataframes. Determines which columns to return data for.
+        query_builder: 'Optional[QueryBuilder]', default=None
+            A QueryBuilder object to apply to the dataframe before it is returned.
+            For more information see the documentation for the QueryBuilder class.
+        prefetch_rows: `Optional[int]`, default=None
+            How many rows to read-ahead from disk
+
+        Returns
+        -------
+        StreamingReadGenerator
+            An object that can be iterated through to retrieve row-slices of the whole data.
+
+        Raises
+        ------
+        ArcticNativeException
+            If Pandas output format is explicitly requested. This API only supports the Polars and PyArrow output
+            formats.
+            If prefetch_rows is negative.
+            If invalid kwargs are provided.
+        MissingDataException
+            If the symbol does not exist.
+        SchemaException
+            If the symbol is recursively normalized, pickled, or a numpy array.
+            If a date_range filter is provided, but the data is not a timeseries, or is an unsorted timeseries.
+        UserInputException
+            If a QueryBuilder is provided with invalid clauses. Supported operations are filters, projections,
+            date_range, row_range, head, and tail.
+
+        Examples
+        --------
+
+        >>> df = pl.DataFrame({"col": pl.Series(values=[range(50)], dtype=pl.Int64)})
+        >>> for idx in range(5):
+        >>>     lib.append("sym", df.slice(idx * 10, 10))
+        >>> gen = lib.read_streaming("sym")
+        >>> for row_slice in gen:
+        >>>     assert row_slice.equals(df.slice(idx * 10, 10))
+        >>> gen.versioned_item().version
+        4
+        """
+
         # The kwargs allowed by read but disallowed here are either legacy and scheduled for deprecation,
         # Pandas-specific, or not supported with streaming reads (incomplete)
         self._validate_kwargs(
