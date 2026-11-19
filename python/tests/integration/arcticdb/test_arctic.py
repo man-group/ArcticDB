@@ -1903,7 +1903,7 @@ def test_read_streaming(lmdb_library):
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     for i in range(10):
         lib.append(sym, df.slice(i * 10, 10))
-    gen = lib.read_streaming(sym)
+    gen = lib.read_streaming_experimental(sym)
     for i, slice in enumerate(gen):
         assert slice.equals(df.slice(i * 10, 10))
     expected_vit = lib.read(sym)

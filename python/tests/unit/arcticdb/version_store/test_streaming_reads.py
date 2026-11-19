@@ -36,7 +36,7 @@ def generic_streaming_reads_test(lib, sym, expected_slices, prefetch_rows=None, 
         expected_stats = qs.get_query_stats()
         qs.reset_stats()
         with qs.query_stats():
-            gen = lib.read_streaming(sym, prefetch_rows=prefetch_rows, **kwargs)
+            gen = lib.read_streaming_experimental(sym, prefetch_rows=prefetch_rows, **kwargs)
         # No IO yet
         assert gen.in_flight_rows() == 0
         assert not len(qs.get_query_stats())
@@ -314,7 +314,7 @@ def test_streaming_reads_empty_data(in_memory_version_store, clear_query_stats):
         lib.write(sym, df, metadata=metadata)
         assert not len(lib.read_index(sym))
         with qs.query_stats():
-            gen = lib.read_streaming(sym)
+            gen = lib.read_streaming_experimental(sym)
         # No IO yet
         assert gen.in_flight_rows() == 0
         assert not len(qs.get_query_stats())
@@ -354,7 +354,7 @@ def test_streaming_reads_all_data_filtered_out_at_index_level(in_memory_version_
             else {"date_range": (pd.Timestamp("2027-01-01"), None)}
         )
         with qs.query_stats():
-            gen = lib.read_streaming(sym, **kwargs)
+            gen = lib.read_streaming_experimental(sym, **kwargs)
         # No IO yet
         assert gen.in_flight_rows() == 0
         assert not len(qs.get_query_stats())
@@ -519,15 +519,15 @@ def test_streaming_reads_pandas_output_format(in_memory_version_store, lib_setti
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, df)
     if method_arg is None:
-        gen = lib.read_streaming(sym)
+        gen = lib.read_streaming_experimental(sym)
         # Just so we can call .lower() below with an is not None check
         method_arg = "None"
     elif method_arg.lower() == "pandas":
         with pytest.raises(ArcticNativeException):
-            lib.read_streaming(sym, output_format=method_arg)
+            lib.read_streaming_experimental(sym, output_format=method_arg)
         return
     else:
-        gen = lib.read_streaming(sym, output_format=method_arg)
+        gen = lib.read_streaming_experimental(sym, output_format=method_arg)
     expected_output_type = pa.Table if lib_setting == "pyarrow" else pl.DataFrame
     if method_arg.lower() == "pyarrow":
         expected_output_type = pa.Table
@@ -550,7 +550,7 @@ def test_streaming_reads_io_counts(
         df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
         lib.write(sym, df)
         with qs.query_stats():
-            gen = lib.read_streaming(sym, prefetch_rows=prefetch_rows)
+            gen = lib.read_streaming_experimental(sym, prefetch_rows=prefetch_rows)
         stats = qs.get_query_stats()
         # No IO yet
         assert not len(stats)
@@ -603,7 +603,7 @@ def test_streaming_reads_prefetch_row_counts(in_memory_store_factory, segment_ro
     sym = "test_streaming_reads_prefetch_row_counts"
     df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
     lib.write(sym, df)
-    gen = lib.read_streaming(sym, prefetch_rows=prefetch_rows)
+    gen = lib.read_streaming_experimental(sym, prefetch_rows=prefetch_rows)
     # No IO yet
     assert gen.in_flight_rows() == 0
     remaining_rows = len(df)
@@ -702,7 +702,7 @@ def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, 
 def test_streaming_reads_with_invalid_kwargs(in_memory_version_store, kwarg):
     lib = in_memory_version_store
     with pytest.raises(ArcticNativeException):
-        lib.read_streaming("sym", **{kwarg: 0})
+        lib.read_streaming_experimental("sym", **{kwarg: 0})
 
 
 @pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
@@ -710,7 +710,7 @@ def test_streaming_reads_invalid_prefetch_rows(in_memory_version_store, prefetch
     lib = in_memory_version_store
     lib.set_output_format("polars")
     with pytest.raises(ArcticNativeException if isinstance(prefetch_rows, int) else TypeError):
-        lib.read_streaming("sym", prefetch_rows=prefetch_rows)
+        lib.read_streaming_experimental("sym", prefetch_rows=prefetch_rows)
 
 
 def test_streaming_reads_with_invalid_clauses(in_memory_store_factory):
@@ -718,20 +718,20 @@ def test_streaming_reads_with_invalid_clauses(in_memory_store_factory):
     lib.set_output_format("polars")
     q = QueryBuilder().groupby("group").agg({"agg": "sum"})
     with pytest.raises(UserInputException):
-        lib.read_streaming("sym", query_builder=q)
+        lib.read_streaming_experimental("sym", query_builder=q)
     q = QueryBuilder().resample("1s").agg({"agg": "sum"})
     with pytest.raises(UserInputException):
-        lib.read_streaming("sym", query_builder=q)
+        lib.read_streaming_experimental("sym", query_builder=q)
 
 
 def test_streaming_reads_non_existent_symbol(in_memory_version_store):
     lib = in_memory_version_store
     with pytest.raises(MissingDataException):
-        gen = lib.read_streaming("non_existent")
+        gen = lib.read_streaming_experimental("non_existent")
         for _ in gen:
             pass
     with pytest.raises(MissingDataException):
-        lib.read_streaming("non_existent").versioned_item()
+        lib.read_streaming_experimental("non_existent").versioned_item()
 
 
 def test_streaming_reads_deleted_symbol(in_memory_version_store):
@@ -740,11 +740,11 @@ def test_streaming_reads_deleted_symbol(in_memory_version_store):
     lib.write(sym, "hello")
     lib.delete(sym)
     with pytest.raises(MissingDataException):
-        gen = lib.read_streaming(sym)
+        gen = lib.read_streaming_experimental(sym)
         for _ in gen:
             pass
     with pytest.raises(MissingDataException):
-        lib.read_streaming(sym).versioned_item()
+        lib.read_streaming_experimental(sym).versioned_item()
 
 
 def test_streaming_reads_recursively_normalized_data(in_memory_version_store, clear_query_stats):
@@ -755,11 +755,11 @@ def test_streaming_reads_recursively_normalized_data(in_memory_version_store, cl
     assert not lib.is_symbol_pickled(sym)
     with qs.query_stats():
         with pytest.raises(SchemaException):
-            gen = lib.read_streaming(sym)
+            gen = lib.read_streaming_experimental(sym)
             for _ in gen:
                 pass
         with pytest.raises(SchemaException):
-            lib.read_streaming(sym).versioned_item()
+            lib.read_streaming_experimental(sym).versioned_item()
     stats = qs.get_query_stats()
     qs.reset_stats()
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
@@ -773,11 +773,11 @@ def test_streaming_reads_pickled_data(in_memory_version_store, clear_query_stats
     assert lib.is_symbol_pickled(sym)
     with qs.query_stats():
         with pytest.raises(SchemaException):
-            gen = lib.read_streaming(sym)
+            gen = lib.read_streaming_experimental(sym)
             for _ in gen:
                 pass
         with pytest.raises(SchemaException):
-            lib.read_streaming(sym).versioned_item()
+            lib.read_streaming_experimental(sym).versioned_item()
     stats = qs.get_query_stats()
     qs.reset_stats()
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
@@ -790,11 +790,11 @@ def test_streaming_reads_numpy_array(in_memory_version_store, clear_query_stats)
     assert not lib.is_symbol_pickled(sym)
     with qs.query_stats():
         with pytest.raises(SchemaException):
-            gen = lib.read_streaming(sym)
+            gen = lib.read_streaming_experimental(sym)
             for _ in gen:
                 pass
         with pytest.raises(SchemaException):
-            lib.read_streaming(sym).versioned_item()
+            lib.read_streaming_experimental(sym).versioned_item()
     stats = qs.get_query_stats()
     qs.reset_stats()
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
@@ -807,11 +807,11 @@ def test_streaming_reads_date_range_non_timeseries(in_memory_version_store, clea
     lib.write(sym, df)
     with qs.query_stats():
         with pytest.raises(SchemaException):
-            gen = lib.read_streaming(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1)))
+            gen = lib.read_streaming_experimental(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1)))
             for _ in gen:
                 pass
         with pytest.raises(SchemaException):
-            lib.read_streaming(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1))).versioned_item()
+            lib.read_streaming_experimental(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1))).versioned_item()
     stats = qs.get_query_stats()
     qs.reset_stats()
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
@@ -827,11 +827,11 @@ def test_streaming_reads_date_range_unsorted_timeseries(in_memory_version_store,
     lib.write(sym, df)
     with qs.query_stats():
         with pytest.raises(SchemaException):
-            gen = lib.read_streaming(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1)))
+            gen = lib.read_streaming_experimental(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1)))
             for _ in gen:
                 pass
         with pytest.raises(SchemaException):
-            lib.read_streaming(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1))).versioned_item()
+            lib.read_streaming_experimental(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1))).versioned_item()
     stats = qs.get_query_stats()
     qs.reset_stats()
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0

@@ -2249,7 +2249,7 @@ class Library:
                 iterate_snapshots_if_tombstoned=False,
             )
 
-    def read_streaming(
+    def read_streaming_experimental(
         self,
         symbol: str,
         as_of: Optional[AsOf] = None,
@@ -2262,7 +2262,7 @@ class Library:
         arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
         prefetch_rows: Optional[int] = None,
     ) -> StreamingReadGenerator:
-        return self._nvs.read_streaming(
+        return self._nvs.read_streaming_experimental(
             symbol=symbol,
             as_of=as_of,
             date_range=date_range,

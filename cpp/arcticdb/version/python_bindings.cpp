@@ -956,7 +956,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     "Read the specified version of the dataframe from the store"
             )
             .def(
-                    "read_streaming",
+                    "_read_streaming",
                     [&](PythonVersionStore& v,
                         StreamId sid,
                         const VersionQuery& version_query,

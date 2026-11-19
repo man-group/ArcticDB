@@ -2637,7 +2637,7 @@ class NativeVersionStore:
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
 
-    def read_streaming(
+    def read_streaming_experimental(
         self,
         symbol: str,
         as_of: Optional[VersionQueryInput] = None,
@@ -2683,7 +2683,7 @@ class NativeVersionStore:
             prefetch_rows,
         )
 
-        generator = self.version_store.read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
+        generator = self.version_store._read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
         return StreamingReadGenerator(self, generator, output_format)
 
     def rename_columns_arrow_compat(
