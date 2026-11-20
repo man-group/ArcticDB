@@ -286,6 +286,20 @@ class AsyncStore : public Store {
         return folly::makeFuture();
     }
 
+    [[nodiscard]] bool supports_object_metadata_listing() const override {
+        return library_->supports_object_metadata_listing();
+    }
+
+    folly::Future<folly::Unit> visit_object_metadata(
+            KeyType type, const std::optional<StreamId>& stream_id_opt, storage::ObjectMetadataVisitor visitor
+    ) override {
+        std::string prefix;
+        if (stream_id_opt && std::holds_alternative<StringId>(*stream_id_opt)) {
+            prefix = std::get<StringId>(*stream_id_opt);
+        }
+        return async::submit_io_task(VisitObjectMetadataTask{type, std::move(prefix), std::move(visitor), library_});
+    }
+
     folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(
             KeyType type, const std::optional<StreamId>& stream_id_opt
     ) override {

@@ -270,4 +270,20 @@ void NfsBackedStorage::do_visit_object_sizes(
     s3::detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
 }
 
+bool NfsBackedStorage::supports_object_metadata_listing() const { return true; }
+
+void NfsBackedStorage::do_visit_object_metadata(
+        KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor
+) {
+    auto path_info = s3::detail::calculate_path_info(
+            root_folder_, key_type, false, prefix, NfsBucketizer::bucketize_length(key_type)
+    );
+    const ObjectMetadataVisitor visitor_with_prefix_filtering =
+            [&visitor, &prefix](const VariantKey& key, const ObjectMetadata& metadata) {
+                s3::detail::object_metadata_visit_if_prefix_matches(visitor, prefix, unencode_object_id(key), metadata);
+            };
+    s3::detail::Visitor<ObjectMetadataVisitor> final_visitor{visitor_with_prefix_filtering};
+    s3::detail::do_visit_object_metadata_for_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
+}
+
 } // namespace arcticdb::storage::nfs_backed

@@ -80,7 +80,7 @@ S3Result<Segment> MockS3Client::get_object(const std::string& s3_object_name, co
     if (pos == s3_contents_.end() || !pos->second.has_value()) {
         return {not_found_error};
     }
-    return {pos->second.value().clone()};
+    return {pos->second->segment.clone()};
 }
 
 folly::Future<S3Result<Segment>> MockS3Client::get_object_async(
@@ -98,10 +98,15 @@ S3Result<std::monostate> MockS3Client::put_object(
         return {precondition_failed_error};
     }
 
-    // When we write Segments we occasionally don't fill in the size_. This is fine as it's not needed for writing.
-    // However, it is required when reading so we need to calculate it. It's easier to do on write.
-    [[maybe_unused]] auto size = segment.calculate_size();
-    s3_contents_.insert_or_assign({bucket_name, s3_object_name}, std::make_optional<Segment>(segment.clone()));
+    const uint64_t size = segment.calculate_size();
+    const uint64_t seq = ++write_seq_;
+    MockObject obj{
+            segment.clone(),
+            size,
+            fmt::format("\"mock-{}-{}\"", bucket_name, seq),
+            static_cast<int64_t>(seq * 1000)
+    };
+    s3_contents_.insert_or_assign({bucket_name, s3_object_name}, std::move(obj));
 
     return {std::monostate()};
 }
@@ -157,6 +162,9 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         if (it->first.bucket_name == bucket_name && it->first.s3_object_name.rfind(name_prefix, 0) == 0 &&
             it->second.has_value()) {
             output.s3_object_names.emplace_back(it->first.s3_object_name);
+            output.s3_object_sizes.emplace_back(it->second->size);
+            output.s3_object_etags.emplace_back(it->second->etag);
+            output.s3_object_last_modified_ms.emplace_back(it->second->last_modified_ms);
         }
     }
     if (it != s3_contents_.end()) {

@@ -24,6 +24,15 @@ namespace arcticdb::storage {
 using CompressedSize = uint64_t;
 using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)>;
 
+struct ObjectMetadata {
+    std::string etag;
+    CompressedSize size{0};
+    int64_t last_modified_ms{0};
+
+    bool operator==(const ObjectMetadata&) const = default;
+};
+using ObjectMetadataVisitor = std::function<void(const VariantKey&, const ObjectMetadata&)>;
+
 // '*', '<' and '>' are problematic for S3 and are rejected by every backend, so they form the default set of
 // characters disallowed in names. Backends extend this set by overriding Storage::do_unsupported_*_chars().
 inline const std::set<char> GLOBALLY_UNSUPPORTED_CHARS{'*', '<', '>'};
@@ -171,6 +180,17 @@ class Storage {
         do_visit_object_sizes(key_type, prefix, visitor);
     }
 
+    [[nodiscard]] virtual bool supports_object_metadata_listing() const { return false; }
+
+    void visit_object_metadata(KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor) {
+        util::check(
+                supports_object_metadata_listing(),
+                "visit_object_metadata called on storage {} which does not support object metadata listing",
+                name()
+        );
+        do_visit_object_metadata(key_type, prefix, visitor);
+    }
+
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
         return do_iterate_type_until_match(key_type, predicate, std::string());
     }
@@ -274,6 +294,15 @@ class Storage {
         // Must be overridden if you want to use this
         util::raise_rte(
                 "do_visit_object_sizes called on storage {} that does not support object size calculation {}", name()
+        );
+    }
+
+    virtual void do_visit_object_metadata(
+            [[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
+            [[maybe_unused]] const ObjectMetadataVisitor& visitor
+    ) {
+        util::raise_rte(
+                "do_visit_object_metadata called on storage {} that does not support object metadata listing", name()
         );
     }
 

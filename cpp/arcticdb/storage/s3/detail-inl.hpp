@@ -541,6 +541,15 @@ inline void object_sizes_visit_if_prefix_matches(
     }
 }
 
+inline void object_metadata_visit_if_prefix_matches(
+        const ObjectMetadataVisitor& visitor, const std::string& prefix, const VariantKey& key,
+        const ObjectMetadata& metadata
+) {
+    if (prefix.empty() || variant_key_id_starts_with(key, prefix)) {
+        visitor(key, metadata);
+    }
+}
+
 template<typename Predicate>
 struct Visitor {
     Visitor(const Predicate& primary_visitor, const std::optional<Predicate> fallback_visitor = std::nullopt) :
@@ -674,6 +683,45 @@ inline void do_visit_object_sizes_for_type_impl(
             }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
+                    key_type,
+                    error.GetExceptionName().c_str(),
+                    error.GetMessage().c_str()
+            );
+            raise_if_unexpected_error(error, path_info.key_prefix_);
+        }
+    } while (continuation_token.has_value());
+}
+
+inline void do_visit_object_metadata_for_type_impl(
+        KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
+        Visitor<ObjectMetadataVisitor>& visitor
+) {
+    ARCTICDB_SAMPLE(S3StorageVisitMetadataForType, 0)
+    auto continuation_token = std::optional<std::string>();
+    do {
+        auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
+        if (list_objects_result.is_success()) {
+            const auto& output = list_objects_result.get_output();
+            const size_t count = output.s3_object_names.size();
+            for (size_t i = 0; i < count; ++i) {
+                auto key = output.s3_object_names[i].substr(path_info.path_to_key_size_);
+                auto k = variant_key_from_bytes(reinterpret_cast<uint8_t*>(key.data()), key.size(), key_type);
+                ObjectMetadata meta{
+                        i < output.s3_object_etags.size() ? output.s3_object_etags[i] : std::string{},
+                        i < output.s3_object_sizes.size() ? output.s3_object_sizes[i] : 0,
+                        i < output.s3_object_last_modified_ms.size() ? output.s3_object_last_modified_ms[i] : 0
+                };
+                visitor.primary_visitor_(k, meta);
+            }
+            continuation_token = output.next_continuation_token;
+        } else {
+            const auto& error = list_objects_result.get_error();
+            if (should_retry_with_directory_bucket_limitations(error.GetErrorType(), path_info, visitor)) {
+                adjust_for_directory_bucket_limitations(key_type, path_info, visitor);
+                return do_visit_object_metadata_for_type_impl(key_type, bucket_name, s3_client, path_info, visitor);
+            }
+            log::storage().warn(
+                    "Failed to list metadata for key type '{}' {}: {}",
                     key_type,
                     error.GetExceptionName().c_str(),
                     error.GetMessage().c_str()

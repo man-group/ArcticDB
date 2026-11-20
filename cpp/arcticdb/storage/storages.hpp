@@ -63,6 +63,12 @@ class Storages {
         });
     }
 
+    [[nodiscard]] bool supports_object_metadata_listing() const {
+        return std::all_of(storages_.begin(), storages_.end(), [](const auto& storage) {
+            return storage->supports_object_metadata_listing();
+        });
+    }
+
     bool fast_delete() { return primary().fast_delete(); }
 
     void cleanup() { primary().cleanup(); }
@@ -193,6 +199,19 @@ class Storages {
 
         for (const auto& storage : storages_) {
             storage->visit_object_sizes(key_type, prefix, visitor);
+        }
+    }
+
+    void visit_object_metadata(
+            KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor, bool primary_only = true
+    ) {
+        if (primary_only) {
+            primary().visit_object_metadata(key_type, prefix, visitor);
+            return;
+        }
+
+        for (const auto& storage : storages_) {
+            storage->visit_object_metadata(key_type, prefix, visitor);
         }
     }
 

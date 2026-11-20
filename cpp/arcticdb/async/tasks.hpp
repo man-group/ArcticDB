@@ -712,4 +712,30 @@ struct VisitObjectSizesTask : BaseTask {
         lib_->visit_object_sizes(type_, prefix_, visitor_);
     }
 };
+
+struct VisitObjectMetadataTask : BaseTask {
+    KeyType type_;
+    std::string prefix_;
+    storage::ObjectMetadataVisitor visitor_;
+    std::shared_ptr<storage::Library> lib_;
+
+    VisitObjectMetadataTask(
+            KeyType type, std::string prefix, storage::ObjectMetadataVisitor visitor,
+            std::shared_ptr<storage::Library> lib
+    ) :
+        type_(type),
+        prefix_(std::move(prefix)),
+        visitor_(std::move(visitor)),
+        lib_(std::move(lib)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(VisitObjectMetadataTask)
+
+    void operator()() {
+        util::check(
+                lib_->supports_object_metadata_listing(),
+                "VisitObjectMetadataTask requires a storage supporting object metadata listing"
+        );
+        lib_->visit_object_metadata(type_, prefix_, visitor_);
+    }
+};
 } // namespace arcticdb::async
