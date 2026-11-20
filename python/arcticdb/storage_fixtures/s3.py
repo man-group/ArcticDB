@@ -36,6 +36,7 @@ from moto.server import DomainDispatcherApplication, create_backend_app
 
 from arcticdb.storage_fixtures.azure import AzureStorageFixtureFactory
 from arcticdb.util.logger import get_logger
+from arcticdb.util.utils import strtobool
 
 from .api import *
 from .utils import (
@@ -61,6 +62,17 @@ _PermissionCapableFactory: Type["MotoS3StorageFixtureFactory"] = None  # To be s
 
 logging.getLogger("botocore").setLevel(logging.INFO)
 logger = logging.getLogger("S3 Storage Fixture")
+
+
+def _configure_moto_server_logging() -> None:
+    """Drop the simulators' per-request log unless ARCTICDB_MOTO_VERBOSE is set."""
+    if strtobool(os.getenv("ARCTICDB_MOTO_VERBOSE", "")):
+        return
+
+    werkzeug_logger = logging.getLogger("werkzeug")
+    # In the server process werkzeug then adds its own stderr handler, so errors stay visible
+    werkzeug_logger.propagate = False
+    werkzeug_logger.setLevel(logging.ERROR)
 
 
 class Key:
@@ -986,26 +998,24 @@ class KeepAliveRequestHandler(WSGIRequestHandler):
             self.close_connection = True
 
 
-def run_s3_server(port, key_file, cert_file):
+def _run_moto_server(app, port, key_file, cert_file):
+    _configure_moto_server_logging()
     werkzeug.run_simple(
         "0.0.0.0",
         port,
-        HostDispatcherApplication(create_backend_app),
+        app,
         threaded=True,
         request_handler=KeepAliveRequestHandler,
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
+
+
+def run_s3_server(port, key_file, cert_file):
+    _run_moto_server(HostDispatcherApplication(create_backend_app), port, key_file, cert_file)
 
 
 def run_gcp_server(port, key_file, cert_file):
-    werkzeug.run_simple(
-        "0.0.0.0",
-        port,
-        GcpHostDispatcherApplication(create_backend_app),
-        threaded=True,
-        request_handler=KeepAliveRequestHandler,
-        ssl_context=(cert_file, key_file) if cert_file and key_file else None,
-    )
+    _run_moto_server(GcpHostDispatcherApplication(create_backend_app), port, key_file, cert_file)
 
 
 def is_server_type(url: str, server_type: str):

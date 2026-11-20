@@ -1,12 +1,17 @@
 import contextlib
 import http.client
+import multiprocessing
+import os
 import selectors
 import socket
 import ssl
+import sys
 import threading
 from urllib.parse import urlsplit
 
-from arcticdb.storage_fixtures.s3 import KeepAliveRequestHandler, MotoS3StorageFixtureFactory
+import pytest
+from arcticdb.storage_fixtures.s3 import KeepAliveRequestHandler, MotoS3StorageFixtureFactory, run_s3_server
+from arcticdb.storage_fixtures.utils import wait_for_server_to_come_up
 from werkzeug.serving import make_server
 
 
@@ -99,3 +104,57 @@ def test_mock_server_does_not_wait_for_more_request_data(monkeypatch):
             conn.request("GET", "/")
             assert conn.getresponse().read() == b"hello"
     assert timed_out_selects == []
+
+
+def _serve_s3_logging_to(stderr_path, verbose, port):
+    os.environ["ARCTICDB_MOTO_VERBOSE"] = verbose
+    sys.stderr = open(stderr_path, "w", buffering=1)
+    run_s3_server(port, None, None)
+
+
+def _start_s3_server_logging_to(stderr_path, verbose):
+    for _ in range(3):  # Another process can take the port before the server binds it
+        with socket.socket() as probe:
+            probe.bind(("0.0.0.0", 0))
+            port = probe.getsockname()[1]
+        server = multiprocessing.get_context("spawn").Process(
+            target=_serve_s3_logging_to, args=(str(stderr_path), verbose, port)
+        )
+        server.start()
+        try:
+            # Same timeout as MotoS3StorageFixtureFactory: sockets are slow on the macOS runners
+            wait_for_server_to_come_up(f"http://127.0.0.1:{port}/whoami", "moto", server, timeout=240)
+            return server, port
+        except AssertionError:
+            died = not server.is_alive()
+            _stop(server)
+            if not died:
+                raise
+    server_stderr = stderr_path.read_text() if stderr_path.exists() else "(died before redirecting stderr)"
+    raise AssertionError(f"moto server kept dying at start up:\n{server_stderr}")
+
+
+def _stop(server):
+    server.terminate()
+    server.join(30)
+    if server.is_alive():
+        server.kill()
+        server.join(30)
+
+
+@pytest.mark.parametrize("verbose", ["", "1"])
+def test_mock_server_logs_errors_and_requests_only_when_verbose(verbose, tmp_path):
+    stderr_path = tmp_path / "server_stderr.log"
+    server, port = _start_s3_server_logging_to(stderr_path, verbose)
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=60) as raw:
+            raw.sendall(b"NOT-HTTP\r\n\r\n")
+            # The server closes the connection once it has logged the error
+            while raw.recv(1024):
+                pass
+    finally:
+        _stop(server)
+
+    stderr = stderr_path.read_text()
+    assert "Bad request syntax ('NOT-HTTP')" in stderr, stderr
+    assert ('"GET /whoami HTTP/1.1" 200' in stderr) == bool(verbose), stderr
