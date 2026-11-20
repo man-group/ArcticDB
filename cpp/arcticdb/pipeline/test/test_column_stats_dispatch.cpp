@@ -1491,3 +1491,41 @@ INSTANTIATE_TEST_SUITE_P(
                 )
         )
 );
+
+namespace {
+StatsComparison compare_constant_stats(Value stats_value, double python_float, OperationType op) {
+    std::vector<ColumnStatsValues> column_stats_values{{stats_value, stats_value}};
+    auto result = dispatch_binary_stats(
+            column_stats_values, std::make_shared<Value>(construct_python_float_value(python_float)), op
+    );
+    return std::get<std::vector<StatsComparison>>(result).at(0);
+}
+} // namespace
+
+// The read's output schema can narrow a Python float to FLOAT32 or not, so stats only decide when both precisions agree
+TEST(PythonFloatStatsComparison, UnknownWhenPrecisionsDisagree) {
+    const auto float32_of_literal = static_cast<double>(0.05F);
+    for (const auto& stats_value :
+         {Value{float32_of_literal, DataType::FLOAT64}, Value{0.05F, DataType::FLOAT32}, Value{0.05, DataType::FLOAT64}
+         }) {
+        ASSERT_EQ(compare_constant_stats(stats_value, 0.05, OperationType::EQ), StatsComparison::UNKNOWN);
+        ASSERT_EQ(compare_constant_stats(stats_value, 0.05, OperationType::NE), StatsComparison::UNKNOWN);
+    }
+    ASSERT_EQ(
+            compare_constant_stats(Value{int16_t{100}, DataType::INT16}, 100.000001, OperationType::EQ),
+            StatsComparison::UNKNOWN
+    );
+}
+
+TEST(PythonFloatStatsComparison, DecidesWhenPrecisionsAgree) {
+    ASSERT_EQ(
+            compare_constant_stats(Value{0.5, DataType::FLOAT64}, 0.5, OperationType::EQ), StatsComparison::ALL_MATCH
+    );
+    ASSERT_EQ(
+            compare_constant_stats(Value{1.0F, DataType::FLOAT32}, 0.05, OperationType::LT), StatsComparison::NONE_MATCH
+    );
+    ASSERT_EQ(
+            compare_constant_stats(Value{int64_t{100}, DataType::INT64}, 100.5, OperationType::EQ),
+            StatsComparison::NONE_MATCH
+    );
+}

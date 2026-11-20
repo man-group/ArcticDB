@@ -10,6 +10,7 @@ from datetime import datetime
 from itertools import cycle
 import math
 import numpy as np
+import operator
 from packaging.version import Version
 import pandas as pd
 import pytest
@@ -44,7 +45,7 @@ from arcticdb.util.test import (
     equals,
     assert_null_string,
 )
-from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
+from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_ONE, IS_NUMPY_TWO
 
 pytestmark = pytest.mark.pipeline
 
@@ -2362,3 +2363,108 @@ def test_filter_merge_after_concat(lmdb_version_store_tiny_segment, any_output_f
     combined = lib.batch_read_and_join(symbols, query_builder=build(True)).data
     assert not chained.empty
     assert_frame_equal(chained, combined)
+
+
+COMPARISON_OPERATORS = [operator.eq, operator.ne, operator.lt, operator.le, operator.gt, operator.ge]
+
+
+PYTHON_FLOAT_LITERAL_CASES = [
+    *[(dtype, literal) for dtype in [np.float64, np.float32] for literal in [0.05, 1 / 3, 123456789.123, 1e300]],
+    *[(dtype, literal) for dtype in [np.int64, np.uint64] for literal in [0.5, 123456789.123]],
+]
+
+
+@pytest.mark.parametrize("dtype, literal", PYTHON_FLOAT_LITERAL_CASES)
+def test_filter_python_float_literal_comparison(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, dtype, literal
+):
+    if IS_NUMPY_ONE and dtype is np.float32 and literal == 1e300:
+        pytest.skip("NumPy 1 value-based casting compares an out-of-float32-range literal in float64")
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_python_float_literal_comparison"
+    if np.issubdtype(dtype, np.floating):
+        # The literal, its float32 rounding and its float64 neighbour tell the comparison precisions apart
+        values = [literal, float(np.float32(literal)), float(np.nextafter(literal, np.inf)), 0.0, -literal]
+    else:
+        values = [0, 1, 123456789, 123456790]
+    df = pd.DataFrame({"col": np.array(values, dtype=dtype)}, index=np.arange(len(values)))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    for op in COMPARISON_OPERATORS:
+        q = QueryBuilder()
+        q = q[op(q.col, literal)]
+        assert_frame_equal(df[op(df["col"], literal)], lib.read(symbol, query_builder=q).data)
+
+
+def test_filter_python_float_and_numpy_float64_literals_in_one_query(
+    lmdb_version_store_v1, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_python_float_and_numpy_float64_literals_in_one_query"
+    df = pd.DataFrame({"d": np.array([0.05, 0.07], dtype=np.float32)}, index=np.arange(2))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    q = QueryBuilder()
+    q = q[(q.d == 0.05) ^ (q.d == np.float64(0.05))]
+    expected = df.iloc[[0]]
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q).data)
+
+
+@pytest.mark.parametrize(
+    "first_dtype, appended_dtype, values, literal",
+    [
+        (np.float32, np.float64, [0.05, 0.7], 0.05),
+        (np.float32, np.float64, [0.05, np.nan], 0.05),
+        (np.float64, np.float32, [0.05, 0.7], 0.7),
+        (np.int16, np.float32, [100, 100], 100.000001),
+    ],
+)
+def test_filter_python_float_literal_after_type_promotion(
+    lmdb_version_store_dynamic_schema_v1,
+    column_stats_filtering_enabled_and_disabled,
+    first_dtype,
+    appended_dtype,
+    values,
+    literal,
+):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_filter_python_float_literal_after_type_promotion"
+    lib.write(symbol, pd.DataFrame({"col": np.array(values, dtype=first_dtype)}, index=np.arange(2)))
+    lib.append(symbol, pd.DataFrame({"col": np.array([0.3, 0.7], dtype=appended_dtype)}, index=np.arange(2, 4)))
+    lib.create_column_stats_experimental(symbol)
+    df = lib.read(symbol).data
+    # Compared at the precision of the column as read, as NumPy 2 does
+    typed_literal = np.float32(literal) if df["col"].dtype == np.float32 else literal
+    for op in COMPARISON_OPERATORS:
+        q = QueryBuilder()
+        q = q[op(q.col, literal)]
+        assert_frame_equal(df[op(df["col"], typed_literal)], lib.read(symbol, query_builder=q).data)
+
+
+def test_filter_python_float_literal_after_concat_of_float32_and_float64(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbols = ["test_filter_python_float_literal_after_concat_f32", "test_filter_python_float_literal_after_concat_f64"]
+    index = pd.date_range("2000-01-01", periods=4)
+    lib.write(symbols[0], pd.DataFrame({"col": np.array([0.05, 0.7], dtype=np.float32)}, index=index[:2]))
+    lib.write(symbols[1], pd.DataFrame({"col": np.array([0.05, 0.3], dtype=np.float64)}, index=index[2:]))
+    joined = lib.batch_read_and_join(symbols, query_builder=QueryBuilder().concat()).data
+    for op in COMPARISON_OPERATORS:
+        q = QueryBuilder().concat()
+        q = q[op(q.col, 0.05)]
+        assert_frame_equal(joined[op(joined["col"], 0.05)], lib.batch_read_and_join(symbols, query_builder=q).data)
+
+
+@pytest.mark.parametrize("op", [operator.eq, operator.ne])
+def test_filter_constant_float32_column_against_python_float_literal(
+    lmdb_version_store_v1, column_stats_filtering_enabled_and_disabled, op
+):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_constant_float32_column_against_python_float_literal"
+    df = pd.DataFrame({"col": np.full(3, 0.05, dtype=np.float32)}, index=np.arange(3))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    q = QueryBuilder()
+    q = q[op(q.col, 0.05)]
+    assert_frame_equal(df[op(df["col"], np.float32(0.05))], lib.read(symbol, query_builder=q).data)

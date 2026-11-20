@@ -199,6 +199,26 @@ ExpressionNode::ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationTy
     label_ = label_for(std::get<Operation>(kind_));
 }
 
+namespace {
+bool is_python_float_value(const ExpressionNode& node) {
+    return node.is_value() &&
+           std::get<std::shared_ptr<Value>>(std::get<ExpressionNode::Leaf>(node.kind_))->is_python_float();
+}
+
+// Runtime counterpart of resolve_python_float_type. The literal follows the other operand's output schema type, not its
+// type in this row slice, so that under dynamic schema a row slice storing the operand with another type, or not at
+// all, agrees with the declared schema and with pandas on the returned frame.
+void resolve_python_float_literal(const ProcessingUnit& seg, VariantData& literal, const ExpressionNode& other_node) {
+    if (!seg.python_float_float32_operands_ || !std::holds_alternative<std::shared_ptr<Value>>(literal)) {
+        return;
+    }
+    const auto& value = std::get<std::shared_ptr<Value>>(literal);
+    if (value->is_python_float() && seg.python_float_float32_operands_->contains(&other_node)) {
+        literal = std::make_shared<Value>(value->resolved_against(DataType::FLOAT32));
+    }
+}
+} // namespace
+
 VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
     return util::variant_match(
             kind_,
@@ -220,14 +240,18 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
                 }
                 VariantData result = [&seg, &op]() -> VariantData {
                     if (is_ternary_operation(op.operation_type_)) {
-                        return dispatch_ternary(
-                                op.condition_->compute(seg),
-                                op.left_->compute(seg),
-                                op.right_->compute(seg),
-                                op.operation_type_
-                        );
+                        auto condition = op.condition_->compute(seg);
+                        auto left = op.left_->compute(seg);
+                        auto right = op.right_->compute(seg);
+                        resolve_python_float_literal(seg, left, *op.right_);
+                        resolve_python_float_literal(seg, right, *op.left_);
+                        return dispatch_ternary(condition, left, right, op.operation_type_);
                     } else if (is_binary_operation(op.operation_type_)) {
-                        return dispatch_binary(op.left_->compute(seg), op.right_->compute(seg), op.operation_type_);
+                        auto left = op.left_->compute(seg);
+                        auto right = op.right_->compute(seg);
+                        resolve_python_float_literal(seg, left, *op.right_);
+                        resolve_python_float_literal(seg, right, *op.left_);
+                        return dispatch_binary(left, right, op.operation_type_);
                     } else {
                         return dispatch_unary(op.left_->compute(seg), op.operation_type_);
                     }
@@ -246,8 +270,34 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
     );
 }
 
+namespace {
+// Output schema counterpart of Value::resolved_against
+void resolve_python_float_type(
+        const ExpressionNode& node, std::variant<BitSetTag, DataType>& type, const ExpressionNode& other_node,
+        const std::variant<BitSetTag, DataType>& other_type, PythonFloatFloat32Operands* float32_operands
+) {
+    if (is_python_float_value(node) && std::holds_alternative<DataType>(other_type) &&
+        std::get<DataType>(other_type) == DataType::FLOAT32) {
+        type = DataType::FLOAT32;
+        if (float32_operands) {
+            float32_operands->insert(&other_node);
+        }
+    }
+}
+
+void resolve_python_float_types(
+        const ExpressionNode::Operation& operation, std::variant<BitSetTag, DataType>& left_type,
+        std::variant<BitSetTag, DataType>& right_type, PythonFloatFloat32Operands* float32_operands
+) {
+    const auto unresolved_left_type = left_type;
+    resolve_python_float_type(*operation.left_, left_type, *operation.right_, right_type, float32_operands);
+    resolve_python_float_type(*operation.right_, right_type, *operation.left_, unresolved_left_type, float32_operands);
+}
+} // namespace
+
 std::variant<BitSetTag, DataType> ExpressionNode::compute(
-        const ankerl::unordered_dense::map<std::string, DataType>& column_types
+        const ankerl::unordered_dense::map<std::string, DataType>& column_types,
+        PythonFloatFloat32Operands* float32_operands
 ) const {
     if (std::holds_alternative<Leaf>(kind_)) {
         ValueSetState value_set_state;
@@ -258,7 +308,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
     // Default to BitSetTag
     std::variant<BitSetTag, DataType> res;
     ValueSetState left_value_set_state;
-    auto left_type = child_return_type(*operation.left_, column_types, left_value_set_state);
+    auto left_type = child_return_type(*operation.left_, column_types, left_value_set_state, float32_operands);
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             left_value_set_state == ValueSetState::NOT_A_SET, "Unexpected value set input to {}", operation_type_
     );
@@ -315,7 +365,8 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
         }
     } else if (is_binary_operation(operation_type_)) {
         ValueSetState right_value_set_state;
-        auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state);
+        auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state, float32_operands);
+        resolve_python_float_types(operation, left_type, right_type, float32_operands);
         switch (operation_type_) {
         case OperationType::ADD:
         case OperationType::SUB:
@@ -538,9 +589,11 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
     } else {
         // Ternary operation
         ValueSetState condition_value_set_state;
-        auto condition_type = child_return_type(*operation.condition_, column_types, condition_value_set_state);
+        auto condition_type =
+                child_return_type(*operation.condition_, column_types, condition_value_set_state, float32_operands);
         ValueSetState right_value_set_state;
-        auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state);
+        auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state, float32_operands);
+        resolve_python_float_types(operation, left_type, right_type, float32_operands);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 condition_value_set_state == ValueSetState::NOT_A_SET &&
                         right_value_set_state == ValueSetState::NOT_A_SET,
@@ -648,13 +701,13 @@ std::variant<BitSetTag, DataType> ExpressionNode::leaf_return_type(
 
 std::variant<BitSetTag, DataType> ExpressionNode::child_return_type(
         const ExpressionNode& child, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
-        ValueSetState& value_set_state
+        ValueSetState& value_set_state, PythonFloatFloat32Operands* float32_operands
 ) {
     value_set_state = ValueSetState::NOT_A_SET;
     if (std::holds_alternative<Leaf>(child.kind_)) {
         return leaf_return_type(std::get<Leaf>(child.kind_), column_types, value_set_state);
     }
-    return child.compute(column_types);
+    return child.compute(column_types, float32_operands);
 }
 
 } // namespace arcticdb

@@ -145,6 +145,8 @@ struct FilterClause {
     std::shared_ptr<ComponentManager> component_manager_;
     std::shared_ptr<ExpressionContext> expression_context_;
     PipelineOptimisation optimisation_;
+    // Set by modify_schema, which every read runs again before process.
+    mutable std::shared_ptr<const PythonFloatFloat32Operands> python_float_float32_operands_;
 
     explicit FilterClause(
             std::unordered_set<std::string> input_columns, ExpressionContext expression_context,
@@ -204,6 +206,8 @@ struct ProjectClause {
     std::shared_ptr<ComponentManager> component_manager_;
     std::string output_column_;
     std::shared_ptr<ExpressionContext> expression_context_;
+    // Set by modify_schema, which every read runs again before process.
+    mutable std::shared_ptr<const PythonFloatFloat32Operands> python_float_float32_operands_;
 
     explicit ProjectClause(
             std::unordered_set<std::string> input_columns, std::string output_column,

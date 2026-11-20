@@ -65,7 +65,7 @@ def test_to_strings():
         (-3, "Val(INT8:-3)"),
         (300, "Val(UINT16:300)"),
         (100_000, "Val(UINT32:100000)"),
-        (3.5, "Val(FLOAT32:3.5)"),
+        (3.5, "Val(FLOAT64:3.5)"),
         (np.uint8(3), "Val(UINT8:3)"),
         (np.int16(-3), "Val(INT8:-3)"),
         (np.float32(3.5), "Val(FLOAT32:3.5)"),

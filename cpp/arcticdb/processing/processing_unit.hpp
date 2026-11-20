@@ -45,6 +45,7 @@ struct ProcessingUnit {
     std::optional<std::vector<uint64_t>> entity_fetch_count_;
 
     std::shared_ptr<ExpressionContext> expression_context_;
+    std::shared_ptr<const PythonFloatFloat32Operands> python_float_float32_operands_;
 
     /*
      * Memoization of results after applying an ExpressionNode to this processing unit. Keyed on the node's label_ with

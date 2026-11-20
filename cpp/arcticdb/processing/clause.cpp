@@ -118,6 +118,7 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
             *component_manager_, std::move(entity_ids)
     );
     proc.set_expression_context(expression_context_);
+    proc.python_float_float32_operands_ = python_float_float32_operands_;
     ARCTICDB_RUNTIME_DEBUG(
             log::memory(), "Doing filter {} for entity ids {}", expression_context_->root_->label_, entity_ids
     );
@@ -142,10 +143,13 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
 
 OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
     check_column_presence(output_schema, clause_info_.input_columns_, "Filter");
-    std::variant<BitSetTag, DataType> return_type = expression_context_->root_->compute(output_schema.column_types());
+    PythonFloatFloat32Operands float32_operands;
+    std::variant<BitSetTag, DataType> return_type =
+            expression_context_->root_->compute(output_schema.column_types(), &float32_operands);
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset"
     );
+    python_float_float32_operands_ = std::make_shared<const PythonFloatFloat32Operands>(std::move(float32_operands));
     return output_schema;
 }
 
@@ -162,6 +166,7 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
             *component_manager_, std::move(entity_ids)
     );
     proc.set_expression_context(expression_context_);
+    proc.python_float_float32_operands_ = python_float_float32_operands_;
     auto variant_data = expression_context_->root_->compute(proc);
     std::vector<EntityId> output;
     util::variant_match(
@@ -220,10 +225,13 @@ OutputSchema ProjectClause::modify_schema(OutputSchema&& output_schema) const {
         const auto& value = std::get<std::shared_ptr<Value>>(std::get<ExpressionNode::Leaf>(root.kind_));
         output_schema.add_field(output_column_, value->descriptor().data_type());
     } else {
-        std::variant<BitSetTag, DataType> return_type = root.compute(output_schema.column_types());
+        PythonFloatFloat32Operands float32_operands;
+        std::variant<BitSetTag, DataType> return_type = root.compute(output_schema.column_types(), &float32_operands);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 std::holds_alternative<DataType>(return_type), "ProjectClause AST would produce a bitset, not a column"
         );
+        python_float_float32_operands_ =
+                std::make_shared<const PythonFloatFloat32Operands>(std::move(float32_operands));
         output_schema.add_field(output_column_, std::get<DataType>(return_type));
     }
     return output_schema;

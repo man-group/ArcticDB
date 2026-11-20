@@ -65,6 +65,12 @@ using VariantData = std::variant<
 // Used to represent that an ExpressionNode returns a bitset
 struct BitSetTag {};
 
+struct ExpressionNode;
+
+// Operands of binary and ternary operations that are FLOAT32 in the output schema and paired with a Python float
+// literal. Row slices narrow the literal to FLOAT32 exactly for these, whatever type the operand has in the slice.
+using PythonFloatFloat32Operands = ankerl::unordered_dense::set<const ExpressionNode*>;
+
 /*
  * Basic AST node.
  */
@@ -113,7 +119,10 @@ struct ExpressionNode {
 
     VariantData compute(ProcessingUnit& seg) const;
 
-    std::variant<BitSetTag, DataType> compute(const ankerl::unordered_dense::map<std::string, DataType>& column_types
+    // Output schema type. Optionally records the operands that narrow a Python float literal to FLOAT32.
+    std::variant<BitSetTag, DataType> compute(
+            const ankerl::unordered_dense::map<std::string, DataType>& column_types,
+            PythonFloatFloat32Operands* float32_operands = nullptr
     ) const;
 
   private:
@@ -126,7 +135,7 @@ struct ExpressionNode {
 
     static std::variant<BitSetTag, DataType> child_return_type(
             const ExpressionNode& child, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
-            ValueSetState& value_set_state
+            ValueSetState& value_set_state, PythonFloatFloat32Operands* float32_operands
     );
 };
 
