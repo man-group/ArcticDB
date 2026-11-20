@@ -990,6 +990,36 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause, any_out
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
+@pytest.mark.parametrize("project_columns", [False, True], ids=["all-columns", "projected"])
+@marks([Marks.pipeline, Marks.storage])
+def test_exact_date_range_keeps_duplicate_timestamps_across_row_segments(
+    basic_store_tiny_segment, use_date_range_clause, any_output_format, project_columns
+):
+    store = basic_store_tiny_segment
+    store._set_output_format_for_pipeline_tests(any_output_format)
+    tick = pd.Timestamp("2026-01-02 14:30:00")
+    ns = pd.Timedelta(1, unit="ns")
+    # Two rows per segment put one event at the shared timestamp in each segment.
+    quotes = pd.DataFrame(
+        {"sequence": [100, 101, 102, 103], "bid": [100, 101, 102, 103], "ask": [102, 103, 104, 105]},
+        index=pd.DatetimeIndex([tick - ns, tick, tick, tick + ns]),
+    )
+    store.write("quotes", quotes)
+
+    date_range = (tick, tick)
+    columns = ["sequence", "ask"] if project_columns else None
+    if use_date_range_clause:
+        received = store.read("quotes", columns=columns, query_builder=QueryBuilder().date_range(date_range)).data
+    else:
+        received = store.read("quotes", columns=columns, date_range=date_range).data
+
+    expected = quotes.iloc[1:3]
+    if columns is not None:
+        expected = expected[columns]
+    assert_frame_equal(received, expected)
+
+
+@pytest.mark.parametrize("use_date_range_clause", [True, False])
 @marks([Marks.pipeline, Marks.storage])
 def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause, any_output_format):
     lib = basic_store_tiny_segment
