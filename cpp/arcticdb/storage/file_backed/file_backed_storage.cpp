@@ -64,7 +64,7 @@ void raise_io_error(int error_code, std::string_view message) {
         storage::raise<ErrorCode::E_QUOTA_EXCEEDED>(message);
         break;
     case ENOENT:
-        storage::raise<ErrorCode::E_KEY_NOT_FOUND>(message);
+        throw storage::KeyNotFoundException(std::string{message});
         break;
     case ESTALE:
         storage::raise<ErrorCode::E_STALE_FILE_DESCRIPTOR>(message);
@@ -108,7 +108,13 @@ void refresh_directory(PosixInterface& posix, const fs::path& dir) {
  */
 void refresh_ancestors(PosixInterface& posix, const fs::path& dir, const fs::path& subpath) {
     fs::path to_check = subpath;
-    assert(to_check.has_parent_path() && dir.is_absolute() && subpath.is_absolute());
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            to_check.has_parent_path() && dir.is_absolute() && subpath.is_absolute(),
+            "Expected dir {} and subpath {subpath} to be absolute paths, and dir should be a parent of subpath",
+            dir.c_str(),
+            subpath.c_str()
+    );
     while (to_check != dir) {
         // TODO: The stopping condition here can be relaxed. The only reason we traverse parents one by one
         //       is because of the possibility that they are **all missing**. If one of them successfully opens,
@@ -140,7 +146,11 @@ class FdHolder {
     // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
     FdHolder(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
         posix_(posix) {
-        assert((flags & O_CLOEXEC) != 0 && "For fork safety, mode O_CLOEXEC should always be set");
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                (flags & O_CLOEXEC) != 0,
+                "For fork safety, mode O_CLOEXEC should always be set"
+        );
         fd_ = posix.open(pathname.c_str(), flags, mode);
         if (fd_ < 0) {
             if (errno == ENOENT) {
@@ -174,7 +184,9 @@ class FdHolder {
     int fd() const noexcept { return fd_; }
 
     void close() {
-        assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE, fd_ >= 0, "Closing a file descriptor which was already closed"
+        );
         int true_fd = fd_;
         fd_ = -1;
         if (posix_.close(true_fd) != 0)
@@ -184,7 +196,9 @@ class FdHolder {
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
     // errors.
     void close_swallow_errors() {
-        assert(fd_ >= 0 && "Closing a file descriptor which was already closed");
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE, fd_ >= 0, "Closing a file descriptor which was already closed"
+        );
         int res = posix_.close(fd_);
         if (res != 0)
             log::storage().warn("Failed to close file: {}", std::strerror(errno));
@@ -192,8 +206,6 @@ class FdHolder {
     }
 
     void sync() const {
-        // TODO: Can this error? Yes... EINTR at the least should be retried. Then there's the usual ones
-        // which write can return.
         int res = posix_.fsync(fd_);
         if (res < 0) {
             if (errno == EINTR) {
@@ -322,6 +334,9 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
                 continue;
             } else
                 throw;
+        } catch (const storage::KeyNotFoundException&) {
+            // TODO: Kind of a silly exception handler, attaching variant_key here is important.
+            throw storage::KeyNotFoundException(variant_key);
         }
     }
 }
@@ -371,21 +386,6 @@ FileBackedStorage::FileBackedStorage(
     Directory storage_dir_fd(*posix_, root_path_fd, lib_path_str);
     storage_dir_fd.close();
     root_path_fd.close();
-
-    // if (!fs::exists(storage_dir_)) {
-    //     // TODO: This isn't "unexpected". Need to create a few more errors, but don't want to recompile the world.
-    //     storage::check<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>(
-    //             mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}", storage_dir_.c_str(), lib_path_str, mode
-    //     );
-
-    //     // TODO: It's important to set sensible permissions on these directories, so that group users have read
-    //     access. std::error_code error; fs::create_directories(storage_dir_, error); if (error)
-    //         raise_io_error(error.value(), fmt::format("Failed to create storage dir {}", storage_dir_.c_str()));
-    // } else if (!fs::is_directory(storage_dir_))
-    //     // TODO: This isn't "unexpected". Need to create a few more errors, but don't want to recompile the world.
-    //     storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>(
-    //             "Storage path {} already exists but is not a directory", storage_dir_.c_str()
-    //     );
 }
 
 FileBackedStorage::FileBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :

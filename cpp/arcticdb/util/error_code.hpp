@@ -274,6 +274,11 @@ template<>
 }
 
 template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_STALE_FILE_DESCRIPTOR>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_STALE_FILE_DESCRIPTOR>(msg);
+}
+
+template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(msg);
 }
