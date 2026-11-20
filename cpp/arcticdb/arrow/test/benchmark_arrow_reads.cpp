@@ -205,7 +205,7 @@ static void BM_arrow_timestamp_handler(benchmark::State& state) {
             source_type_desc, dest_type_desc, field_wrapper.field(), dest_size, num_rows, 0, 0, dest_size * num_rows, 0
     );
     if (truncate) {
-        mapping.set_truncate(ColumnTruncation(num_rows / 4, num_rows * 3 / 4));
+        mapping.set_truncate(FrameTruncation(num_rows / 4, num_rows * 3 / 4));
     }
     auto handler_data = std::any{};
     auto string_pool = std::make_shared<StringPool>();

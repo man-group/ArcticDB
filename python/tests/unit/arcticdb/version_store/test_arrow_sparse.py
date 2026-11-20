@@ -20,7 +20,8 @@ from polars.testing import assert_frame_equal as polars_assert_frame_equal
 from arcticdb import concat
 from arcticdb.options import LibraryOptions, OutputFormat
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow_for_sparse
+from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
+from arcticdb.util.test import arrow_string_read, assert_frame_equal, assert_frame_equal_with_arrow_for_sparse
 from arcticdb.version_store.processing import QueryBuilder
 from tests.util.arrow import assert_arrow_equal, to_format, undictionarify_table
 
@@ -110,6 +111,61 @@ def test_sparse_arrow_date_range(
         received_pandas = lib.read(sym, date_range=date_range, output_format="PANDAS").data.reset_index()
     assert expected.equals(undictionarify_table(received))
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
+
+
+# The kept rows of the end-truncated last segment have no nulls, but the rows cut off do. Rows 3-12 make that
+# segment's validity bitmap 13 bits (2 bytes) for a 3-row block when sized in frame rows, which ASan reports as
+# new-delete-type-mismatch when sparrow frees it as 1 byte. Rows 6-12 start inside the second segment, so the frame
+# starts there too. Pandas output with pyarrow-backed strings decodes strings through the same Arrow handler.
+@pytest.mark.parametrize("first_row, last_row", [(3, 12), (6, 12)], ids=["starts_in_first", "starts_in_second"])
+@pytest.mark.parametrize("use_date_range", [True, False], ids=["date_range", "row_range"])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("column_group_size", [127, 2], ids=["one_column_slice", "column_sliced"])
+@pytest.mark.parametrize("output", ["pyarrow", "pandas_pyarrow_strings"])
+def test_sparse_arrow_read_ends_inside_later_segment(
+    in_memory_store_factory, first_row, last_row, use_date_range, dynamic_schema, column_group_size, output
+):
+    if dynamic_schema and column_group_size == 2:
+        pytest.skip("Dynamic schema ignores column_group_size, so this would repeat one_column_slice")
+    lib = in_memory_store_factory(
+        segment_row_size=5, column_group_size=column_group_size, dynamic_schema=dynamic_schema
+    )
+    sym = "test_sparse_arrow_read_ends_inside_later_segment"
+    dates = pd.date_range("2025-01-01", periods=15)
+    valid = [True, False, True, True, True, True, False, True, True, True, True, True, True, False, True]
+    table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(dates, type=pa.timestamp("ns")),
+            "int_col": pa.array([i if v else None for i, v in enumerate(valid)], pa.int64()),
+            "float_col": pa.array([float(i) if v else None for i, v in enumerate(valid)], pa.float64()),
+            "bool_col": pa.array([bool(i % 2) if v else None for i, v in enumerate(valid)], pa.bool_()),
+            "str_col": pa.array([str(i) if v else None for i, v in enumerate(valid)], pa.large_string()),
+        }
+    )
+    lib.write(sym, table, index_column=True)
+    expected = table.slice(first_row, last_row - first_row + 1)
+    read_kwargs = (
+        {"date_range": (dates[first_row], dates[last_row])}
+        if use_date_range
+        else {"row_range": (first_row, last_row + 1)}
+    )
+    if output == "pandas_pyarrow_strings":
+        with arrow_string_read(True):
+            received = lib.read(sym, output_format=OutputFormat.PANDAS, **read_kwargs).data.reset_index()
+        assert str(received["str_col"].dtype) == "str"
+        # Convert before slicing: on Windows, pyarrow 21's fill_null is wrong for a sliced int64 array with nulls
+        expected_pandas = convert_arrow_to_pandas_for_tests(table).iloc[first_row : last_row + 1].reset_index(drop=True)
+        expected_pandas["str_col"] = pd.array(
+            expected["str_col"].to_pylist(), dtype=pd.StringDtype(storage="pyarrow", na_value=np.nan)
+        )
+        assert_frame_equal(expected_pandas, received, check_column_type=False)
+        return
+    received = lib.read(sym, output_format=OutputFormat.PYARROW, **read_kwargs).data
+    assert expected.equals(undictionarify_table(received))
+    for name in ["int_col", "float_col", "bool_col", "str_col"]:
+        last_chunk = received.column(name).chunks[-1]
+        assert last_chunk.null_count == 0, name
+        assert last_chunk.buffers()[0] is None, name
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
