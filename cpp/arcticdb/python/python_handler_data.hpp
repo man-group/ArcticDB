@@ -2,8 +2,14 @@
 
 #include <pybind11/pybind11.h>
 #include <arcticdb/pipeline/output_config.hpp>
+#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/util/type_handler.hpp>
 
+#include <any>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <memory>
 
 // Python 3.12 (PEP 683) made Py_None immortal: Py_INCREF on it is a no-op, so we no longer
@@ -14,20 +20,24 @@ namespace arcticdb {
 
 namespace py = pybind11;
 
-inline py::handle* create_py_nan() {
-    util::check(PyGILState_Check() != 0, "Expected GIL to be held when allocating Python nan");
-    auto ptr = PyFloat_FromDouble(std::numeric_limits<double>::quiet_NaN());
-    util::check(ptr != nullptr, "Got null nan ptr");
-    return new py::handle(ptr);
+// Keep a single process-wide NaN owned for the lifetime of the interpreter so workers can borrow
+// its PyObject* and drop PythonHandlerData without ever acquiring the GIL (safe during interpreter
+// exit, early error returns, and after fork).
+inline PyObject* shared_py_nan() {
+    util::check(PyGILState_Check() != 0, "Expected GIL to be held when accessing Python nan");
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> storage;
+    return storage
+            .call_once_and_store_result([]() {
+                auto* ptr = PyFloat_FromDouble(std::numeric_limits<double>::quiet_NaN());
+                util::check(ptr != nullptr, "Got null nan ptr");
+                return py::reinterpret_steal<py::object>(ptr);
+            })
+            .get_stored()
+            .ptr();
 }
 
 struct PythonHandlerData {
-    PythonHandlerData() :
-        py_nan_(std::shared_ptr<py::handle>(create_py_nan(), [](py::handle* py_obj) {
-            PyGILState_STATE gstate = PyGILState_Ensure();
-            delete py_obj; // Calls ~handle(), which does dec_ref() with GIL held
-            PyGILState_Release(gstate);
-        })) {}
+    PythonHandlerData() : py_nan_(shared_py_nan()) {}
 
     void increment_missing_refcount(PandasMissingValue value, size_t increment) {
         if (value == PandasMissingValue::NaN) {
@@ -41,9 +51,9 @@ struct PythonHandlerData {
         }
     }
 
-    bool is_nan_initialized() const { return static_cast<bool>(py_nan_); }
+    bool is_nan_initialized() const { return py_nan_ != nullptr; }
 
-    PyObject* non_owning_nan_handle() const { return py_nan_->ptr(); }
+    PyObject* non_owning_nan_handle() const { return py_nan_; }
 
     PyObject* get_missing_value(PandasMissingValue value) const {
         return value == PandasMissingValue::NaN ? non_owning_nan_handle() : Py_None;
@@ -63,19 +73,37 @@ struct PythonHandlerData {
 #endif
     }
 
-    /// There is no need to hold the GIL for this operation as this python object was created by the
-    /// PythonHandlerData object on a read/read_batch/etc... operation and not handled to python yet.
+    /// The GIL must be acquired when this is called as the shared NaN can be referenced by other Python threads.
     void apply_nan_refcount() {
         const size_t count = nan_refcount_->exchange(0, std::memory_order_acq_rel);
-        if (count > 0) {
-            Py_SET_REFCNT(py_nan_->ptr(), count);
+        if (count == 0) {
+            return;
+        }
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                PyGILState_Check(), "The thread incrementing NaN refcount must hold the GIL"
+        );
+#if !defined(Py_GIL_DISABLED) && !defined(Py_DEBUG)
+        // Fast O(1) bulk refcount update under the GIL. Stay below PEP 683 immortal thresholds
+        // (1 << 30 on 32-bit, 1 << 31 on 64-bit) and fall back to Py_INCREF otherwise.
+        constexpr size_t kFastRefcntLimit = size_t{1} << 29;
+        const Py_ssize_t current = Py_REFCNT(py_nan_);
+        if (current > 0 && static_cast<size_t>(current) < kFastRefcntLimit &&
+            count < kFastRefcntLimit - static_cast<size_t>(current)) {
+            Py_SET_REFCNT(py_nan_, current + static_cast<Py_ssize_t>(count));
+            return;
+        }
+#endif
+        for (size_t i = 0; i < count; ++i) {
+            Py_INCREF(py_nan_);
         }
     }
 
   private:
+#if PY_VERSION_HEX < ARCTICDB_PY_NONE_IMMORTAL_HEX
     std::shared_ptr<std::atomic<uint64_t>> none_refcount_ = std::make_shared<std::atomic<uint64_t>>(0);
+#endif
     std::shared_ptr<std::atomic<uint64_t>> nan_refcount_ = std::make_shared<std::atomic<uint64_t>>(0);
-    std::shared_ptr<py::handle> py_nan_;
+    PyObject* py_nan_;
 };
 
 inline void apply_global_refcounts(std::any& handler_data, OutputFormat output_format) {
