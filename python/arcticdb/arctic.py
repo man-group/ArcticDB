@@ -7,36 +7,40 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import logging
-from re import L
-from typing import List, Optional, Any, Union
+from typing import Any, List, Optional, Union
 
-from arcticdb.options import (
-    DEFAULT_ENCODING_VERSION,
-    LibraryOptions,
-    EnterpriseLibraryOptions,
-    RuntimeOptions,
-    OutputFormat,
-    ArrowOutputStringFormat,
+from arcticdb_ext.storage import LibraryManager
+
+from arcticdb.adapters import (
+    ArcticLibraryAdapter,
+    AzureLibraryAdapter,
+    GCPXMLLibraryAdapter,
+    InMemoryLibraryAdapter,
+    LMDBLibraryAdapter,
+    MongoLibraryAdapter,
+    S3LibraryAdapter,
+    FileLibraryAdapter,
 )
 from arcticdb.dependencies import pyarrow as pa
-from arcticdb_ext.storage import LibraryManager
+from arcticdb.encoding_version import EncodingVersion
 from arcticdb.exceptions import (
+    ArcticInvalidApiUsageException,
+    KeyNotFoundException,
     LibraryNotFound,
     MismatchingLibraryOptions,
-    KeyNotFoundException,
-    ArcticInvalidApiUsageException,
 )
-from arcticdb.version_store.library import Library
+from arcticdb.options import (
+    DEFAULT_ENCODING_VERSION,
+    ArrowOutputStringFormat,
+    EnterpriseLibraryOptions,
+    LibraryOptions,
+    ModifiableEnterpriseLibraryOption,
+    ModifiableLibraryOption,
+    OutputFormat,
+    RuntimeOptions,
+)
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
-from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
-from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
-from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
-from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
-from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
-from arcticdb.adapters.gcpxml_library_adapter import GCPXMLLibraryAdapter
-from arcticdb.encoding_version import EncodingVersion
-from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
+from arcticdb.version_store.library import Library
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,7 @@ class Arctic:
     """
 
     _LIBRARY_ADAPTERS = [
+        FileLibraryAdapter,
         S3LibraryAdapter,
         GCPXMLLibraryAdapter,
         LMDBLibraryAdapter,
