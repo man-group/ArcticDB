@@ -1133,7 +1133,7 @@ def expected_pandas_resample_generic(
                     col_name: np.array([], dtype=_expected_types[col_name] if _expected_types else None)
                     for col_name in pandas_aggregations
                 },
-                index=pd.DatetimeIndex([]),
+                index=original_data.index[:0],
             )
         else:
             raise
@@ -1212,7 +1212,9 @@ def generic_resample_test(
                 # resampling again.
 
                 resampler = create_resampler(original_data, rule, closed, "left", offset, origin)
-                first_bin = list(resampler.groups.keys())[0]
+                if not resampler.groups:
+                    raise
+                first_bin = next(iter(resampler.groups))
                 rows_to_pop = 0
                 while rows_to_pop < len(original_data) and original_data.index[rows_to_pop] == first_bin:
                     rows_to_pop += 1
