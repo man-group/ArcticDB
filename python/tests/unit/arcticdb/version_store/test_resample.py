@@ -554,6 +554,34 @@ def test_resample_rejects_non_positive_frequency_strings(freq):
         QueryBuilder().resample(freq)
 
 
+@pytest.mark.parametrize("rule", ("60000D", "100000D"))
+def test_resample_large_rule_no_overflow(lmdb_version_store_v1, any_output_format, rule):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = f"test_resample_large_rule_{rule}"
+    idx = pd.date_range("2024-01-01", "2024-01-02", freq="1h")
+    df = pd.DataFrame({"col": np.arange(len(idx), dtype=np.int64)}, index=idx)
+    lib.write(sym, df)
+
+    q = QueryBuilder().resample(rule).agg({"col": "sum"})
+    received = lib.read(sym, query_builder=q).data
+    expected = df.resample(rule, origin="epoch").agg({"col": "sum"})
+    assert_frame_equal(expected, received, check_freq=False)
+
+
+def test_resample_boundary_overflow_raises(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_resample_boundary_overflow_raises"
+    idx = pd.date_range("2024-01-01", "2024-01-02", freq="1h")
+    df = pd.DataFrame({"col": np.arange(len(idx), dtype=np.int64)}, index=idx)
+    lib.write(sym, df)
+
+    q = QueryBuilder().resample("100000D", origin="start").agg({"col": "sum"})
+    with pytest.raises(UserInputException, match="overflow"):
+        lib.read(sym, query_builder=q)
+
+
 def test_resampling_pickled_query_builder(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)

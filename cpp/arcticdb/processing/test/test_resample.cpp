@@ -16,6 +16,8 @@
 
 using namespace arcticdb;
 
+namespace {
+
 template<ResampleBoundary resample_boundary>
 ResampleClause<resample_boundary> generate_resample_clause(
         ResampleBoundary label_boundary, timestamp rule_ns, timestamp offset = 0, ResampleOrigin origin = timestamp{0}
@@ -35,6 +37,8 @@ ResampleClause<resample_boundary> generate_resample_clause_with_boundaries(
     return res;
 }
 
+} // namespace
+
 TEST(Resample, RejectsNonPositiveRuleNs) {
     EXPECT_THROW(
             (ResampleClause<ResampleBoundary::LEFT>{"0s", 0, ResampleBoundary::LEFT, 0, timestamp{0}}),
@@ -46,6 +50,60 @@ TEST(Resample, RejectsNonPositiveRuleNs) {
             }),
             UserInputException
     );
+}
+
+TEST(Resample, LargeRuleDoesNotOverflow) {
+    constexpr timestamp one_day_ns = timestamp{24} * 60 * 60 * 1'000'000'000;
+    constexpr timestamp start_2024 = timestamp{1'704'067'200} * 1'000'000'000;
+    constexpr timestamp end_2024 = start_2024 + one_day_ns;
+    StreamId sym{"sym"};
+    auto key = AtomKeyBuilder().start_index(start_2024).end_index(end_2024).build<KeyType::TABLE_DATA>(sym);
+
+    // 60000D = 5.184e18 ns: advancing past the end boundary (5.184e18 + 5.184e18) would overflow int64_t.
+    // 100000D = 8.64e18 ns: (a % b + b) in python_mod would also overflow int64_t.
+    for (timestamp rule_ns : {60'000 * one_day_ns, 100'000 * one_day_ns}) {
+        std::vector<RangesAndKey> ranges_left{RangesAndKey(RowRange{0, 10}, ColRange{1, 2}, key)};
+        auto clause_left = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, rule_ns);
+        auto units_left = clause_left.structure_for_processing(ranges_left);
+        ASSERT_EQ(units_left, (std::vector<std::vector<size_t>>{{0}}));
+        ASSERT_EQ(clause_left.bucket_boundaries_, (std::vector<timestamp>{0, rule_ns}));
+
+        std::vector<RangesAndKey> ranges_right{RangesAndKey(RowRange{0, 10}, ColRange{1, 2}, key)};
+        auto clause_right = generate_resample_clause<ResampleBoundary::RIGHT>(ResampleBoundary::RIGHT, rule_ns);
+        auto units_right = clause_right.structure_for_processing(ranges_right);
+        ASSERT_EQ(units_right, (std::vector<std::vector<size_t>>{{0}}));
+        ASSERT_EQ(clause_right.bucket_boundaries_, (std::vector<timestamp>{0, rule_ns}));
+    }
+}
+
+TEST(Resample, LargeRuleSpanExceedingInt64Max) {
+    // Boundaries {-6e18, 0, 6e18} span 12e18 ns > INT64_MAX while every boundary fits in int64_t.
+    constexpr timestamp rule_ns = 6'000'000'000'000'000'000LL;
+    constexpr timestamp start = -5'000'000'000'000'000'000LL;
+    constexpr timestamp end = 5'000'000'000'000'000'000LL;
+    StreamId sym{"sym"};
+    auto key = AtomKeyBuilder().start_index(start).end_index(end).build<KeyType::TABLE_DATA>(sym);
+    std::vector<RangesAndKey> ranges{RangesAndKey(RowRange{0, 10}, ColRange{1, 2}, key)};
+
+    auto clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, rule_ns);
+    auto units = clause.structure_for_processing(ranges);
+    ASSERT_EQ(units, (std::vector<std::vector<size_t>>{{0}}));
+    ASSERT_EQ(clause.bucket_boundaries_, (std::vector<timestamp>{-rule_ns, 0, rule_ns}));
+}
+
+TEST(Resample, BoundaryOverflowThrowsUserInputException) {
+    constexpr timestamp one_day_ns = timestamp{24} * 60 * 60 * 1'000'000'000;
+    constexpr timestamp start_2024 = timestamp{1'704'067'200} * 1'000'000'000;
+    constexpr timestamp end_2024 = start_2024 + one_day_ns;
+    StreamId sym{"sym"};
+    auto key = AtomKeyBuilder().start_index(start_2024).end_index(end_2024).build<KeyType::TABLE_DATA>(sym);
+    std::vector<RangesAndKey> ranges{RangesAndKey(RowRange{0, 10}, ColRange{1, 2}, key)};
+
+    // origin="start" + 100000D (~1.704e18 + 8.64e18) overflows 64-bit nanosecond timestamps.
+    auto clause = generate_resample_clause<ResampleBoundary::LEFT>(
+            ResampleBoundary::LEFT, 100'000 * one_day_ns, 0, ResampleOrigin{std::string{"start"}}
+    );
+    EXPECT_THROW((void)clause.structure_for_processing(ranges), UserInputException);
 }
 
 TEST(Resample, StructureForProcessingBasic) {

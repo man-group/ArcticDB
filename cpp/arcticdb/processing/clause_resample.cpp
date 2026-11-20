@@ -7,6 +7,8 @@
  */
 
 #include <concepts>
+#include <cstdint>
+#include <limits>
 
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/collection_utils.hpp>
@@ -21,14 +23,45 @@ namespace {
 
 consteval timestamp one_day_in_nanoseconds() { return timestamp(24) * 60 * 60 * 1'000'000'000; }
 
+[[nodiscard]] timestamp checked_add(timestamp a, timestamp b) {
+    if ((b > 0 && a > std::numeric_limits<timestamp>::max() - b) ||
+        (b < 0 && a < std::numeric_limits<timestamp>::min() - b)) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Resampling bucket boundaries overflow 64-bit nanosecond timestamps"
+        );
+    }
+    return a + b;
+}
+
+[[nodiscard]] timestamp checked_sub(timestamp a, timestamp b) {
+    if ((b < 0 && a > std::numeric_limits<timestamp>::max() + b) ||
+        (b > 0 && a < std::numeric_limits<timestamp>::min() + b)) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Resampling bucket boundaries overflow 64-bit nanosecond timestamps"
+        );
+    }
+    return a - b;
+}
+
 template<typename T>
 requires std::integral<T>
 [[nodiscard]] T python_mod(T a, T b) {
-    return (a % b + b) % b;
+    const T rem = a % b;
+    return rem < 0 ? rem + b : rem;
+}
+
+// Computes mathematical (a - b) mod m in [0, m - 1] for m > 0 without signed overflow.
+[[nodiscard]] timestamp mod_diff(timestamp a, timestamp b, timestamp m) {
+    const auto ra = static_cast<uint64_t>(python_mod(a, m));
+    const auto rb = static_cast<uint64_t>(python_mod(b, m));
+    const auto um = static_cast<uint64_t>(m);
+    return static_cast<timestamp>(ra >= rb ? ra - rb : ra + (um - rb));
 }
 
 /// @param ts in nanoseconds
-[[nodiscard]] timestamp start_of_day_nanoseconds(timestamp ts) { return ts - python_mod(ts, one_day_in_nanoseconds()); }
+[[nodiscard]] timestamp start_of_day_nanoseconds(timestamp ts) {
+    return checked_sub(ts, python_mod(ts, one_day_in_nanoseconds()));
+}
 
 /// @param ts in nanoseconds
 [[nodiscard]] timestamp end_of_day_nanoseconds(timestamp ts) {
@@ -37,7 +70,7 @@ requires std::integral<T>
     if (is_midnnight) {
         return ts;
     }
-    return start_of_day + one_day_in_nanoseconds();
+    return checked_add(start_of_day, one_day_in_nanoseconds());
 }
 
 [[nodiscard]] std::pair<timestamp, timestamp> compute_first_last_dates(
@@ -58,9 +91,13 @@ requires std::integral<T>
                     return {start_of_day_nanoseconds(start), start};
                 } else if (o == "end_day" || o == "end") {
                     const timestamp origin_last = o == "end" ? end : end_of_day_nanoseconds(end);
-                    const timestamp bucket_count =
-                            (origin_last - start) / rule + (closed_boundary_arg == ResampleBoundary::LEFT);
-                    const timestamp origin_ns = origin_last - bucket_count * rule;
+                    const auto u_rule = static_cast<uint64_t>(rule);
+                    const auto span = static_cast<uint64_t>(origin_last) - static_cast<uint64_t>(start);
+                    const auto base_steps = (span / u_rule) * u_rule;
+                    timestamp origin_ns = static_cast<timestamp>(static_cast<uint64_t>(origin_last) - base_steps);
+                    if (closed_boundary_arg == ResampleBoundary::LEFT) {
+                        origin_ns = checked_sub(origin_ns, rule);
+                    }
                     return {origin_ns, origin_ns};
                 } else {
                     user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -70,18 +107,19 @@ requires std::integral<T>
                 }
             }
     );
-    origin_ns += offset;
+    origin_ns = checked_add(origin_ns, offset);
 
-    const timestamp ns_to_prev_offset_start = python_mod(origin_adjusted_start - origin_ns, rule);
-    const timestamp ns_to_prev_offset_end = python_mod(end - origin_ns, rule);
+    const timestamp ns_to_prev_offset_start = mod_diff(origin_adjusted_start, origin_ns, rule);
+    const timestamp ns_to_prev_offset_end = mod_diff(end, origin_ns, rule);
 
     if (closed_boundary_arg == ResampleBoundary::RIGHT) {
-        return {ns_to_prev_offset_start > 0 ? origin_adjusted_start - ns_to_prev_offset_start
-                                            : origin_adjusted_start - rule,
-                ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end};
+        return {ns_to_prev_offset_start > 0 ? checked_sub(origin_adjusted_start, ns_to_prev_offset_start)
+                                            : checked_sub(origin_adjusted_start, rule),
+                ns_to_prev_offset_end > 0 ? checked_add(end, rule - ns_to_prev_offset_end) : end};
     } else {
-        return {ns_to_prev_offset_start > 0 ? origin_adjusted_start - ns_to_prev_offset_start : origin_adjusted_start,
-                ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end + rule};
+        return {ns_to_prev_offset_start > 0 ? checked_sub(origin_adjusted_start, ns_to_prev_offset_start)
+                                            : origin_adjusted_start,
+                ns_to_prev_offset_end > 0 ? checked_add(end, rule - ns_to_prev_offset_end) : checked_add(end, rule)};
     }
 }
 
@@ -507,11 +545,20 @@ std::vector<timestamp> ResampleClause<closed_boundary>::generate_buckets(timesta
     }
     const auto [start_with_offset, end_with_offset] =
             compute_first_last_dates(start, end, rule_ns_, closed_boundary, offset_, origin_);
-    const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns_ + 1;
+    const auto step = static_cast<uint64_t>(rule_ns_);
+    const auto span = static_cast<uint64_t>(end_with_offset) - static_cast<uint64_t>(start_with_offset);
+    const auto num_buckets = span / step;
     std::vector<timestamp> res;
+    if (num_buckets >= res.max_size()) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Resampling rule '{}' produces too many buckets ({}) for the symbol's time range", rule_, num_buckets
+        );
+    }
+    const auto bucket_boundary_count = static_cast<size_t>(num_buckets) + 1;
     res.reserve(bucket_boundary_count);
-    for (auto boundary = start_with_offset; boundary <= end_with_offset; boundary += rule_ns_) {
-        res.push_back(boundary);
+    const auto base = static_cast<uint64_t>(start_with_offset);
+    for (size_t i = 0; i < bucket_boundary_count; ++i) {
+        res.push_back(static_cast<timestamp>(base + static_cast<uint64_t>(i) * step));
     }
     return res;
 }
