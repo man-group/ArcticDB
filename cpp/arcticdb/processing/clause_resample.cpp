@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <concepts>
+
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
@@ -15,16 +17,88 @@ namespace arcticdb {
 namespace ranges = std::ranges;
 using namespace pipelines;
 
+namespace {
+
+consteval timestamp one_day_in_nanoseconds() { return timestamp(24) * 60 * 60 * 1'000'000'000; }
+
+template<typename T>
+requires std::integral<T>
+[[nodiscard]] T python_mod(T a, T b) {
+    return (a % b + b) % b;
+}
+
+/// @param ts in nanoseconds
+[[nodiscard]] timestamp start_of_day_nanoseconds(timestamp ts) { return ts - python_mod(ts, one_day_in_nanoseconds()); }
+
+/// @param ts in nanoseconds
+[[nodiscard]] timestamp end_of_day_nanoseconds(timestamp ts) {
+    const timestamp start_of_day = start_of_day_nanoseconds(ts);
+    const bool is_midnnight = start_of_day == ts;
+    if (is_midnnight) {
+        return ts;
+    }
+    return start_of_day + one_day_in_nanoseconds();
+}
+
+[[nodiscard]] std::pair<timestamp, timestamp> compute_first_last_dates(
+        timestamp start, timestamp end, const timestamp rule, const ResampleBoundary closed_boundary_arg,
+        const timestamp offset, const ResampleOrigin& origin
+) {
+    // Origin value formula from Pandas:
+    // https://github.com/pandas-dev/pandas/blob/68d9dcab5b543adb3bfe5b83563c61a9b8afae77/pandas/core/resample.py#L2564
+    auto [origin_ns, origin_adjusted_start] = util::variant_match(
+            origin,
+            [start](timestamp o) -> std::pair<timestamp, timestamp> { return {o, start}; },
+            [&](const std::string& o) -> std::pair<timestamp, timestamp> {
+                if (o == "epoch") {
+                    return {0, start};
+                } else if (o == "start") {
+                    return {start, start};
+                } else if (o == "start_day") {
+                    return {start_of_day_nanoseconds(start), start};
+                } else if (o == "end_day" || o == "end") {
+                    const timestamp origin_last = o == "end" ? end : end_of_day_nanoseconds(end);
+                    const timestamp bucket_count =
+                            (origin_last - start) / rule + (closed_boundary_arg == ResampleBoundary::LEFT);
+                    const timestamp origin_ns = origin_last - bucket_count * rule;
+                    return {origin_ns, origin_ns};
+                } else {
+                    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                            R"(Invalid origin value {}. Supported values are: "start", "start_day", "end", "end_day", "epoch" or timestamp in nanoseconds)",
+                            o
+                    );
+                }
+            }
+    );
+    origin_ns += offset;
+
+    const timestamp ns_to_prev_offset_start = python_mod(origin_adjusted_start - origin_ns, rule);
+    const timestamp ns_to_prev_offset_end = python_mod(end - origin_ns, rule);
+
+    if (closed_boundary_arg == ResampleBoundary::RIGHT) {
+        return {ns_to_prev_offset_start > 0 ? origin_adjusted_start - ns_to_prev_offset_start
+                                            : origin_adjusted_start - rule,
+                ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end};
+    } else {
+        return {ns_to_prev_offset_start > 0 ? origin_adjusted_start - ns_to_prev_offset_start : origin_adjusted_start,
+                ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end + rule};
+    }
+}
+
+} // namespace
+
 template<ResampleBoundary closed_boundary>
 ResampleClause<closed_boundary>::ResampleClause(
-        std::string rule, ResampleBoundary label_boundary, BucketGeneratorT&& generate_bucket_boundaries,
-        timestamp offset, ResampleOrigin origin
+        std::string rule, timestamp rule_ns, ResampleBoundary label_boundary, timestamp offset, ResampleOrigin origin
 ) :
     rule_(std::move(rule)),
+    rule_ns_(rule_ns),
     label_boundary_(label_boundary),
-    generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
     offset_(offset),
     origin_(std::move(origin)) {
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            rule_ns_ > 0, "Resampling rule must be a positive fixed frequency, but '{}' is {}ns", rule_, rule_ns_
+    );
     clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.index_ = KeepCurrentTopLevelIndex();
@@ -200,9 +274,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
         date_range_ = index_range;
     }
 
-    bucket_boundaries_ = generate_bucket_boundaries_(
-            date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_
-    );
+    bucket_boundaries_ = generate_buckets(date_range_->first, date_range_->second);
     if (bucket_boundaries_.size() < 2) {
         ranges_and_keys.clear();
         return {};
@@ -243,9 +315,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     }
 
     date_range_ = std::make_optional<TimestampRange>(min_start_ts, max_end_ts);
-    bucket_boundaries_ = generate_bucket_boundaries_(
-            date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_
-    );
+    bucket_boundaries_ = generate_buckets(date_range_->first, date_range_->second);
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
@@ -427,6 +497,23 @@ std::vector<timestamp> ResampleClause<closed_boundary>::generate_bucket_boundari
     // case for data written by old versions of Arctic using update. See
     // test_compatibility.py::test_compat_resample_updated_data for more explanation
     return bucket_boundaries;
+}
+
+template<ResampleBoundary closed_boundary>
+std::vector<timestamp> ResampleClause<closed_boundary>::generate_buckets(timestamp start, timestamp end) const {
+    // e.g. Can happen if date range specified does not overlap with the time range covered by the symbol
+    if (end < start) {
+        return {};
+    }
+    const auto [start_with_offset, end_with_offset] =
+            compute_first_last_dates(start, end, rule_ns_, closed_boundary, offset_, origin_);
+    const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns_ + 1;
+    std::vector<timestamp> res;
+    res.reserve(bucket_boundary_count);
+    for (auto boundary = start_with_offset; boundary <= end_with_offset; boundary += rule_ns_) {
+        res.push_back(boundary);
+    }
+    return res;
 }
 
 template struct ResampleClause<ResampleBoundary::LEFT>;
