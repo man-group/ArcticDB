@@ -57,9 +57,11 @@ struct StreamSource {
 
     [[nodiscard]] virtual folly::Future<folly::Unit> visit_object_metadata(
             [[maybe_unused]] KeyType type, [[maybe_unused]] const std::optional<StreamId>& stream_id_opt,
-            [[maybe_unused]] storage::ObjectMetadataVisitor visitor
+            [[maybe_unused]] const storage::ObjectMetadataVisitor& visitor
     ) {
-        util::raise_rte("visit_object_metadata not supported by this StreamSource");
+        return folly::makeFutureWith([]() -> folly::Unit {
+            util::raise_rte("visit_object_metadata not supported by this StreamSource");
+        });
     }
 
     virtual bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) = 0;

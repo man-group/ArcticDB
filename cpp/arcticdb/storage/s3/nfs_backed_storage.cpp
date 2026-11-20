@@ -254,20 +254,9 @@ bool NfsBackedStorage::supports_object_size_calculation() const { return true; }
 void NfsBackedStorage::do_visit_object_sizes(
         KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor
 ) {
-    auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, false, prefix, NfsBucketizer::bucketize_length(key_type)
-    );
-    // We need this prefix filtering here instead of a regex like in s3/azure
-    // because we are doing sharding through subdirectories
-    // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
-    // so it cannot be hashed to the correct shard
-    const ObjectSizesVisitor visitor_with_prefix_filtering = [&visitor,
-                                                              &prefix](const VariantKey& key, CompressedSize size) {
-        s3::detail::object_sizes_visit_if_prefix_matches(visitor, prefix, unencode_object_id(key), size);
-    };
-    s3::detail::Visitor<ObjectSizesVisitor> final_visitor{visitor_with_prefix_filtering};
-
-    s3::detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
+    do_visit_object_metadata(key_type, prefix, [&visitor](const VariantKey& key, const ObjectMetadata& metadata) {
+        visitor(key, metadata.size);
+    });
 }
 
 bool NfsBackedStorage::supports_object_metadata_listing() const { return true; }
@@ -278,6 +267,10 @@ void NfsBackedStorage::do_visit_object_metadata(
     auto path_info = s3::detail::calculate_path_info(
             root_folder_, key_type, false, prefix, NfsBucketizer::bucketize_length(key_type)
     );
+    // We need this prefix filtering here instead of a regex like in s3/azure
+    // because we are doing sharding through subdirectories
+    // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
+    // so it cannot be hashed to the correct shard
     const ObjectMetadataVisitor visitor_with_prefix_filtering =
             [&visitor, &prefix](const VariantKey& key, const ObjectMetadata& metadata) {
                 s3::detail::object_metadata_visit_if_prefix_matches(visitor, prefix, unencode_object_id(key), metadata);

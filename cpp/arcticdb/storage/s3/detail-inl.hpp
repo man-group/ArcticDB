@@ -531,16 +531,6 @@ inline bool visit_if_prefix_matches(const IterateTypePredicate& visitor, const s
     }
 }
 
-inline void object_sizes_visit_if_prefix_matches(
-        const ObjectSizesVisitor& visitor, const std::string& prefix, const VariantKey& key, CompressedSize size
-) {
-    if (prefix.empty()) {
-        visitor(key, size);
-    } else if (variant_key_id_starts_with(key, prefix)) {
-        visitor(key, size);
-    }
-}
-
 inline void object_metadata_visit_if_prefix_matches(
         const ObjectMetadataVisitor& visitor, const std::string& prefix, const VariantKey& key,
         const ObjectMetadata& metadata
@@ -580,7 +570,7 @@ void adjust_for_directory_bucket_limitations(KeyType key_type, PathInfo& path_in
     );
     // It is possible that should_retry_with_directory_bucket_limitations returned true for some other reason when we
     // are not in a directory bucket. In that case, the next call to do_iterate_type_impl/
-    // do_visit_object_sizes_for_type_impl should fail in the same way. Then we will raise, and the directory_bucket_
+    // do_visit_object_metadata_for_type_impl should fail in the same way. Then we will raise, and the directory_bucket_
     // field of the calling S3Storage object will not be modified.
     visitor.directory_bucket_ = true;
     visitor.primary_visitor_ = std::move(*visitor.fallback_visitor_);
@@ -645,69 +635,31 @@ inline bool do_iterate_type_impl(
     return false;
 }
 
-inline void do_visit_object_sizes_for_type_impl(
-        KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
-        Visitor<ObjectSizesVisitor>& visitor
-) {
-    ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
-    ARCTICDB_RUNTIME_DEBUG(
-            log::storage(),
-            "Calculating sizes for objects in bucket {} with prefix {}",
-            bucket_name,
-            path_info.key_prefix_
-    );
-
-    auto continuation_token = std::optional<std::string>();
-    ObjectSizes res{key_type};
-    do {
-        auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
-        if (list_objects_result.is_success()) {
-            const auto& output = list_objects_result.get_output();
-
-            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
-
-            auto zipped = folly::gen::from(output.s3_object_sizes) | folly::gen::zip(output.s3_object_names) |
-                          folly::gen::as<std::vector>();
-            for (const auto& [size, name] : zipped) {
-                auto key = name.substr(path_info.path_to_key_size_);
-                auto k = variant_key_from_bytes(reinterpret_cast<uint8_t*>(key.data()), key.size(), key_type);
-
-                visitor.primary_visitor_(k, size);
-            }
-            continuation_token = output.next_continuation_token;
-        } else {
-            const auto& error = list_objects_result.get_error();
-            if (should_retry_with_directory_bucket_limitations(error.GetErrorType(), path_info, visitor)) {
-                adjust_for_directory_bucket_limitations(key_type, path_info, visitor);
-                return do_visit_object_sizes_for_type_impl(key_type, bucket_name, s3_client, path_info, visitor);
-            }
-            log::storage().warn(
-                    "Failed to iterate key type with key '{}' {}: {}",
-                    key_type,
-                    error.GetExceptionName().c_str(),
-                    error.GetMessage().c_str()
-            );
-            raise_if_unexpected_error(error, path_info.key_prefix_);
-        }
-    } while (continuation_token.has_value());
-}
-
 inline void do_visit_object_metadata_for_type_impl(
         KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
         Visitor<ObjectMetadataVisitor>& visitor
 ) {
     ARCTICDB_SAMPLE(S3StorageVisitMetadataForType, 0)
+    ARCTICDB_RUNTIME_DEBUG(
+            log::storage(), "Listing object metadata in bucket {} with prefix {}", bucket_name, path_info.key_prefix_
+    );
+
     auto continuation_token = std::optional<std::string>();
     do {
+        auto query_stat_operation_time =
+                query_stats::add_task_count_and_time(query_stats::TaskType::S3_ListObjectsV2, key_type);
         auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
-            const auto& output = list_objects_result.get_output();
+            auto& output = list_objects_result.get_output();
+
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
+
             const size_t count = output.s3_object_names.size();
             for (size_t i = 0; i < count; ++i) {
                 auto key = output.s3_object_names[i].substr(path_info.path_to_key_size_);
                 auto k = variant_key_from_bytes(reinterpret_cast<uint8_t*>(key.data()), key.size(), key_type);
                 ObjectMetadata meta{
-                        i < output.s3_object_etags.size() ? output.s3_object_etags[i] : std::string{},
+                        i < output.s3_object_etags.size() ? std::move(output.s3_object_etags[i]) : std::string{},
                         i < output.s3_object_sizes.size() ? output.s3_object_sizes[i] : 0,
                         i < output.s3_object_last_modified_ms.size() ? output.s3_object_last_modified_ms[i] : 0
                 };
@@ -726,7 +678,10 @@ inline void do_visit_object_metadata_for_type_impl(
                     error.GetExceptionName().c_str(),
                     error.GetMessage().c_str()
             );
+            // We don't raise on expected errors like NoSuchKey/NoSuchBucket because we want to stop listing
+            // instead of raising (matching do_iterate_type_impl).
             raise_if_unexpected_error(error, path_info.key_prefix_);
+            return;
         }
     } while (continuation_token.has_value());
 }

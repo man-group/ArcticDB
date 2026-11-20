@@ -98,13 +98,13 @@ S3Result<std::monostate> MockS3Client::put_object(
         return {precondition_failed_error};
     }
 
+    // When we write Segments we occasionally don't fill in the size_. This is fine as it's not needed for writing.
+    // However, it is required when reading so we need to calculate it. It's easier to do on write.
     const uint64_t size = segment.calculate_size();
+    // Synthetic per-write quoted ETag (matching AWS S3) and monotonic timestamp (ms) for metadata listing tests.
     const uint64_t seq = ++write_seq_;
     MockObject obj{
-            segment.clone(),
-            size,
-            fmt::format("\"mock-{}-{}\"", bucket_name, seq),
-            static_cast<int64_t>(seq * 1000)
+            segment.clone(), size, fmt::format("\"mock-{}-{}\"", bucket_name, seq), static_cast<int64_t>(seq * 1000)
     };
     s3_contents_.insert_or_assign({bucket_name, s3_object_name}, std::move(obj));
 

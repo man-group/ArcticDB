@@ -8,11 +8,15 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/async/async_store.hpp>
+#include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
+#include <arcticdb/storage/test/in_memory_store.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/test/common.hpp>
@@ -518,6 +522,268 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
     }
     ASSERT_THROW(list_in_store(store, KeyType::TABLE_DATA, prefix), UnexpectedS3ErrorException);
     ASSERT_FALSE(store.directory_bucket());
+}
+
+namespace {
+
+std::map<std::string, ObjectMetadata> list_metadata_in_store(
+        Storage& store, entity::KeyType key_type = entity::KeyType::TABLE_DATA, const std::string& prefix = ""
+) {
+    std::map<std::string, ObjectMetadata> result;
+    store.visit_object_metadata(key_type, prefix, [&result](const VariantKey& key, const ObjectMetadata& meta) {
+        const auto& atom_key = std::get<AtomKey>(key);
+        result.emplace(std::get<StringId>(atom_key.id()), meta);
+    });
+    return result;
+}
+
+std::map<std::string, CompressedSize> list_sizes_in_store(
+        Storage& store, entity::KeyType key_type = entity::KeyType::TABLE_DATA, const std::string& prefix = ""
+) {
+    std::map<std::string, CompressedSize> result;
+    store.visit_object_sizes(key_type, prefix, [&result](const VariantKey& key, CompressedSize size) {
+        const auto& atom_key = std::get<AtomKey>(key);
+        result.emplace(std::get<StringId>(atom_key.id()), size);
+    });
+    return result;
+}
+
+struct ScopedQueryStats {
+    ScopedQueryStats() {
+        auto stats = query_stats::QueryStats::instance();
+        was_enabled_ = stats->is_enabled();
+        stats->enable();
+        stats->reset_stats();
+    }
+    ~ScopedQueryStats() {
+        auto stats = query_stats::QueryStats::instance();
+        stats->reset_stats();
+        if (!was_enabled_) {
+            stats->disable();
+        }
+    }
+    bool was_enabled_{false};
+};
+
+} // namespace
+
+TEST_P(S3AndNfsStorageFixture, test_visit_object_metadata_paginates_and_matches_sizes) {
+    auto store = get_storage();
+    ASSERT_TRUE(store->supports_object_metadata_listing());
+
+    std::set<std::string> expected_symbols;
+    // Write 25 keys to span multiple pages (MockS3Client page_size == 10).
+    for (int i = 0; i < 25; ++i) {
+        auto symbol = fmt::format("sym_{:02}", i);
+        write_in_store(*store, symbol);
+        expected_symbols.emplace(symbol);
+    }
+
+    ScopedQueryStats scoped_stats;
+    auto metadata = list_metadata_in_store(*store);
+    auto stats_output = query_stats::QueryStats::instance()->get_stats();
+    ASSERT_GE(stats_output["storage_operations"]["S3_ListObjectsV2"]["TABLE_DATA"]["count"], 3u);
+
+    auto sizes = list_sizes_in_store(*store);
+    ASSERT_EQ(metadata.size(), expected_symbols.size());
+    ASSERT_EQ(sizes.size(), expected_symbols.size());
+
+    std::set<std::string> seen_etags;
+    for (const auto& symbol : expected_symbols) {
+        ASSERT_TRUE(metadata.contains(symbol));
+        ASSERT_TRUE(sizes.contains(symbol));
+        const auto& meta = metadata.at(symbol);
+        ASSERT_FALSE(meta.etag.empty());
+        ASSERT_EQ(meta.etag.front(), '"');
+        ASSERT_EQ(meta.etag.back(), '"');
+        ASSERT_GT(meta.size, 0u);
+        ASSERT_EQ(meta.size, sizes.at(symbol));
+        ASSERT_GT(meta.last_modified_ms, 0);
+        seen_etags.insert(meta.etag);
+    }
+    ASSERT_EQ(seen_etags.size(), expected_symbols.size());
+}
+
+TEST_P(S3AndNfsStorageFixture, test_visit_object_metadata_prefix_filter) {
+    auto store = get_storage();
+    std::set<std::string> expected_alpha;
+    for (int i = 0; i < 15; ++i) {
+        auto symbol = fmt::format("alpha_{:02}", i);
+        write_in_store(*store, symbol);
+        expected_alpha.emplace(symbol);
+    }
+    for (int i = 0; i < 5; ++i) {
+        write_in_store(*store, fmt::format("beta_{:02}", i));
+    }
+
+    auto metadata = list_metadata_in_store(*store, KeyType::TABLE_DATA, "alpha_");
+    ASSERT_EQ(metadata.size(), expected_alpha.size());
+    for (const auto& [sym, meta] : metadata) {
+        ASSERT_TRUE(expected_alpha.contains(sym));
+        ASSERT_FALSE(meta.etag.empty());
+        ASSERT_GT(meta.size, 0u);
+    }
+}
+
+TEST_P(S3AndNfsStorageFixture, test_visit_object_metadata_overwrite_and_delete) {
+    auto store = get_storage();
+    write_in_store(*store, "sym_keep");
+    write_in_store(*store, "sym_change");
+
+    auto before = list_metadata_in_store(*store);
+    ASSERT_EQ(before.size(), 2u);
+    const auto original_meta = before.at("sym_change");
+
+    update_in_store(*store, "sym_change");
+    auto after_update = list_metadata_in_store(*store);
+    ASSERT_EQ(after_update.size(), 2u);
+    ASSERT_EQ(after_update.at("sym_keep"), before.at("sym_keep"));
+    ASSERT_NE(after_update.at("sym_change").etag, original_meta.etag);
+    ASSERT_GT(after_update.at("sym_change").last_modified_ms, original_meta.last_modified_ms);
+
+    remove_in_store(*store, {"sym_change"});
+    auto after_delete = list_metadata_in_store(*store);
+    ASSERT_EQ(after_delete.size(), 1u);
+    ASSERT_TRUE(after_delete.contains("sym_keep"));
+    ASSERT_FALSE(after_delete.contains("sym_change"));
+}
+
+TEST_F(S3StorageFixture, test_visit_object_metadata_directory_bucket_fallback) {
+    auto* mock_s3_client = dynamic_cast<S3ClientTestWrapper*>(&store.client());
+    ASSERT_NE(mock_s3_client, nullptr);
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
+
+    const std::string prefix = "symbol_";
+    std::set<std::string> expected;
+    for (int i = 10; i < 25; ++i) {
+        auto matching = fmt::format("{}_{}", prefix, i);
+        write_in_store(store, matching);
+        expected.emplace(matching);
+        write_in_store(store, fmt::format("other_{}_{}", prefix, i));
+    }
+
+    auto first = list_metadata_in_store(store, KeyType::TABLE_DATA, prefix);
+    ASSERT_TRUE(store.directory_bucket());
+    ASSERT_EQ(first.size(), expected.size());
+    for (const auto& sym : expected) {
+        ASSERT_TRUE(first.contains(sym));
+        ASSERT_FALSE(first.at(sym).etag.empty());
+    }
+
+    // Subsequent call uses the cached directory_bucket_ flag and still filters in memory.
+    auto second = list_metadata_in_store(store, KeyType::TABLE_DATA, prefix);
+    ASSERT_EQ(second, first);
+}
+
+TEST_F(S3StorageFixture, test_visit_object_metadata_directory_bucket_failure) {
+    auto* mock_s3_client = dynamic_cast<S3ClientTestWrapper*>(&store.client());
+    ASSERT_NE(mock_s3_client, nullptr);
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
+
+    write_in_store(store, "symbol_1");
+    ASSERT_THROW(list_metadata_in_store(store, KeyType::TABLE_DATA, "symbol_"), UnexpectedS3ErrorException);
+    ASSERT_FALSE(store.directory_bucket());
+}
+
+TEST_F(S3StorageFixture, test_visit_object_metadata_expected_error_after_page_1_terminates) {
+    // Write 12 keys so page 1 returns 10 keys and a continuation token, then inject an expected
+    // NoSuchBucket error on page 2. Both metadata and size listings must stop cleanly without looping.
+    for (int i = 0; i < 12; ++i) {
+        write_in_store(store, fmt::format("symbol_{:02}", i));
+    }
+    write_in_store(
+            store,
+            S3ClientTestWrapper::get_failure_trigger(
+                    "symbol_99", StorageOperation::LIST, Aws::S3::S3Errors::NO_SUCH_BUCKET, false
+            )
+    );
+
+    {
+        ScopedQueryStats scoped_stats;
+        auto metadata = list_metadata_in_store(store);
+        ASSERT_EQ(metadata.size(), 10u);
+        auto stats_output = query_stats::QueryStats::instance()->get_stats();
+        ASSERT_EQ(stats_output["storage_operations"]["S3_ListObjectsV2"]["TABLE_DATA"]["count"], 2u);
+    }
+
+    {
+        ScopedQueryStats scoped_stats;
+        auto sizes = list_sizes_in_store(store);
+        ASSERT_EQ(sizes.size(), 10u);
+        auto stats_output = query_stats::QueryStats::instance()->get_stats();
+        ASSERT_EQ(stats_output["storage_operations"]["S3_ListObjectsV2"]["TABLE_DATA"]["count"], 2u);
+    }
+}
+
+TEST_F(S3StorageFixture, test_visit_object_metadata_unexpected_error_throws) {
+    for (int i = 0; i < 12; ++i) {
+        write_in_store(store, fmt::format("symbol_{:02}", i));
+    }
+    write_in_store(
+            store,
+            S3ClientTestWrapper::get_failure_trigger(
+                    "symbol_99", StorageOperation::LIST, Aws::S3::S3Errors::NETWORK_CONNECTION, false
+            )
+    );
+    ASSERT_THROW(list_metadata_in_store(store), UnexpectedS3ErrorException);
+}
+
+TEST(TestObjectMetadataListing, unsupported_storage_and_async_store) {
+    LibraryPath lp{"lib"};
+    auto mem_storage = std::make_shared<memory::MemoryStorage>(lp, OpenMode::DELETE, memory::MemoryStorage::Config{});
+    ASSERT_FALSE(mem_storage->supports_object_metadata_listing());
+    ASSERT_THROW(
+            mem_storage->visit_object_metadata(
+                    KeyType::TABLE_DATA, "", [](const VariantKey&, const ObjectMetadata&) {}
+            ),
+            ArcticException
+    );
+
+    auto mem_storages = std::make_shared<Storages>(Storages::StorageVector{mem_storage}, OpenMode::DELETE);
+    auto mem_library = std::make_shared<Library>(lp, std::move(mem_storages));
+    auto mem_async_store = std::make_shared<async::AsyncStore<>>(
+            std::move(mem_library), proto::encoding::VariantCodec{}, EncodingVersion::V2
+    );
+    ASSERT_FALSE(mem_async_store->supports_object_metadata_listing());
+    auto mem_fut = mem_async_store->visit_object_metadata(
+            KeyType::TABLE_DATA, std::nullopt, [](const VariantKey&, const ObjectMetadata&) {}
+    );
+    ASSERT_THROW(std::move(mem_fut).get(), ArcticException);
+
+    // Default StreamSource::visit_object_metadata returns an exceptional future rather than throwing synchronously.
+    InMemoryStore in_memory_store;
+    ASSERT_FALSE(in_memory_store.supports_object_metadata_listing());
+    auto default_fut = in_memory_store.visit_object_metadata(
+            KeyType::TABLE_DATA, std::nullopt, [](const VariantKey&, const ObjectMetadata&) {}
+    );
+    ASSERT_TRUE(default_fut.hasException());
+    ASSERT_THROW(std::move(default_fut).get(), ArcticException);
+
+    // AsyncStore backed by S3Storage executes VisitObjectMetadataTask on io_executor().
+    auto s3_storage = std::make_shared<S3Storage>(lp, OpenMode::DELETE, S3Settings(get_test_s3_config()));
+    write_in_store(*s3_storage, "async_sym_1");
+    write_in_store(*s3_storage, "async_sym_2");
+    auto s3_storages = std::make_shared<Storages>(Storages::StorageVector{s3_storage}, OpenMode::DELETE);
+    auto s3_library = std::make_shared<Library>(lp, std::move(s3_storages));
+    auto s3_async_store = std::make_shared<async::AsyncStore<>>(
+            std::move(s3_library), proto::encoding::VariantCodec{}, EncodingVersion::V2
+    );
+    ASSERT_TRUE(s3_async_store->supports_object_metadata_listing());
+
+    std::map<std::string, ObjectMetadata> visited;
+    s3_async_store
+            ->visit_object_metadata(
+                    KeyType::TABLE_DATA,
+                    std::nullopt,
+                    [&visited](const VariantKey& key, const ObjectMetadata& meta) {
+                        visited.emplace(std::get<StringId>(std::get<AtomKey>(key).id()), meta);
+                    }
+            )
+            .get();
+    ASSERT_EQ(visited.size(), 2u);
+    ASSERT_TRUE(visited.contains("async_sym_1"));
+    ASSERT_TRUE(visited.contains("async_sym_2"));
 }
 
 TEST(S3LogSystem, RoutesToSpdlogWithLevelAndTag) {

@@ -25,6 +25,7 @@ using CompressedSize = uint64_t;
 using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)>;
 
 struct ObjectMetadata {
+    // Raw ETag as returned by the backend (e.g. quoted string from S3 ListObjectsV2).
     std::string etag;
     CompressedSize size{0};
     int64_t last_modified_ms{0};
