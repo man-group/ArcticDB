@@ -175,7 +175,7 @@ def get_sample_from_non_empty_arr(arr, arr_name):
 
         return element
 
-    log.info("Column {} does not have non null elements.", arr_name)
+    log.debug("Column {} does not have non null elements.", arr_name)
     return None
 
 
