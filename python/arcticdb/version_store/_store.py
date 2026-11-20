@@ -70,7 +70,6 @@ from arcticdb_ext.types import IndexKind
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
-from arcticdb_ext.version_store import SignedRowRange as _SignedRowRange
 from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
 from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
@@ -285,6 +284,53 @@ class VersionedItemWithJoin:
 
     versions: List[VersionedItem]
     data: Any
+
+
+class StreamingReadGenerator:
+    # TODO 13346982120: Is this pattern Pythonic? Or should a different object be returned by __iter__? The current
+    # implementation is destructive, but is reusing an object of this class useful?
+    # Also consider implementing __len__
+    # This also only works with "range-based" for loops, not indexing, although this is probably for the best with the
+    # read-ahead strategy
+    # Add a docstring once form is finalized
+    def __init__(self, nvs, generator_impl, output_format):
+        self._nvs = nvs
+        self._generator_impl = generator_impl
+        self._output_format = output_format
+        self._read_result = None
+        self._versioned_item = None
+
+    def _ensure_read_result(self):
+        if self._read_result is None:
+            self._read_result = ReadResult(*self._generator_impl.read_result())
+            self._versioned_item = VersionedItem(
+                symbol=self._read_result.version.symbol,
+                library=self._nvs._library.library_path,
+                data=None,
+                version=self._read_result.version.version,
+                metadata=denormalize_user_metadata(self._read_result.udm, self._nvs._normalizer),
+                host=self._nvs.env,
+                timestamp=self._read_result.version.timestamp,
+            )
+
+    def versioned_item(self):
+        self._ensure_read_result()
+        return self._versioned_item
+
+    def in_flight_rows(self):
+        return self._generator_impl.in_flight_rows()
+
+    def __iter__(self):
+        self._ensure_read_result()
+        return self
+
+    def __next__(self):
+        data = self._generator_impl.next()
+        if data is None:
+            raise StopIteration
+        return self._nvs._adapt_frame_data(
+            data, self._read_result.norm, self._output_format, self._read_result.sort_order
+        )
 
 
 def _env_config_from_lib_config(lib_cfg, env):
@@ -2263,6 +2309,7 @@ class NativeVersionStore:
         row_range: Tuple[int, int],
         columns: Optional[List[str]],
         query_builder: Optional[QueryBuilder],
+        streaming_read: bool = False,
     ):
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
@@ -2274,13 +2321,13 @@ class NativeVersionStore:
             query_builder.prepend(QueryBuilder().row_range(row_range))
 
         if query_builder is not None:
-            read_query.add_clauses(query_builder.clauses)
+            read_query.add_clauses(query_builder.clauses, streaming_read)
 
         if row_range is not None:
-            read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
+            read_query.set_row_range(row_range[0], row_range[1])
 
         if date_range is not None:
-            read_query.row_filter = _normalize_dt_range(date_range)
+            read_query.set_row_filter(_normalize_dt_range(date_range))
 
         read_query.columns = columns
 
@@ -2355,14 +2402,31 @@ class NativeVersionStore:
         return read_queries
 
     def _get_read_options_and_output_format(
-        self, **kwargs
+        self, streaming_read=False, **kwargs
     ) -> Tuple[_PythonVersionStoreReadOptions, Union[OutputFormat, str]]:
+        def resolve_output_format(streaming_read, **kwargs):
+            output_format = self.resolve_runtime_defaults(
+                "output_format",
+                proto_cfg,
+                global_default=OutputFormat.POLARS if streaming_read else OutputFormat.PANDAS,
+                **kwargs,
+            )
+            if streaming_read and output_format.lower() == OutputFormat.PANDAS.lower():
+                output_format = (
+                    self._runtime_options.output_format
+                    if (
+                        self._runtime_options is not None
+                        and self._runtime_options.output_format.lower() != OutputFormat.PANDAS.lower()
+                    )
+                    else OutputFormat.POLARS
+                )
+                log.info(f"read_streaming does not support Pandas output, defaulting to {output_format}")
+            return output_format
+
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
-        output_format = self.resolve_runtime_defaults(
-            "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
-        )
+        output_format = resolve_output_format(streaming_read, **kwargs)
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
@@ -2456,11 +2520,17 @@ class NativeVersionStore:
         batch_read_options.set_output_format(output_format_to_internal(output_format))
         return batch_read_options, output_format
 
-    def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
+    def _get_queries(
+        self, as_of, date_range, row_range, columns=None, query_builder=None, streaming_read=False, **kwargs
+    ):
         version_query = self._get_version_query(as_of, **kwargs)
-        read_options, output_format = self._get_read_options_and_output_format(**kwargs)
+        read_options, output_format = self._get_read_options_and_output_format(streaming_read, **kwargs)
         read_query = self._get_read_query(
-            date_range=date_range, row_range=row_range, columns=columns, query_builder=query_builder
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            streaming_read=streaming_read,
         )
         return version_query, read_options, read_query, output_format
 
@@ -2497,6 +2567,30 @@ class NativeVersionStore:
         if not implement_read_index and is_columns_empty:
             columns = None
         return columns
+
+    def _read_preamble(
+        self,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+        streaming_read: bool = False,
+        **kwargs,
+    ):
+        implement_read_index = kwargs.get("implement_read_index", False)
+        columns = self._resolve_empty_columns(columns, implement_read_index)
+        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
+        return (implement_read_index,) + self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            streaming_read=streaming_read,
+            **kwargs,
+        )
 
     def read(
         self,
@@ -2551,22 +2645,120 @@ class NativeVersionStore:
         self._validate_kwargs(
             "read", self._valid_read_kwargs.union({"implement_read_index", "allow_secondary"}), kwargs
         )
-
-        implement_read_index = kwargs.get("implement_read_index", False)
-        columns = self._resolve_empty_columns(columns, implement_read_index)
-        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
-        query_builder = copy.deepcopy(query_builder)
-        version_query, read_options, read_query, output_format = self._get_queries(
-            as_of=as_of,
-            date_range=date_range,
-            row_range=row_range,
-            columns=columns,
-            query_builder=query_builder,
-            **kwargs,
+        implement_read_index, version_query, read_options, read_query, output_format = self._read_preamble(
+            as_of, date_range, row_range, columns, query_builder, streaming_read=False, **kwargs
         )
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
+
+    def read_streaming_experimental(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+        prefetch_rows: Optional[int] = None,
+        **kwargs,
+    ) -> StreamingReadGenerator:
+        """
+        Return a generator for iterating through the row-slices of a symbol.
+
+        This API is experimental, and subject to change at any time, not following semver.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        as_of : `Optional[VersionQueryInput]`, default=None
+            Return the data as it was as_of the point in time. Defaults to getting the latest version.
+            `int` : specific version number. Negative indexing is supported, with -1 representing the latest version, -2
+                    the version before that, etc.
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        date_range: `Optional[DateRangeInput]`, default=None
+            DateRange to read data for. Inclusive both for lower and upper bounds. Applicable only for dataframes with
+            a DateTime index. Returns only the part of the data that falls within the given range.
+            The same effect can  be achieved by using the date_range clause of the QueryBuilder class, which will be
+            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
+            details.
+            Only one of date_range or row_range can be provided.
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
+            the handling of negative start/end values.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
+            Only one of date_range or row_range can be provided.
+        columns: `Optional[List[str]]`, default=None
+            Applicable only for dataframes. Determines which columns to return data for.
+        query_builder: 'Optional[QueryBuilder]', default=None
+            A QueryBuilder object to apply to the dataframe before it is returned.
+            For more information see the documentation for the QueryBuilder class.
+        prefetch_rows: `Optional[int]`, default=None
+            How many rows to read-ahead from disk
+
+        Returns
+        -------
+        StreamingReadGenerator
+            An object that can be iterated through to retrieve row-slices of the whole data.
+
+        Raises
+        ------
+        ArcticNativeException
+            If Pandas output format is explicitly requested. This API only supports the Polars and PyArrow output
+            formats.
+            If prefetch_rows is negative.
+            If invalid kwargs are provided.
+        MissingDataException
+            If the symbol does not exist.
+        SchemaException
+            If the symbol is recursively normalized, pickled, or a numpy array.
+            If a date_range filter is provided, but the data is not a timeseries, or is an unsorted timeseries.
+        UserInputException
+            If a QueryBuilder is provided with invalid clauses. Supported operations are filters, projections,
+            date_range, row_range, head, and tail.
+
+        Examples
+        --------
+
+        >>> df = pl.DataFrame({"col": pl.Series(values=[range(50)], dtype=pl.Int64)})
+        >>> for idx in range(5):
+        >>>     lib.append("sym", df.slice(idx * 10, 10))
+        >>> gen = lib.read_streaming("sym")
+        >>> for row_slice in gen:
+        >>>     assert row_slice.equals(df.slice(idx * 10, 10))
+        >>> gen.versioned_item().version
+        4
+        """
+
+        # The kwargs allowed by read but disallowed here are either legacy and scheduled for deprecation,
+        # Pandas-specific, or not supported with streaming reads (incomplete)
+        self._validate_kwargs(
+            "read_streaming",
+            self._valid_read_kwargs.union({"implement_read_index"}).difference(
+                {"force_string_to_object", "dynamic_schema", "set_tz", "allow_sparse", "incomplete"}
+            ),
+            kwargs,
+        )
+        output_format_kwarg = kwargs.get("output_format", None)
+        if output_format_kwarg is not None:
+            check(
+                output_format_kwarg.lower() != OutputFormat.PANDAS.lower(),
+                "read_streaming does not support Pandas output format",
+            )
+        check(
+            prefetch_rows is None or prefetch_rows >= 0,
+            "prefetch_rows must be None or a positive integer, received {}",
+            prefetch_rows,
+        )
+        _, version_query, read_options, read_query, output_format = self._read_preamble(
+            as_of, date_range, row_range, columns, query_builder, streaming_read=True, **kwargs
+        )
+        generator = self.version_store._read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
+        return StreamingReadGenerator(self, generator, output_format)
 
     def rename_columns_arrow_compat(
         self,
@@ -2712,13 +2904,14 @@ class NativeVersionStore:
         VersionedItem
         """
         self._validate_kwargs("head", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
-
-        implement_read_index = kwargs.get("implement_read_index", False)
-        columns = self._resolve_empty_columns(columns, implement_read_index)
-        q = QueryBuilder()
-        q = q.head(n)
-        version_query, read_options, read_query, output_format = self._get_queries(
-            as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
+        implement_read_index, version_query, read_options, read_query, output_format = self._read_preamble(
+            as_of,
+            date_range=None,
+            row_range=None,
+            columns=columns,
+            query_builder=QueryBuilder().head(n),
+            streaming_read=False,
+            **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(
@@ -2748,13 +2941,14 @@ class NativeVersionStore:
         VersionedItem
         """
         self._validate_kwargs("tail", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
-
-        implement_read_index = kwargs.get("implement_read_index", False)
-        columns = self._resolve_empty_columns(columns, implement_read_index)
-        q = QueryBuilder()
-        q = q.tail(n)
-        version_query, read_options, read_query, output_format = self._get_queries(
-            as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
+        implement_read_index, version_query, read_options, read_query, output_format = self._read_preamble(
+            as_of,
+            date_range=None,
+            row_range=None,
+            columns=columns,
+            query_builder=QueryBuilder().tail(n),
+            streaming_read=False,
+            **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(
@@ -2810,15 +3004,15 @@ class NativeVersionStore:
                     row_range = (0, head)
                 elif tail:
                     row_range = (-tail, None)
-                elif isinstance(read_query.row_filter, _RowRange):
+                elif isinstance(read_query.row_range, _RowRange):
                     # Compute n_rows from the filter, clamped to the total symbol row count.
                     # This helps us to match _denormalize_single_index.
                     total_rows = read_result.frame_data.row_count
-                    n_rows = max(0, min(read_query.row_filter.end, total_rows) - read_query.row_filter.start)
+                    n_rows = max(0, min(read_query.row_range.end, total_rows) - read_query.row_range.start)
                     row_range = (0, n_rows)
                 return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
-            if read_query.row_filter is not None and read_query.needs_post_processing:
+            if read_query.post_processing_filter() is not None and read_query.needs_post_processing:
                 # post filter
                 start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
                 row_count = end_idx - start_idx
@@ -2859,16 +3053,17 @@ class NativeVersionStore:
 
     def _compute_filter_start_end_row(self, read_result, read_query):
         start_idx = end_idx = None
-        if isinstance(read_query.row_filter, _RowRange):
-            start_idx = read_query.row_filter.start - read_result.frame_data.offset
-            end_idx = read_query.row_filter.end - read_result.frame_data.offset
-        elif isinstance(read_query.row_filter, _IndexRange):
+        row_filter = read_query.post_processing_filter()
+        if isinstance(row_filter, _RowRange):
+            start_idx = row_filter.start - read_result.frame_data.offset
+            end_idx = row_filter.end - read_result.frame_data.offset
+        elif isinstance(row_filter, _IndexRange):
             index = read_result.frame_data.data[0]
             if len(index) != 0:
-                start_idx = index.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
-                end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
-        else:
-            raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+                start_idx = index.searchsorted(datetime64(row_filter.start_ts, "ns"), side="left")
+                end_idx = index.searchsorted(datetime64(row_filter.end_ts, "ns"), side="right")
+        elif row_filter is not None:
+            raise ArcticNativeException(f"Unrecognised row_filter type: {type(read_query.row_filter)}")
         # Resolve start_idx/end_idx (may be negative or beyond row_count) into valid bounds within [0, row_count].
         start, stop, _ = slice(start_idx, end_idx).indices(read_result.frame_data.row_count)
         return (start, stop)

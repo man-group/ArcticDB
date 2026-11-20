@@ -1,0 +1,837 @@
+"""
+Copyright 2026 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+"""
+
+import numpy as np
+import pandas as pd
+import polars as pl
+import pyarrow as pa
+import pytest
+
+from arcticdb import QueryBuilder
+from arcticdb.exceptions import ArcticNativeException, MissingDataException, SchemaException, UserInputException
+import arcticdb.toolbox.query_stats as qs
+from arcticdb.util.test import config_context, query_stats_operation_count
+
+from python.arcticdb.options import OutputFormat
+
+
+# Comparing dict equality relies on timings matching
+def assert_stat_counts_equal(left, right):
+    for key_type in ["VERSION_REF", "VERSION", "TABLE_INDEX", "TABLE_DATA"]:
+        assert query_stats_operation_count(left, "Memory_GetObject", key_type) == query_stats_operation_count(
+            right, "Memory_GetObject", key_type
+        )
+
+
+def generic_streaming_reads_test(lib, sym, expected_slices, prefetch_rows=None, **kwargs):
+    # Forces version map reload when reading, otherwise cached info is used
+    with config_context("VersionMap.ReloadInterval", 0):
+        with qs.query_stats():
+            expected_vit = lib.read(sym, **kwargs)
+        expected_stats = qs.get_query_stats()
+        qs.reset_stats()
+        with qs.query_stats():
+            gen = lib.read_streaming_experimental(sym, prefetch_rows=prefetch_rows, **kwargs)
+        # No IO yet
+        assert gen.in_flight_rows() == 0
+        assert not len(qs.get_query_stats())
+        qs.reset_stats()
+        with qs.query_stats():
+            slices = []
+            for idx, slice in enumerate(gen):
+                assert slice.equals(expected_slices[idx])
+                # Exactly one record batch per slice
+                if isinstance(slice, pa.Table):
+                    num_record_batches = len(slice.to_batches())
+                elif isinstance(slice, pa.ChunkedArray):
+                    num_record_batches = slice.num_chunks
+                elif isinstance(slice, (pl.DataFrame, pl.Series)):
+                    num_record_batches = slice.n_chunks()
+                else:
+                    assert False
+                assert num_record_batches == 1
+                slices.append(slice)
+        stats = qs.get_query_stats()
+        # Total IO operations match non-streaming reads
+        assert_stat_counts_equal(stats, expected_stats)
+        qs.reset_stats()
+        # Concatenating together slices gives the same result as a non-streaming read
+        if isinstance(slices[0], pa.Table):
+            combined_data = pa.concat_tables(slices)
+        elif isinstance(slices[0], pa.ChunkedArray):
+            # concat_arrays copies into a pa.Array, which fails the equals check due to type mismatch, so wrap in a
+            # ChunkedArray
+            combined_data = pa.chunked_array([pa.concat_arrays(slice.chunks[0] for slice in slices)])
+        elif isinstance(slices[0], (pl.DataFrame, pl.Series)):
+            combined_data = pl.concat(slices)
+        else:
+            assert False
+        assert combined_data.equals(expected_vit.data)
+        expected_vit.data = None
+        assert gen.versioned_item() == expected_vit
+
+
+@pytest.mark.parametrize("prefetch_rows", [None, 0, 20])
+def test_streaming_reads_basic(in_memory_store_factory, clear_query_stats, prefetch_rows):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_basic"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    metadata = {"hello": "world"}
+    lib.write(sym, df, metadata=metadata)
+    generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)], prefetch_rows)
+
+
+def test_streaming_reads_as_of(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_as_of"
+    snap = "test_streaming_reads_as_of_snap"
+    # v0
+    df0 = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    metadata = {"version": "0"}
+    lib.write(sym, df0, metadata=metadata)
+    # v1, kept alive by snapshot
+    df1 = pl.from_pandas(pd.DataFrame({"col": np.arange(100, 200)}))
+    metadata = {"version": "1"}
+    lib.write(sym, df1, metadata=metadata)
+    lib.snapshot(snap)
+    lib.delete_version(sym, 1)
+    # v2, latest
+    df2 = pl.from_pandas(pd.DataFrame({"col": np.arange(200, 300)}))
+    metadata = {"version": "2"}
+    lib.write(sym, df2, metadata=metadata)
+    generic_streaming_reads_test(lib, sym, [df0.slice(idx * 10, 10) for idx in range(10)], as_of=0)
+    generic_streaming_reads_test(lib, sym, [df1.slice(idx * 10, 10) for idx in range(10)], as_of=snap)
+    generic_streaming_reads_test(lib, sym, [df2.slice(idx * 10, 10) for idx in range(10)], as_of=None)
+
+
+def test_streaming_reads_col_slicing(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_col_slicing"
+    df = pl.from_pandas(pd.DataFrame({f"col_{i}": np.arange(i * 20, (i + 1) * 20) for i in range(5)}))
+    lib.write(sym, df)
+    generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)])
+
+
+@pytest.mark.parametrize("row_filter", [None, "row_range", "date_range"])
+def test_streaming_reads_col_filtering(in_memory_store_factory, clear_query_stats, row_filter):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_col_filtering"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame(
+            {f"col_{i}": np.arange(i * 100, (i + 1) * 100) for i in range(5)},
+            index=pd.date_range("2026-01-01", periods=100, name="ts"),
+        ),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    expected_df = df.select("ts", "col_1", "col_4")
+    kwargs = {"columns": ["col_1", "col_4"]}
+    if row_filter is None:
+        expected_slices = [expected_df.slice(idx * 10, 10) for idx in range(10)]
+    else:
+        expected_df = expected_df.slice(15, 70)
+        if row_filter == "row_range":
+            kwargs["row_range"] = (15, 85)
+        elif row_filter == "date_range":
+            kwargs["date_range"] = (pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26"))
+        expected_slices = []
+        for idx in range(8):
+            if idx == 0:
+                expected_slices.append(expected_df.slice(0, 5))
+            elif idx == 7:
+                expected_slices.append(expected_df.slice(65, 5))
+            else:
+                expected_slices.append(expected_df.slice(idx * 10 - 5, 10))
+    generic_streaming_reads_test(lib, sym, expected_slices, **kwargs)
+
+
+def test_streaming_reads_with_row_range(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_row_range"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    # Omits the first and last chunk, and truncates the second and penultimate chunks
+    expected_slices = []
+    for idx in range(8):
+        if idx == 0:
+            expected_slices.append(df.slice(15, 5))
+        elif idx == 7:
+            expected_slices.append(df.slice(80, 5))
+        else:
+            expected_slices.append(df.slice((idx + 1) * 10, 10))
+    generic_streaming_reads_test(lib, sym, expected_slices, row_range=(15, 85))
+
+
+def test_streaming_reads_with_row_range_exact_boundaries(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_row_range_exact_boundaries"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    # Omits the first and last chunk exactly
+    generic_streaming_reads_test(lib, sym, [df.slice((idx + 1) * 10, 10) for idx in range(8)], row_range=(10, 90))
+
+
+def test_streaming_reads_with_open_ended_row_range(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_open_ended_row_range"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)], row_range=(None, None))
+
+
+@pytest.mark.parametrize("row_range", [(None, 15), (None, -85), (85, None), (-15, None)])
+def test_streaming_reads_with_funky_row_ranges(in_memory_store_factory, clear_query_stats, row_range):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_funky_row_ranges"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    expected_slices = (
+        [df.slice(0, 10), df.slice(10, 5)] if row_range[0] is None else [df.slice(85, 5), df.slice(90, 10)]
+    )
+    generic_streaming_reads_test(lib, sym, expected_slices, row_range=row_range)
+
+
+def test_streaming_reads_with_date_range(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_date_range"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    # Omits the first and last chunk, and truncates the second and penultimate chunks
+    expected_slices = []
+    for idx in range(8):
+        if idx == 0:
+            expected_slices.append(df.slice(15, 5))
+        elif idx == 7:
+            expected_slices.append(df.slice(80, 5))
+        else:
+            expected_slices.append(df.slice((idx + 1) * 10, 10))
+    generic_streaming_reads_test(
+        lib, sym, expected_slices, date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26"))
+    )
+
+
+def test_streaming_reads_with_date_range_exact_boundaries(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_date_range_exact_boundaries"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    # Omits the first and last chunk exactly
+    generic_streaming_reads_test(
+        lib,
+        sym,
+        [df.slice((idx + 1) * 10, 10) for idx in range(8)],
+        date_range=(pd.Timestamp("2026-01-11"), pd.Timestamp("2026-03-31")),
+    )
+
+
+def test_streaming_reads_with_open_ended_date_range(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_open_ended_date_range"
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    generic_streaming_reads_test(lib, sym, [df.slice(idx * 10, 10) for idx in range(10)], date_range=(None, None))
+
+
+@pytest.mark.parametrize("date_range", [(None, pd.Timestamp("2026-01-15")), (pd.Timestamp("2026-03-27"), None)])
+def test_streaming_reads_with_funky_date_ranges(in_memory_store_factory, clear_query_stats, date_range):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_funky_date_ranges"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    expected_slices = (
+        [df.slice(0, 10), df.slice(10, 5)] if date_range[0] is None else [df.slice(85, 5), df.slice(90, 10)]
+    )
+    generic_streaming_reads_test(lib, sym, expected_slices, date_range=date_range)
+
+
+def test_streaming_reads_with_date_range_index_values_duplicated_across_segment_boundaries(
+    in_memory_store_factory, clear_query_stats
+):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_date_range_index_values_duplicated_across_segment_boundaries"
+    unique_index_values = pd.date_range("2026-01-01", periods=15)
+    index = []
+    for ts in unique_index_values:
+        index.extend(7 * [ts])
+    index = pd.DatetimeIndex(index, name="ts")
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(105)}, index=index), include_index=True)
+    lib.write(sym, df, index_column=True)
+    # Omits the first and last chunk, and truncates the second and penultimate chunks
+    expected_slices = []
+    for idx in range(9):
+        if idx == 0:
+            expected_slices.append(df.slice(14, 6))
+        elif idx == 8:
+            expected_slices.append(df.slice(90, 8))
+        else:
+            expected_slices.append(df.slice((idx + 1) * 10, 10))
+    generic_streaming_reads_test(
+        lib, sym, expected_slices, date_range=(pd.Timestamp("2026-01-03"), pd.Timestamp("2026-01-14"))
+    )
+
+
+def test_streaming_reads_empty_data(in_memory_version_store, clear_query_stats):
+    with config_context("VersionMap.ReloadInterval", 0):
+        lib = in_memory_version_store
+        lib.set_output_format("polars")
+        sym = "test_streaming_reads_empty_data"
+        df = pl.DataFrame({"col": pl.Series(values=[], dtype=pl.Int64)})
+        metadata = "blah"
+        lib.write(sym, df, metadata=metadata)
+        assert not len(lib.read_index(sym))
+        with qs.query_stats():
+            gen = lib.read_streaming_experimental(sym)
+        # No IO yet
+        assert gen.in_flight_rows() == 0
+        assert not len(qs.get_query_stats())
+        qs.reset_stats()
+        with qs.query_stats():
+            for _ in gen:
+                # There are no row-slices so we never get here
+                # TODO 13346982120: Return a single record-batch with the correct schema in this case
+                assert False
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+        qs.reset_stats()
+        expected_vit = lib.read(sym)
+        expected_vit.data = None
+        assert gen.versioned_item() == expected_vit
+
+
+@pytest.mark.parametrize("filter_type", ["row_range", "date_range"])
+def test_streaming_reads_all_data_filtered_out_at_index_level(in_memory_version_store, clear_query_stats, filter_type):
+    with config_context("VersionMap.ReloadInterval", 0):
+        lib = in_memory_version_store
+        lib.set_output_format("polars")
+        sym = "test_streaming_reads_all_data_filtered_out_at_index_level"
+        # Index last value is 2026-04-10
+        df = pl.from_pandas(
+            pd.DataFrame({"col": np.arange(100)}, index=pd.date_range("2026-01-01", periods=100, name="ts")),
+            include_index=True,
+        )
+        metadata = "blah"
+        lib.write(sym, df, metadata=metadata, index_column=True)
+        kwargs = (
+            {"row_range": (200, 201)}
+            if filter_type == "row_range"
+            else {"date_range": (pd.Timestamp("2027-01-01"), None)}
+        )
+        with qs.query_stats():
+            gen = lib.read_streaming_experimental(sym, **kwargs)
+        # No IO yet
+        assert gen.in_flight_rows() == 0
+        assert not len(qs.get_query_stats())
+        qs.reset_stats()
+        with qs.query_stats():
+            for _ in gen:
+                # All row-slices are filtered out at the index level, so we never get here
+                # TODO 13346982120: Return a single record-batch with the correct schema in this case
+                assert False
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+        qs.reset_stats()
+        expected_vit = lib.read(sym)
+        expected_vit.data = None
+        assert gen.versioned_item() == expected_vit
+
+
+@pytest.mark.parametrize("columns", [None, ["col_0"], ["col_0", "col_9"], ["col_1"], ["col_5", "col_6"]])
+def test_streaming_reads_with_filter(in_memory_store_factory, clear_query_stats, columns):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_filter"
+    df = pl.from_pandas(pd.DataFrame({f"col_{idx}": np.arange(idx * 100, (idx + 1) * 100) for idx in range(10)}))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["col_0"] < 25]
+    expected_df = df if columns is None else df.select(*columns)
+    expected_slices = []
+    for idx in range(10):
+        if idx < 2:
+            expected_slices.append(expected_df.slice(idx * 10, 10))
+        elif idx == 2:
+            expected_slices.append(expected_df.slice(20, 5))
+        else:
+            expected_slices.append(expected_df.slice(0, 0))
+    generic_streaming_reads_test(lib, sym, expected_slices, columns=columns, query_builder=q)
+
+
+def test_streaming_reads_with_projection(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_projection"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q.apply("new_col", q["col"] * 2)
+    expected_df = pl.from_pandas(pd.DataFrame({"col": np.arange(100), "new_col": np.arange(0, 200, 2)}))
+    expected_slices = [expected_df.slice(idx * 10, 10) for idx in range(10)]
+    generic_streaming_reads_test(lib, sym, expected_slices, query_builder=q)
+
+
+@pytest.mark.parametrize("columns", [None, ["col_0"], ["col_0", "col_9"], ["col_1"], ["col_5", "col_6"]])
+def test_streaming_reads_with_row_range_and_filter(in_memory_store_factory, clear_query_stats, columns):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_row_range_and_filter"
+    df = pl.from_pandas(pd.DataFrame({f"col_{idx}": np.arange(idx * 100, (idx + 1) * 100) for idx in range(10)}))
+    lib.write(sym, df)
+    # row_range the first and last chunk, and truncates the second and penultimate chunks
+    # query then filters down further
+    q = QueryBuilder()
+    q = q[q["col_0"] < 28]
+    expected_df = df if columns is None else df.select(*columns)
+    expected_slices = []
+    for idx in range(8):
+        if idx == 0:
+            expected_slices.append(expected_df.slice(15, 5))
+        elif idx == 1:
+            expected_slices.append(expected_df.slice(20, 8))
+        else:
+            expected_slices.append(expected_df.slice(0, 0))
+    generic_streaming_reads_test(lib, sym, expected_slices, row_range=(15, 85), columns=columns, query_builder=q)
+
+
+@pytest.mark.parametrize("columns", [None, ["col_0"], ["col_0", "col_9"], ["col_1"], ["col_5", "col_6"]])
+def test_streaming_reads_with_date_range_and_filter(in_memory_store_factory, clear_query_stats, columns):
+    lib = in_memory_store_factory(segment_row_size=10, column_group_size=2)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_with_date_range_and_filter"
+    # Index last value is 2026-04-10
+    df = pl.from_pandas(
+        pd.DataFrame(
+            {f"col_{idx}": np.arange(idx * 100, (idx + 1) * 100) for idx in range(10)},
+            index=pd.date_range("2026-01-01", periods=100, name="ts"),
+        ),
+        include_index=True,
+    )
+    lib.write(sym, df, index_column=True)
+    # date_range the first and last chunk, and truncates the second and penultimate chunks
+    # query then filters down further
+    q = QueryBuilder()
+    q = q[q["col_0"] < 28]
+    expected_df = df if columns is None else df.select("ts", *columns)
+    expected_slices = []
+    for idx in range(8):
+        if idx == 0:
+            expected_slices.append(expected_df.slice(15, 5))
+        elif idx == 1:
+            expected_slices.append(expected_df.slice(20, 8))
+        else:
+            expected_slices.append(expected_df.slice(0, 0))
+    generic_streaming_reads_test(
+        lib,
+        sym,
+        expected_slices,
+        date_range=(pd.Timestamp("2026-01-16"), pd.Timestamp("2026-03-26")),
+        columns=columns,
+        query_builder=q,
+    )
+
+
+def test_streaming_reads_series(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_series"
+    series = pl.from_pandas(pd.Series(np.arange(100)))
+    lib.write(sym, series)
+    generic_streaming_reads_test(lib, sym, [series.slice(idx * 10, 10) for idx in range(10)])
+
+
+def test_streaming_reads_pyarrow_table(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("pyarrow")
+    sym = "test_streaming_reads_pyarrow_table"
+    table = pa.Table.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, table)
+    generic_streaming_reads_test(lib, sym, [table.slice(idx * 10, 10) for idx in range(10)])
+
+
+def test_streaming_reads_pyarrow_chunked_array(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("pyarrow")
+    sym = "test_streaming_reads_pyarrow_chunked_array"
+    arr = pa.chunked_array([range(100)])
+    lib.write(sym, arr)
+    generic_streaming_reads_test(lib, sym, [arr.slice(idx * 10, 10) for idx in range(10)])
+
+
+@pytest.mark.parametrize("lib_setting", [None, "pandas", "pyarrow", "polars"])
+@pytest.mark.parametrize(
+    "method_arg",
+    [
+        None,
+        "pandas",
+        "pyarrow",
+        "polars",
+        "PANDAS",
+        "PoLArs",
+        OutputFormat.PANDAS,
+        OutputFormat.POLARS,
+        OutputFormat.PYARROW,
+    ],
+)
+def test_streaming_reads_pandas_output_format(in_memory_version_store, lib_setting, method_arg):
+    lib = in_memory_version_store
+    if lib_setting is not None:
+        lib.set_output_format(lib_setting)
+    sym = "test_streaming_reads_pandas_output_format"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    if method_arg is None:
+        gen = lib.read_streaming_experimental(sym)
+        # Just so we can call .lower() below with an is not None check
+        method_arg = "None"
+    elif method_arg.lower() == "pandas":
+        with pytest.raises(ArcticNativeException):
+            lib.read_streaming_experimental(sym, output_format=method_arg)
+        return
+    else:
+        gen = lib.read_streaming_experimental(sym, output_format=method_arg)
+    expected_output_type = pa.Table if lib_setting == "pyarrow" else pl.DataFrame
+    if method_arg.lower() == "pyarrow":
+        expected_output_type = pa.Table
+    elif method_arg.lower() == "polars":
+        expected_output_type = pl.DataFrame
+    for slice in gen:
+        assert isinstance(slice, expected_output_type)
+
+
+@pytest.mark.parametrize("call_versioned_item_before_loop", [True, False])
+@pytest.mark.parametrize("prefetch_rows", [None, 0, 7, 13, 20])
+def test_streaming_reads_io_counts(
+    in_memory_store_factory, clear_query_stats, call_versioned_item_before_loop, prefetch_rows
+):
+    # Forces version map reload when reading, otherwise cached info is used
+    with config_context("VersionMap.ReloadInterval", 0):
+        lib = in_memory_store_factory(segment_row_size=10)
+        lib.set_output_format("polars")
+        sym = "test_streaming_reads_io_counts"
+        df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+        lib.write(sym, df)
+        with qs.query_stats():
+            gen = lib.read_streaming_experimental(sym, prefetch_rows=prefetch_rows)
+        stats = qs.get_query_stats()
+        # No IO yet
+        assert not len(stats)
+        qs.reset_stats()
+        if call_versioned_item_before_loop:
+            with qs.query_stats():
+                gen.versioned_item()
+            stats = qs.get_query_stats()
+            assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
+            # Index key is in version ref so no version chain traversal
+            assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+            assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+            # No data keys read yet
+            assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+            qs.reset_stats()
+        with qs.query_stats():
+            for idx, df_slice in enumerate(gen):
+                assert df_slice.equals(df.slice(idx * 10, 10))
+        stats = qs.get_query_stats()
+        # Version ref and index only read if we have not already called versioned_item
+        assert (
+            query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 0
+            if call_versioned_item_before_loop
+            else 1
+        )
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+        assert (
+            query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
+            if call_versioned_item_before_loop
+            else 1
+        )
+        # Each data key read exactly once, regardless of the prefetch_rows parameter
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 10
+        qs.reset_stats()
+        # Index key already loaded, so calling versioned_item() now does no IO
+        with qs.query_stats():
+            gen.versioned_item()
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+
+
+@pytest.mark.parametrize("segment_row_size", [7, 13, 20, 100_000])
+@pytest.mark.parametrize("prefetch_rows", [None, 0, 7, 13, 20])
+def test_streaming_reads_prefetch_row_counts(in_memory_store_factory, segment_row_size, prefetch_rows):
+    lib = in_memory_store_factory(segment_row_size=segment_row_size)
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_prefetch_row_counts"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    gen = lib.read_streaming_experimental(sym, prefetch_rows=prefetch_rows)
+    # No IO yet
+    assert gen.in_flight_rows() == 0
+    remaining_rows = len(df)
+    for idx, df_slice in enumerate(gen):
+        assert df_slice.equals(df.slice(idx * segment_row_size, segment_row_size))
+        remaining_rows -= len(df_slice)
+        in_flight_rows = gen.in_flight_rows()
+        if prefetch_rows is None:
+            min_in_flight_rows = remaining_rows
+            max_in_flight_rows = remaining_rows
+        else:
+            min_in_flight_rows = min(remaining_rows, prefetch_rows)
+            max_in_flight_rows = min(
+                remaining_rows,
+                segment_row_size * ((prefetch_rows + segment_row_size) // segment_row_size),
+            )
+        assert min_in_flight_rows <= in_flight_rows <= max_in_flight_rows
+    assert remaining_rows == 0
+
+
+@pytest.mark.parametrize("row_range", [None, (5, 15)])
+@pytest.mark.parametrize(
+    "columns",
+    [
+        None,
+        ["present_in_all"],
+        ["present_in_first_only", "present_in_third_only"],
+        ["present_in_first_and_second", "present_in_first_and_third"],
+    ],
+)
+def test_streaming_reads_dynamic_schema(in_memory_version_store_dynamic_schema, clear_query_stats, row_range, columns):
+    lib = in_memory_version_store_dynamic_schema
+    lib.set_output_format("polars")
+    sym = "test_streaming_reads_dynamic_schema"
+    df0 = pl.from_pandas(
+        pd.DataFrame(
+            {
+                "present_in_all": np.arange(0, 10, dtype=np.uint8),
+                "present_in_first_only": np.arange(100, 110, dtype=np.int32),
+                "present_in_first_and_second": np.arange(200, 210, dtype=np.uint16),
+                "present_in_first_and_third": np.arange(300, 310, dtype=np.float32),
+            }
+        )
+    )
+    df1 = pl.from_pandas(
+        pd.DataFrame(
+            {
+                "present_in_all": np.arange(10, 20, dtype=np.uint16),
+                "present_in_first_and_second": np.arange(210, 220, dtype=np.int16),
+                "present_in_second_only": np.arange(410, 420, dtype=np.int64),
+                "present_in_second_and_third": np.arange(510, 520, dtype=np.int16),
+            }
+        )
+    )
+    df2 = pl.from_pandas(
+        pd.DataFrame(
+            {
+                "present_in_all": np.arange(20, 30, dtype=np.uint32),
+                "present_in_first_and_third": np.arange(320, 330, dtype=np.float32),
+                "present_in_second_and_third": np.arange(520, 530, dtype=np.uint16),
+                "present_in_third_only": np.arange(620, 630, dtype=np.float64),
+            }
+        )
+    )
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    # Types above selected such that our dynamic schema type promotion behaviour matches Polars'
+    expected_df = pl.concat([df0, df1, df2], how="diagonal_relaxed")
+    global_schema = {
+        "present_in_all": pl.UInt32,
+        "present_in_first_only": pl.Int32,
+        "present_in_first_and_second": pl.Int32,
+        "present_in_first_and_third": pl.Float32,
+        "present_in_second_only": pl.Int64,
+        "present_in_second_and_third": pl.Int32,
+        "present_in_third_only": pl.Float64,
+    }
+    expected_df = expected_df if columns is None else expected_df.select(*columns)
+    expected_schema = pl.Schema(
+        global_schema if columns is None else {k: v for k, v in global_schema.items() if k in columns}
+    )
+    assert expected_df.schema == expected_schema
+    expected_slices = (
+        [expected_df.slice(idx * 10, 10) for idx in range(3)]
+        if row_range is None
+        else [expected_df.slice(5, 5), expected_df.slice(10, 5)]
+    )
+    generic_streaming_reads_test(lib, sym, expected_slices, row_range=row_range, columns=columns)
+
+
+# Except for "blah", these are kwargs allowed by read but disallowed by read_streaming
+@pytest.mark.parametrize(
+    "kwarg", ["blah", "force_string_to_object", "dynamic_schema", "set_tz", "allow_sparse", "incomplete"]
+)
+def test_streaming_reads_with_invalid_kwargs(in_memory_version_store, kwarg):
+    lib = in_memory_version_store
+    with pytest.raises(ArcticNativeException):
+        lib.read_streaming_experimental("sym", **{kwarg: 0})
+
+
+@pytest.mark.parametrize("prefetch_rows", [-5, "not a number"])
+def test_streaming_reads_invalid_prefetch_rows(in_memory_version_store, prefetch_rows):
+    lib = in_memory_version_store
+    lib.set_output_format("polars")
+    with pytest.raises(ArcticNativeException if isinstance(prefetch_rows, int) else TypeError):
+        lib.read_streaming_experimental("sym", prefetch_rows=prefetch_rows)
+
+
+def test_streaming_reads_with_invalid_clauses(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    lib.set_output_format("polars")
+    q = QueryBuilder().groupby("group").agg({"agg": "sum"})
+    with pytest.raises(UserInputException):
+        lib.read_streaming_experimental("sym", query_builder=q)
+    q = QueryBuilder().resample("1s").agg({"agg": "sum"})
+    with pytest.raises(UserInputException):
+        lib.read_streaming_experimental("sym", query_builder=q)
+
+
+def test_streaming_reads_non_existent_symbol(in_memory_version_store):
+    lib = in_memory_version_store
+    with pytest.raises(MissingDataException):
+        gen = lib.read_streaming_experimental("non_existent")
+        for _ in gen:
+            pass
+    with pytest.raises(MissingDataException):
+        lib.read_streaming_experimental("non_existent").versioned_item()
+
+
+def test_streaming_reads_deleted_symbol(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_deleted_symbol"
+    lib.write(sym, "hello")
+    lib.delete(sym)
+    with pytest.raises(MissingDataException):
+        gen = lib.read_streaming_experimental(sym)
+        for _ in gen:
+            pass
+    with pytest.raises(MissingDataException):
+        lib.read_streaming_experimental(sym).versioned_item()
+
+
+def test_streaming_reads_recursively_normalized_data(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_recursively_normalized_data"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, [df], recursive_normalizers=True)
+    assert not lib.is_symbol_pickled(sym)
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming_experimental(sym)
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming_experimental(sym).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+
+
+def test_streaming_reads_pickled_data(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_pickled_data"
+    lib.write(sym, "hello")
+    assert lib.is_symbol_pickled(sym)
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming_experimental(sym)
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming_experimental(sym).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+
+
+def test_streaming_reads_numpy_array(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_numpy_array"
+    lib.write(sym, np.arange(200_000))
+    assert not lib.is_symbol_pickled(sym)
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming_experimental(sym)
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming_experimental(sym).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+
+
+def test_streaming_reads_date_range_non_timeseries(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_date_range_non_timeseries"
+    df = pl.from_pandas(pd.DataFrame({"col": np.arange(100)}))
+    lib.write(sym, df)
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming_experimental(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1)))
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming_experimental(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1))).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+
+
+def test_streaming_reads_date_range_unsorted_timeseries(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    sym = "test_streaming_reads_date_range_unsorted_timeseries"
+    df = pl.from_pandas(
+        pd.DataFrame({"col": np.arange(2)}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(0)], name="ts")),
+        include_index=True,
+    )
+    lib.write(sym, df)
+    with qs.query_stats():
+        with pytest.raises(SchemaException):
+            gen = lib.read_streaming_experimental(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1)))
+            for _ in gen:
+                pass
+        with pytest.raises(SchemaException):
+            lib.read_streaming_experimental(sym, date_range=(pd.Timestamp(0), pd.Timestamp(1))).versioned_item()
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0

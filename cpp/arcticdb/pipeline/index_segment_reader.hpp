@@ -55,8 +55,6 @@ struct IndexSegmentReader {
 
     SortedValue sorted() const { return tsd().sorted(); }
 
-    void set_sorted(SortedValue sorted) { mutable_tsd().set_sorted(sorted); }
-
     const TimeseriesDescriptor& tsd() const { return seg_.index_descriptor(); }
 
     TimeseriesDescriptor& mutable_tsd() { return seg_.mutable_index_descriptor(); }

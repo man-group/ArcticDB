@@ -13,7 +13,7 @@ from arcticdb.options import (
     ArrowOutputStringFormat,
 )
 from arcticdb.version_store.processing import QueryBuilder, where
-from arcticdb.version_store._store import VersionedItem
+from arcticdb.version_store._store import StreamingReadGenerator, VersionedItem
 import arcticdb.version_store.library as library
 from arcticdb.tools import set_config_from_env_vars
 from arcticdb_ext.version_store import DataError, VersionRequestType

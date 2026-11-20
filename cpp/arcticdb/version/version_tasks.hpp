@@ -35,6 +35,17 @@ struct IndexInformation {
     ARCTICDB_MOVE_ONLY_DEFAULT(IndexInformation)
     IndexInformation() = default;
     IndexInformation(std::pair<VariantKey, SegmentInMemory>&& index, std::optional<ColumnStatsSource>&& column_stats);
+    IndexInformation clone() const {
+        auto key = index_.first;
+        auto seg = index_.second.clone();
+        std::optional<ColumnStatsSource> column_stats;
+        if (column_stats_.has_value()) {
+            column_stats.emplace(
+                    std::make_shared<Segment>(column_stats_->data->clone()), column_stats_->query_metadata
+            );
+        }
+        return {std::make_pair(std::move(key), std::move(seg)), std::move(column_stats)};
+    }
     std::pair<VariantKey, SegmentInMemory> index_;
     std::optional<ColumnStatsSource> column_stats_;
 };

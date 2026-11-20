@@ -15,6 +15,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/pipeline/streaming_read_generator.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
@@ -119,6 +120,12 @@ class PythonVersionStore : public LocalVersionedEngine {
     ReadResult read_dataframe_version(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
             const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
+    );
+
+    StreamingReadGenerator read_streaming(
+            const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+            const ReadOptions& read_options, std::optional<uint64_t> prefetch_rows,
+            std::shared_ptr<std::any> handler_data
     );
 
     VersionedItem read_modify_write(

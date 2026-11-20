@@ -100,7 +100,7 @@ std::set<StreamId> get_incomplete_symbols(const std::shared_ptr<Store>& store);
 std::set<StreamId> get_active_incomplete_refs(const std::shared_ptr<Store>& store);
 
 std::vector<AppendMapEntry> get_incomplete(
-        const std::shared_ptr<Store>& store, const StreamId& stream_id, const pipelines::FilterRange& range,
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::optional<IndexRange>& range,
         uint64_t last_row, bool via_iteration, bool load_data
 );
 

@@ -455,74 +455,64 @@ ColumnTruncation get_truncate_range(
     const auto& row_range = context.slice_and_key().slice().row_range;
     const auto& first_row_offset = frame.offset();
     auto adjusted_row_range = RowRange(row_range.first - first_row_offset, row_range.second - first_row_offset);
-    util::variant_match(
-            read_query.row_filter,
-            [&truncate_rows, &adjusted_row_range, &frame, &context, &index_field, index_field_offset, encoding_version](
-                    const IndexRange& index_filter
-            ) {
-                // Time filter is inclusive of both end points
-                const auto& time_filter = static_cast<const TimestampRange&>(index_filter);
-                // We have historically had some bugs where the start and end index values in the atom key do not
-                // exactly reflect the first and last timestamps in the index of the corresponding data keys, so use
-                // the index column as a definitive source of truth
-                auto [index_column, first_ts, last_ts] = [&]() {
-                    std::shared_ptr<Column> _index_column;
-                    timestamp _first_ts;
-                    timestamp _last_ts;
-                    if (context.fetch_index()) {
-                        _index_column = frame.column_ptr(0);
-                        _first_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.first);
-                        _last_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.second - 1);
-                    } else {
-                        const auto& index_type = frame.descriptor().fields(0UL).type();
-                        _index_column = std::make_shared<Column>(index_type);
-                        std::optional<util::BitMagic> bv;
-                        (void)decode_field(
-                                index_type, index_field, index_field_offset, *_index_column, bv, encoding_version
-                        );
-                        _index_column->set_row_data(_index_column->row_count() - 1);
-                        _first_ts = *_index_column->scalar_at<timestamp>(0);
-                        _last_ts = *_index_column->scalar_at<timestamp>(_index_column->row_count() - 1);
-                    }
-                    return std::make_tuple(_index_column, _first_ts, _last_ts);
-                }();
-                // The `get_truncate_range_from_index` is O(logn). This check serves to avoid the expensive O(logn)
-                // check for blocks in the middle of the range
-                // Note that this is slightly stricter than entity::contains, as if a time filter boundary exactly
-                // matches the segment index boundary, we would keep the whole segment and no log-complexity search
-                // is required
-                if ((time_filter.first > first_ts && time_filter.first <= last_ts) ||
-                    (time_filter.second >= first_ts && time_filter.second < last_ts)) {
-                    if (context.fetch_index()) {
-                        truncate_rows = get_truncate_range_from_index(*index_column, adjusted_row_range, time_filter);
-                    } else {
-                        truncate_rows = get_truncate_range_from_index(
-                                *index_column, {0, index_column->row_count()}, time_filter
-                        );
-                        if (truncate_rows.start_.has_value()) {
-                            truncate_rows.start_ = *truncate_rows.start_ + adjusted_row_range.first;
-                        }
-                        if (truncate_rows.end_.has_value()) {
-                            truncate_rows.end_ = *truncate_rows.end_ + adjusted_row_range.first;
-                        }
-                    }
-                }
-                // Because of an old bug where end_index values in the index key could be larger than the last_ts+1,
-                // we need to handle the case where we need to drop the entire first block.
-                if (time_filter.first > last_ts) {
-                    truncate_rows.start_ = adjusted_row_range.second;
-                }
-            },
-            [&truncate_rows, &adjusted_row_range, &first_row_offset](const RowRange& row_filter) {
-                // The row_filter is with respect to global offset. Column truncation works on column row indices.
-                auto row_filter_start = row_filter.first - first_row_offset;
-                auto row_filter_end = row_filter.second - first_row_offset;
-                truncate_rows = get_truncate_range_from_rows(adjusted_row_range, row_filter_start, row_filter_end);
-            },
-            [](const auto&) {
-                // Do nothing
+    if (read_query.row_filter.has_value()) {
+        const auto& index_filter = *read_query.row_filter;
+        // Time filter is inclusive of both end points
+        const auto& time_filter = static_cast<const TimestampRange&>(index_filter);
+        // We have historically had some bugs where the start and end index values in the atom key do not
+        // exactly reflect the first and last timestamps in the index of the corresponding data keys, so use
+        // the index column as a definitive source of truth
+        auto [index_column, first_ts, last_ts] = [&]() {
+            std::shared_ptr<Column> _index_column;
+            timestamp _first_ts;
+            timestamp _last_ts;
+            if (context.fetch_index()) {
+                _index_column = frame.column_ptr(0);
+                _first_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.first);
+                _last_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.second - 1);
+            } else {
+                const auto& index_type = frame.descriptor().fields(0UL).type();
+                _index_column = std::make_shared<Column>(index_type);
+                std::optional<util::BitMagic> bv;
+                (void)decode_field(index_type, index_field, index_field_offset, *_index_column, bv, encoding_version);
+                _index_column->set_row_data(_index_column->row_count() - 1);
+                _first_ts = *_index_column->scalar_at<timestamp>(0);
+                _last_ts = *_index_column->scalar_at<timestamp>(_index_column->row_count() - 1);
             }
-    );
+            return std::make_tuple(_index_column, _first_ts, _last_ts);
+        }();
+        // The `get_truncate_range_from_index` is O(logn). This check serves to avoid the expensive O(logn)
+        // check for blocks in the middle of the range
+        // Note that this is slightly stricter than entity::contains, as if a time filter boundary exactly
+        // matches the segment index boundary, we would keep the whole segment and no log-complexity search
+        // is required
+        if ((time_filter.first > first_ts && time_filter.first <= last_ts) ||
+            (time_filter.second >= first_ts && time_filter.second < last_ts)) {
+            if (context.fetch_index()) {
+                truncate_rows = get_truncate_range_from_index(*index_column, adjusted_row_range, time_filter);
+            } else {
+                truncate_rows =
+                        get_truncate_range_from_index(*index_column, {0, index_column->row_count()}, time_filter);
+                if (truncate_rows.start_.has_value()) {
+                    truncate_rows.start_ = *truncate_rows.start_ + adjusted_row_range.first;
+                }
+                if (truncate_rows.end_.has_value()) {
+                    truncate_rows.end_ = *truncate_rows.end_ + adjusted_row_range.first;
+                }
+            }
+        }
+        // Because of an old bug where end_index values in the index key could be larger than the last_ts+1,
+        // we need to handle the case where we need to drop the entire first block.
+        if (time_filter.first > last_ts) {
+            truncate_rows.start_ = adjusted_row_range.second;
+        }
+    } else if (std::holds_alternative<RowRange>(read_query.row_range)) {
+        const auto& row_filter = std::get<RowRange>(read_query.row_range);
+        // The row_filter is with respect to global offset. Column truncation works on column row indices.
+        auto row_filter_start = row_filter.first - first_row_offset;
+        auto row_filter_end = row_filter.second - first_row_offset;
+        truncate_rows = get_truncate_range_from_rows(adjusted_row_range, row_filter_start, row_filter_end);
+    }
     return truncate_rows;
 };
 
@@ -830,7 +820,7 @@ void decode_into_frame_dynamic(
 
         // We decode only the columns in `seg` and they are truncated during decoding. We need to truncate the
         // remaining columns in `frame` that were not present in `seg`.
-        if (!std::holds_alternative<std::monostate>(read_query.row_filter)) {
+        if (read_query.has_row_filtering()) {
             for (auto frame_col = index_fieldcount; frame_col < frame.descriptor().field_count(); ++frame_col) {
                 if (!truncated_column_indices.contains(frame_col)) {
                     auto& column = frame.column(static_cast<position_t>(frame_col));
