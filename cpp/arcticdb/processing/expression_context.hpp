@@ -9,9 +9,11 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
 
@@ -25,6 +27,16 @@ struct ExpressionContext {
 
     std::shared_ptr<ExpressionNode> root_;
     bool dynamic_schema_{false};
+    // Which results to memoize, the same for every processing unit, so planned once by the clause. It names the root
+    // it was planned for, which ExpressionNode::compute checks.
+    std::shared_ptr<const expression_detail::MemoPlan> memo_plan_;
+
+    void plan_memoization() {
+        util::check(static_cast<bool>(root_), "Cannot plan memoization without an expression");
+        auto plan = expression_detail::plan_memoization(*root_);
+        plan.root = root_;
+        memo_plan_ = std::make_shared<const expression_detail::MemoPlan>(std::move(plan));
+    }
 };
 
 } // namespace arcticdb

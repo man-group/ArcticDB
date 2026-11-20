@@ -169,3 +169,15 @@ def test_to_strings_datetime_projection():
     q = QueryBuilder()
     q["shifted"] = q["date_col"] + datetime.timedelta(days=1)
     assert str(q) == 'PROJECT Column["shifted"] = (Column["date_col"] ADD Val(INT64:86400000000000))'
+
+
+@pytest.mark.parametrize("padding", ["", "a", "aa"])
+def test_long_non_ascii_label_is_cut_on_a_character_boundary(padding):
+    # Each padding puts the 1024-byte cut at a different byte of a three-byte character
+    def build(last):
+        q = QueryBuilder()
+        return q[~(q["x"] == padding + "€" * 400 + last)]
+
+    assert "..." in str(build("a"))
+    # They differ only after the cut, so the hash that ends the label tells them apart
+    assert build("a") != build("b")

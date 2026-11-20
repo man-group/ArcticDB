@@ -1353,34 +1353,63 @@ def create_value(value):
 
 
 def visit_expression(expr):
-    def _visit_child(node):
-        if isinstance(node, ExpressionNode):
-            if node.operator == COLUMN:
-                input_columns.add(node.left)
-                return _ExpressionNode(_ColumnName(node.left))
-            return _visit(node)
-        elif isinstance(node, (np.ndarray, list)):
+    # Iterative, so deep expressions do not hit the recursion limit, and memoised on node identity, so a sub-expression
+    # used more than once becomes one shared C++ node rather than one copy per path.
+    converted = {}
+
+    def _leaf(node):
+        if isinstance(node, (np.ndarray, list)):
             return _ExpressionNode(_ValueSet(node))
         elif isinstance(node, _RegexGeneric):
             return _ExpressionNode(node)
         else:
             return _ExpressionNode(create_value(node))
 
-    def _visit(node):
-        if isinstance(node, bool):
-            raise ArcticNativeException("Query is trivially {}".format(node))
-
-        left = _visit_child(node.left)
+    def _operands(node):
+        # In the order they are converted, and so the order in which an invalid one raises: left, condition, right
         if node.condition is not None:
             check(node.right is not None, "Ternary operator requires three inputs")
-            condition = _visit_child(node.condition)
-            right = _visit_child(node.right)
-            return _ExpressionNode(condition, left, right, node.operator)
+            return [node.left, node.condition, node.right]
         elif node.right is not None:
-            right = _visit_child(node.right)
-            return _ExpressionNode(left, right, node.operator)
+            return [node.left, node.right]
         else:
-            return _ExpressionNode(left, node.operator)
+            return [node.left]
+
+    def _operation(operator, operands):
+        if len(operands) == 3:
+            left, condition, right = operands
+            return _ExpressionNode(condition, left, right, operator)
+        return _ExpressionNode(*operands, operator)
+
+    def _visit(root):
+        # Each entry holds a node and its operands converted so far
+        stack = [(root, [])]
+        while stack:
+            node, done = stack[-1]
+            if id(node) in converted:
+                stack.pop()
+                continue
+            # A bare column at the root is converted as an operation, as it always was
+            if node.operator == COLUMN and node is not root:
+                input_columns.add(node.left)
+                converted[id(node)] = _ExpressionNode(_ColumnName(node.left))
+                stack.pop()
+                continue
+            operands = _operands(node)
+            while len(done) < len(operands):
+                child = operands[len(done)]
+                if not isinstance(child, ExpressionNode):
+                    done.append(_leaf(child))
+                elif id(child) in converted:
+                    done.append(converted[id(child)])
+                else:
+                    break
+            if len(done) == len(operands):
+                stack.pop()
+                converted[id(node)] = _operation(node.operator, done)
+            else:
+                stack.append((operands[len(done)], []))
+        return converted[id(root)]
 
     expression_context = _ExpressionContext()
     input_columns = set()
