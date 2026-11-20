@@ -189,6 +189,11 @@ class VenvArctic:
             )
 
             python_commands = self.add_traceability_prints(python_commands)
+            # Old clients can crash during interpreter shutdown, after every command has passed.
+            # Exit without finalization so that only a failing command makes the script fail.
+            # Not on Windows: os._exit runs static destructors there and hangs clients before 6.1.1 (#2582).
+            if not is_running_on_windows():
+                python_commands += ["import os, sys", "sys.stdout.flush()", "sys.stderr.flush()", "os._exit(0)"]
 
             python_path = os.path.join(dir, "run.py")
             with open(python_path, "w") as python_file:
