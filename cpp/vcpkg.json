@@ -68,6 +68,10 @@
       "platform": "windows"
     },
     {
+      "name": "mimalloc",
+      "platform": "windows"
+    },
+    {
       "name": "curl",
       "version>=": "8.18.0",
       "$version reason": "Issues with libcurl==8.17.0 which need investigation"
@@ -118,6 +122,7 @@
     { "name": "libbson", "version": "1.30.3" },
     { "name": "libevent", "version": "2.1.12#7" },
     { "name": "lz4", "version": "1.9.3#4" },
+    { "name": "mimalloc", "version": "3.3.2" },
     { "name": "mongo-c-driver", "version": "1.28.0" },
     { "name": "mongo-cxx-driver", "version": "3.10.2#1" },
     { "name": "prometheus-cpp", "version": "1.1.0" },
