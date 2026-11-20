@@ -12,6 +12,7 @@
 #include <util/test/generators.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
+#include <arcticdb/async/test/scoped_thread_counts.hpp>
 
 using namespace arcticdb;
 
@@ -159,11 +160,7 @@ class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
         StorageFailureSimulator::instance()->configure({{FailureType::DELETE, scenario.delete_failures}});
 
         if (scenario.single_thread) {
-            std::vector<std::pair<std::string, std::optional<int64_t>>> configs = {
-                    {{"VersionStore.NumCPUThreads", 1}, {"VersionStore.NumIOThreads", 1}}
-            };
-            scoped_config_ = std::make_unique<ScopedConfig>(std::move(configs));
-            async::TaskScheduler::instance()->reattach_instance();
+            thread_counts_.emplace();
         }
         proto::storage::VersionStoreConfig version_store_cfg;
         version_store_cfg.mutable_write_options()->set_column_group_size(100);
@@ -175,13 +172,12 @@ class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
 
     void TearDown() override {
         StorageFailureSimulator::instance()->reset();
-        scoped_config_.reset();
-        async::TaskScheduler::instance()->reattach_instance();
+        thread_counts_.reset();
     }
 
     std::unique_ptr<version_store::PythonVersionStore> version_store_;
     StreamId stream_id_{"sym"};
-    std::unique_ptr<ScopedConfig> scoped_config_;
+    std::optional<async::ScopedThreadCounts> thread_counts_;
 };
 
 class RollbackOnQuotaExceededUpdateOrAppend : public RollbackOnQuotaExceeded {
@@ -193,11 +189,7 @@ class RollbackOnQuotaExceededUpdateOrAppend : public RollbackOnQuotaExceeded {
         version_store_cfg.mutable_write_options()->set_column_group_size(100);
         version_store_cfg.mutable_write_options()->set_segment_row_size(10);
         if (scenario.single_thread) {
-            std::vector<std::pair<std::string, std::optional<int64_t>>> configs = {
-                    {{"VersionStore.NumCPUThreads", 1}, {"VersionStore.NumIOThreads", 1}}
-            };
-            scoped_config_ = std::make_unique<ScopedConfig>(std::move(configs));
-            async::TaskScheduler::instance()->reattach_instance();
+            thread_counts_.emplace();
         }
         auto [version_store, _] = python_version_store_in_memory(version_store_cfg);
         version_store_ = std::make_unique<version_store::PythonVersionStore>(std::move(version_store));

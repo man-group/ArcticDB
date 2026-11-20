@@ -46,6 +46,13 @@ void TaskScheduler::reattach_instance() {
     }
 }
 
+void TaskScheduler::replace_instance_for_testing() {
+    TaskScheduler* old = instance();
+    instance_->ptr_ = new TaskScheduler;
+    old->join();
+    delete old;
+}
+
 bool TaskScheduler::is_forked() { return TaskScheduler::forked_; }
 
 void TaskScheduler::set_forked(bool val) { TaskScheduler::forked_ = val; }

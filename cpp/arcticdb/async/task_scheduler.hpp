@@ -301,6 +301,8 @@ class TaskScheduler {
     static TaskScheduler* instance();
     static bool is_initialized();
     static void reattach_instance();
+    // Tests only: like reattach_instance, but joins and frees the old scheduler instead of leaking it
+    static void replace_instance_for_testing();
     static void stop_active_threads();
     static bool forked_;
     static bool is_forked();
