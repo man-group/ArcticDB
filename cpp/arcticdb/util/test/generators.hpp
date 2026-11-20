@@ -505,14 +505,7 @@ using SegmentSinkWrapper = SegmentSinkWrapperImpl<TestSegmentAggregatorNoSegment
 inline ResampleClause<ResampleBoundary::LEFT> generate_resample_clause(
         const std::vector<NamedAggregator>& named_aggregators
 ) {
-    ResampleClause<ResampleBoundary::LEFT> res{
-            "dummy_rule",
-            ResampleBoundary::LEFT,
-            [](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin
-            ) -> std::vector<timestamp> { return {}; },
-            0,
-            "dummy_origin"
-    };
+    ResampleClause<ResampleBoundary::LEFT> res{"dummy_rule", 1, ResampleBoundary::LEFT, 0, "dummy_origin"};
     res.set_aggregations(named_aggregators);
     return res;
 }
