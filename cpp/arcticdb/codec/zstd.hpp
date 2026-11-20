@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/codec/core.hpp>
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
@@ -55,16 +56,18 @@ struct ZstdDecoder {
         const std::size_t decomp_size = ZSTD_getFrameContentSize(in, in_bytes);
         codec::check<ErrorCode::E_DECODE_ERROR>(
                 decomp_size == out_bytes,
-                "expected out_bytes == zstd deduced bytes, actual {} != {}",
+                "Frame size mismatch in zstd block: expected {} bytes, frame header says {} ({} encoded bytes)",
                 out_bytes,
-                decomp_size
+                decomp_size,
+                in_bytes
         );
         std::size_t real_decomp = ZSTD_decompress(t_out, out_bytes, in, in_bytes);
         codec::check<ErrorCode::E_DECODE_ERROR>(
                 real_decomp == out_bytes,
-                "expected out_bytes == zstd decompressed bytes, actual {} != {}",
+                "Decoded size mismatch in zstd block: expected {} bytes, decoded {} ({} encoded bytes)",
                 out_bytes,
-                real_decomp
+                real_decomp,
+                in_bytes
         );
     }
 };

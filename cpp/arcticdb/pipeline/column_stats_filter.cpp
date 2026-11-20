@@ -10,6 +10,7 @@
 #include <arcticdb/pipeline/column_stats_dispatch.hpp>
 
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/codec/decode_error_context.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
@@ -602,8 +603,14 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         }
 
         auto window = row_window_of_interest(isr, *surviving, query_metadata.date_range);
-        SegmentInMemory partial_segment =
-                partial_decode_column_stats_segment(*column_stats_compressed, tsd, query_metadata.columns_of_interest);
+        SegmentInMemory partial_segment = with_decode_context(
+                [&] {
+                    return partial_decode_column_stats_segment(
+                            *column_stats_compressed, tsd, query_metadata.columns_of_interest
+                    );
+                },
+                [] { return std::string{"column stats"}; }
+        );
         ColumnStatsData column_stats{std::move(partial_segment), tsd, window};
         ExpressionContext expression_context = *query_metadata.filter_expression;
         auto filter = create_column_stats_filter(std::move(column_stats), std::move(expression_context));
