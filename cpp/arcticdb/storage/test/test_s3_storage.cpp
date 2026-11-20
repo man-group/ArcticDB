@@ -495,10 +495,25 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
         write_in_store(store, symbol_matching_prefix);
         symbols.emplace(symbol_matching_prefix);
         auto symbol_not_matching_prefix = fmt::format("blah_{}_{}", prefix, i);
-        write_in_store(store, symbol_matching_prefix);
+        write_in_store(store, symbol_not_matching_prefix);
     }
     ASSERT_EQ(list_in_store(store, KeyType::TABLE_DATA, prefix), symbols);
     ASSERT_TRUE(store.directory_bucket());
+}
+
+// Directory buckets reject every ListObjectsV2 prefix not ending in '/', not just the first one
+// (https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html, "Prefix")
+TEST_F(S3StorageFixture, test_list_directory_bucket_after_detection) {
+    auto* mock_s3_client = dynamic_cast<S3ClientTestWrapper*>(&store.client());
+    mock_s3_client->simulate_directory_bucket();
+    auto symbols = populate_store(store, "symbol", 0, 5);
+    populate_store(store, "other", 0, 5);
+
+    ASSERT_EQ(list_in_store(store, KeyType::TABLE_DATA, "symbol"), symbols);
+    ASSERT_TRUE(store.directory_bucket());
+    ASSERT_EQ(list_in_store(store, KeyType::TABLE_DATA, "symbol"), symbols);
+    // The mock reports no object sizes, so this only checks that the listing request is accepted
+    ASSERT_NO_THROW(store.visit_object_sizes(KeyType::TABLE_DATA, "symbol", [](const VariantKey&, CompressedSize) {}));
 }
 
 TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
@@ -514,7 +529,7 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
         write_in_store(store, symbol_matching_prefix);
         symbols.emplace(symbol_matching_prefix);
         auto symbol_not_matching_prefix = fmt::format("blah_{}_{}", prefix, i);
-        write_in_store(store, symbol_matching_prefix);
+        write_in_store(store, symbol_not_matching_prefix);
     }
     ASSERT_THROW(list_in_store(store, KeyType::TABLE_DATA, prefix), UnexpectedS3ErrorException);
     ASSERT_FALSE(store.directory_bucket());
