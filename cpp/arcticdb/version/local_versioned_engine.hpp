@@ -432,6 +432,23 @@ class LocalVersionedEngine : public VersionedEngine {
             const bool prune_previous_versions
     ) override;
 
+    /**
+     * For each stream_id, locate all versions on disk and report amount of data, which is shared with
+     * earlier versions. The amounts are floats in the range 0 to 1. 0 indicates no segments are shared,
+     * 1 indicates the version consists entirely of segments shared with earlier versions.
+     *
+     * The calculation uses the segments' row and column sizes as a proxy for size on disk, which does
+     * not take into account variable-length encodings such as strings.
+     *
+     * @param stream_ids
+     * @throws NoDataFoundException
+     *
+     * @return Mapping from symbol version number to measure of de-duplicated data.
+     */
+    std::unordered_map<std::tuple<StreamId, VersionId>, double> batch_dedup_ratios_internal(
+            const std::vector<StreamId>& stream_ids
+    ) override;
+
   protected:
     template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(const std::shared_ptr<Store>& store, const ClockType& = ClockType{});
