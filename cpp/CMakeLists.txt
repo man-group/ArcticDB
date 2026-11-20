@@ -40,6 +40,7 @@ option(ARCTICDB_USING_THREAD_SANITIZER "Enable thread sanitizer." OFF)
 option(ARCTICDB_USING_UB_SANITIZER "Enable undefined behavior sanitizer." OFF)
 option(ARCTICDB_LOG_PERFORMANCE "Whether to log performance timings." OFF)
 option(ARCTICDB_COUNT_ALLOCATION "Override new and delete to count allocations." OFF)
+option(ARCTICDB_USE_MIMALLOC "Use mimalloc allocator for Windows static (non-conda) builds." ON)
 option(ARCTICDB_KEEP_DEBUG_SYMBOLS "Whether to keep debug symbols in RelWithDebInfo builds." OFF)
 option(ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT "Enables pretty printing of segments. The printing can affect runtime" OFF)
 set(ARCTICDB_PDB_GENERATION_MODE "TARGET" CACHE STRING
@@ -90,6 +91,17 @@ if(${ARCTICDB_COUNT_ALLOCATIONS})
             GIT_TAG        v0.7.3
     )
     FetchContent_MakeAvailable(cpptrace)
+endif()
+
+# Static (/MT) Windows builds link every C++ dependency into arcticdb_ext.pyd, so routing
+# operator new/delete and arcticdb::Allocator through mimalloc is self-contained. Conda builds
+# link shared third-party DLLs against the dynamic CRT (/MD), where overriding new/delete only
+# inside arcticdb_ext would cause cross-DLL heap mismatches.
+set(ARCTICDB_MIMALLOC_ENABLED OFF)
+if(ARCTICDB_USE_MIMALLOC AND WIN32 AND NOT ARCTICDB_USING_CONDA AND NOT ARCTICDB_COUNT_ALLOCATIONS)
+    set(ARCTICDB_MIMALLOC_ENABLED ON)
+    add_compile_definitions(ARCTICDB_USE_MIMALLOC)
+    message(STATUS "Building ArcticDB with mimalloc allocator")
 endif()
 
 if(ARCTICDB_SANITIZER_FLAGS)
