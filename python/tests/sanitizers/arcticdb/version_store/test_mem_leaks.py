@@ -228,7 +228,7 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
 
 
 @SANITIZER_TESTS_MARK
-def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
+def test_mem_leak_read_all_arctic_lib_100gb(arctic_library_lmdb_100gb):
     lib: adb.Library = arctic_library_lmdb_100gb
 
     df = generate_big_dataframe()
@@ -466,7 +466,7 @@ def library_with_big_symbol_(arctic_library_lmdb) -> Generator[Tuple[Library, st
 
 
 @SANITIZER_TESTS_MARK
-def test_mem_leak_read_all_arctic_lib(library_with_big_symbol_):
+def test_mem_leak_read_all_arctic_lib_big_symbol(library_with_big_symbol_):
     lib: Library = None
     (lib, symbol) = library_with_big_symbol_
     logger.info("Test starting")
