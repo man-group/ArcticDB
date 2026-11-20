@@ -15,10 +15,9 @@
 
 namespace arcticdb::storage::s3 {
 
-TEST(S3ApiEventLoopThreads, DefaultsToZero) {
-    // Zero must select the SDK Default
+TEST(S3ApiEventLoopThreads, DefaultsToOneThread) {
     ScopedConfig unset({{"AWS.EventLoopThreads", std::nullopt}});
-    ASSERT_EQ(event_loop_thread_count_from_config(), 0);
+    ASSERT_EQ(event_loop_thread_count_from_config(), 1);
 }
 
 TEST(S3ApiEventLoopThreads, ReadsConfiguredValue) {
