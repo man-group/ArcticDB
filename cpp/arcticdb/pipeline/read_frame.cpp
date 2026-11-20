@@ -404,6 +404,7 @@ void decode_or_expand(
     }
 }
 
+namespace {
 template<RowSpace Space = RowSpace::FRAME>
 ColumnTruncation<Space> get_truncate_range_from_rows(
         const RowRange& slice_range, size_t filter_start, size_t filter_end
@@ -429,7 +430,6 @@ ColumnTruncation<Space> get_truncate_range_from_rows(
     return {truncate_start, truncate_end};
 }
 
-namespace {
 SegmentTruncation get_truncate_range_from_index(
         const Column& column, const RowRange& slice_range, const TimestampRange& timestamp_range
 ) {
@@ -465,7 +465,6 @@ FrameTruncation get_truncate_range_from_segment_index_rows(
     const auto end_row = slice_range.start() + (std::upper_bound(begin, end, timestamp_range.second) - begin);
     return get_truncate_range_from_rows(slice_range, start_row, end_row);
 }
-} // namespace
 
 FrameTruncation get_truncate_range(
         const SegmentInMemory& frame, const PipelineContextRow& context, const ReadQuery& read_query,
@@ -546,7 +545,8 @@ FrameTruncation get_truncate_range(
             }
     );
     return truncate_rows;
-};
+}
+} // namespace
 
 size_t get_field_range_compressed_size(
         size_t start_idx, size_t num_fields, const SegmentHeader& hdr, const EncodedFieldCollection& fields

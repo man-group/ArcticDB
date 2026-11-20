@@ -9,6 +9,7 @@
 #pragma once
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <cstdint>
 #include <optional>
 
 namespace arcticdb::pipelines {
@@ -19,7 +20,7 @@ namespace arcticdb {
 class Column;
 class SegmentInMemory;
 
-enum class RowSpace { FRAME, SEGMENT };
+enum class RowSpace : std::uint8_t { FRAME, SEGMENT };
 
 template<RowSpace Space>
 struct ColumnTruncation {
@@ -56,7 +57,7 @@ struct ColumnMapping {
             const size_t first_row, const size_t offset_bytes, const size_t dest_bytes, const size_t dest_col
     );
 
-    void set_truncate(FrameTruncation truncate) { truncate_ = std::move(truncate); }
+    void set_truncate(FrameTruncation truncate) { truncate_ = truncate; }
 
     bool requires_truncation() const { return truncate_.requires_truncation(); }
 
