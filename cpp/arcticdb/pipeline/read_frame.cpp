@@ -22,6 +22,7 @@
 #include <arcticdb/codec/slice_data_sink.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
 #include <arcticdb/pipeline/string_reducers.hpp>

@@ -16,7 +16,6 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <folly/Range.h>
 
-#include <exception>
 #include <optional>
 
 namespace arcticdb::util {

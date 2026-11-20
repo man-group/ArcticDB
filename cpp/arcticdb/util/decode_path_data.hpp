@@ -8,24 +8,13 @@
 
 #pragma once
 
-#include <arcticdb/util/spinlock.hpp>
-#include <arcticdb/util/constructors.hpp>
-#include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/lazy.hpp>
 
-#include <vector>
 #include <folly/concurrency/ConcurrentHashMap.h>
-#include <boost/container/small_vector.hpp>
 
 #include <Python.h>
 
 namespace arcticdb {
-class Column;
-
-namespace entity {
-struct TypeDescriptor;
-}
 
 using UniqueStringMapType = folly::ConcurrentHashMap<std::string_view, PyObject*>;
 
