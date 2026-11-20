@@ -148,7 +148,7 @@ class Flattener:
         self._create_meta_structure(obj, "dummy", to_write)
         msgpack_normalizer = MsgPackNormalizer()
         msgpack_normalizer.strict_mode = True  # To prevent msgpack from falling back to pickle silently
-        base_normalizer = CompositeNormalizer(msgpack_normalizer, use_norm_failure_handler_known_types=False)
+        base_normalizer = CompositeNormalizer(msgpack_normalizer)
         for sym, obj_to_write in to_write.items():
             try:
                 opt_custom = self.custom_normalizer.normalize(obj_to_write)

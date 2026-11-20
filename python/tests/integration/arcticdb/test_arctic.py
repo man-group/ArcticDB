@@ -864,7 +864,6 @@ def test_default_library_config(mem_storage, lib_name):
     assert write_options.use_tombstones == True
     assert write_options.fast_tombstone_all == True
     assert write_options.prune_previous_version == False
-    assert write_options.pickle_on_failure == False
     assert write_options.snapshot_dedup == False
     assert write_options.delayed_deletes == False
 
