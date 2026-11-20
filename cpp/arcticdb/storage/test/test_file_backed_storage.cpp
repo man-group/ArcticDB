@@ -7,9 +7,11 @@
  */
 
 #include <cerrno>
+#include <fcntl.h>
 #include <gtest/gtest.h>
 
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
+#include <arcticdb/storage/file_backed/real_posix.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/storage/test/faulty_posix.hpp>
@@ -17,6 +19,7 @@
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/error_code.hpp>
 
+#include <boost/scope_exit.hpp>
 #include <fmt/format.h>
 
 #include <algorithm>
@@ -52,6 +55,37 @@ class TempDir {
     fs::path temp_path_;
 };
 
+FileBackedStorage get_storage(
+        const fs::path& dir, const std::shared_ptr<PosixInterface>& posix = std::make_shared<RealPosix>()
+) {
+    arcticdb::proto::file_storage::Config cfg;
+    cfg.set_dir_path(dir.generic_string());
+    arcticdb::storage::LibraryPath library_path("test_lib", '.');
+    return FileBackedStorage(library_path, storage::OpenMode::DELETE, cfg, posix);
+}
+
+TEST(FileStorageInit, FileExistsWhereLibraryWouldGo) {
+    TempDir temp_dir(*::testing::UnitTest::GetInstance()->current_test_info());
+
+    // What if a file exists with the same name as the directory which the library needs?
+    int fd = ::open((temp_dir.get() / "test_lib").c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+    ASSERT_GT(fd, 0);
+    int res = ::close(fd);
+    ASSERT_EQ(res, 0);
+
+    ASSERT_THROW(get_storage(temp_dir.get()), UnexpectedFileStorageException);
+}
+
+TEST(FileStorageInit, NoPermissionToCreateLibrary) {
+    TempDir temp_dir(*::testing::UnitTest::GetInstance()->current_test_info());
+    // TODO: Try with chmod that lets you read at least. That would cause mkdir to fail. Right now exists() fails.
+    ::chmod(temp_dir.get().c_str(), 0);
+    BOOST_SCOPE_EXIT(&temp_dir) { ::chmod(temp_dir.get().c_str(), 07777); }
+    BOOST_SCOPE_EXIT_END
+
+    ASSERT_THROW(get_storage(temp_dir.get()), PermissionException);
+}
+
 class FileBackedStorageFixture : public ::testing::Test {
   public:
     FileBackedStorageFixture() :
@@ -60,8 +94,7 @@ class FileBackedStorageFixture : public ::testing::Test {
         arcticdb::proto::file_storage::Config cfg;
         cfg.set_dir_path(temp_dir_.get().generic_string());
 
-        // I copied the delim from elsewhere. I don't get it. The default is '.'.
-        arcticdb::storage::LibraryPath library_path("test_lib", '/');
+        arcticdb::storage::LibraryPath library_path("test_lib", '.');
         storage_.emplace(library_path, storage::OpenMode::DELETE, cfg, faulty_posix_);
     }
 

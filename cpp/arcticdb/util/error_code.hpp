@@ -96,7 +96,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5050, E_MONGO_BULK_OP_NO_REPLY)                                                                         \
     ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR)                                                                         \
     ERROR_CODE(5052, E_MONGO_RETRYABLE)                                                                                \
-    ERROR_CODE(5053, E_UNEXPECTED_FILE_STORAGE_ERROR)                                                                  \
+    ERROR_CODE(5060, E_UNEXPECTED_FILE_STORAGE_ERROR)                                                                  \
+    ERROR_CODE(5061, E_STALE_FILE_DESCRIPTOR)                                                                          \
     ERROR_CODE(5090, E_NON_INCREASING_INDEX_VERSION)                                                                   \
     ERROR_CODE(6000, E_UNSORTED_DATA)                                                                                  \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT)                                                                          \
@@ -199,6 +200,7 @@ using MongoOperationNoReplyException = ArcticSpecificException<ErrorCode::E_MONG
 using UnexpectedMongoException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_MONGO_ERROR>;
 using MongoRetryableException = ArcticSpecificException<ErrorCode::E_MONGO_RETRYABLE>;
 using UnexpectedFileStorageException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>;
+using StaleFileDescriptor = ArcticSpecificException<ErrorCode::E_STALE_FILE_DESCRIPTOR>;
 using NonIncreasingIndexVersionException = ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;

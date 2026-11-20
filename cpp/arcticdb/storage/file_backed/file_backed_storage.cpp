@@ -25,7 +25,7 @@
 #include <filesystem>
 #include <random>
 #include <stack>
-#include <system_error>
+#include <stdexcept>
 
 // TODO: Windows will be an entirely separate implementation. Some of the Storage class implementations will be
 //       platform independent, so perhaps it is prudent to introduce some separate TUs per platform.
@@ -62,6 +62,12 @@ void raise_io_error(int error_code, std::string_view message) {
     case ENOSPC:
     case EDQUOT:
         storage::raise<ErrorCode::E_QUOTA_EXCEEDED>(message);
+        break;
+    case ENOENT:
+        storage::raise<ErrorCode::E_KEY_NOT_FOUND>(message);
+        break;
+    case ESTALE:
+        storage::raise<ErrorCode::E_STALE_FILE_DESCRIPTOR>(message);
         break;
     default:
         storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>("{}: {}", message, std::strerror(error_code));
@@ -119,9 +125,7 @@ bool exists(PosixInterface& posix, const fs::path& dir, const fs::path& subpath,
         return true;
 
     if (errno != ENOENT)
-        throw std::system_error(
-                errno, std::generic_category(), fmt::format("do_key_exists() failed to stat {}", to_check.c_str())
-        );
+        raise_io_error(errno, fmt::format("do_key_exists() failed to stat {}", to_check.c_str()));
 
     if (allow_refresh) {
         refresh_ancestors(posix, dir, to_check);
@@ -138,16 +142,15 @@ class FdHolder {
         posix_(posix) {
         assert((flags & O_CLOEXEC) != 0 && "For fork safety, mode O_CLOEXEC should always be set");
         fd_ = posix.open(pathname.c_str(), flags, mode);
-        // TODO: Use a retry wrapper. Note that whether we are creating a new file or trying to open an existing one
-        //       makes a difference to the decision!
         if (fd_ < 0) {
             if (errno == ENOENT) {
+                // Only occurs without O_CREAT
                 refresh_ancestors(posix, storage_dir, pathname);
                 fd_ = posix.open(pathname.c_str(), flags, mode);
             }
         }
         if (fd_ < 0) {
-            throw std::system_error(errno, std::generic_category(), fmt::format("Failed to open {}", pathname.c_str()));
+            raise_io_error(errno, fmt::format("Failed to open {}", pathname.c_str()));
         }
     }
 
@@ -157,9 +160,7 @@ class FdHolder {
         // TODO Note that there is no retry here on ENOENT. It's awkward to refresh the ancestor directories, since we'd
         // have to close the fd and reopen it. Technically doable from within here. Do it later.
         if (fd_ < 0)
-            throw std::system_error(
-                    errno, std::generic_category(), fmt::format("Failed to openat {}", pathname.c_str())
-            );
+            raise_io_error(errno, fmt::format("Failed to openat {}", pathname.c_str()));
     }
 
     ~FdHolder() {
@@ -212,22 +213,29 @@ class FdHolder {
 
 class Directory : public FdHolder {
   public:
-    Directory(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
+    Directory(
+            PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname,
+            int flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC, mode_t mode = 0
+    ) :
         FdHolder(posix, storage_dir, pathname, flags, mode) {}
 
-    Directory(PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
+    Directory(
+            PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname,
+            int flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC, mode_t mode = 0
+    ) :
         FdHolder(posix, dir_fd, pathname, flags, mode) {}
 
     ARCTICDB_NO_MOVE_OR_COPY(Directory);
 
-    void mkdir(const fs::path& pathname, mode_t mode) const {
+    // Returns true if the directory was created.
+    bool mkdir(const fs::path& pathname, mode_t mode) const {
         int res = posix_.mkdirat(fd_, pathname.c_str(), mode);
         if (res < 0) {
             if (errno != EEXIST)
-                throw std::system_error(
-                        errno, std::generic_category(), fmt::format("failed to create subdir {}", pathname.c_str())
-                );
+                raise_io_error(errno, fmt::format("failed to create subdir {}", pathname.c_str()));
+            return false;
         }
+        return true;
     }
 
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
@@ -257,8 +265,6 @@ class File : public FdHolder {
             if (n < 0) {
                 if (errno == EINTR)
                     continue;
-                else if (errno == ESTALE)
-                    throw std::system_error(errno, std::generic_category(), "write failed");
                 raise_io_error(errno, "write failed");
             }
             written += static_cast<size_t>(n);
@@ -269,7 +275,7 @@ class File : public FdHolder {
         struct stat st;
         int stat_res = posix_.fstat(fd_, &st);
         if (stat_res != 0)
-            throw std::system_error(errno, std::generic_category(), "stat failed");
+            raise_io_error(errno, "stat failed");
         const size_t buffer_size = st.st_size;
         auto buffer = std::make_shared<Buffer>(buffer_size);
         size_t read = 0;
@@ -278,9 +284,11 @@ class File : public FdHolder {
             if (n > 0)
                 read += static_cast<size_t>(n);
             else if (n == 0)
-                throw std::runtime_error(fmt::format("Unexpected EOF after {} of {} bytes", read, buffer_size));
+                storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>(
+                        "Unexpected EOF after {} of {} bytes", read, buffer_size
+                );
             else if (errno != EINTR)
-                throw std::system_error(errno, std::generic_category(), "read failed");
+                raise_io_error(errno, "read failed");
         }
 
         return buffer;
@@ -308,14 +316,12 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
             Segment result = Segment::from_buffer(file.read_all());
             file.close();
             return result;
-        } catch (const std::system_error& e) {
-            if (e.code().value() == ESTALE && !retried_stale) {
+        } catch (const StaleFileDescriptor& e) {
+            if (!retried_stale) {
                 retried_stale = true;
                 continue;
-            } else if (e.code().value() == ENOENT) {
-                throw storage::KeyNotFoundException(variant_key);
             } else
-                raise_io_error(e.code().value(), std::strerror(e.code().value()));
+                throw;
         }
     }
 }
@@ -339,27 +345,47 @@ FileBackedStorage::FileBackedStorage(
 ) :
     Storage(library_path, mode),
     posix_(posix_interface) {
-    const auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
+    const std::string lib_path_str = library_path.to_delim_path();
     const fs::path root_path = conf.dir_path();
-    storage_dir_ = root_path / lib_path_str;
+    storage_dir_ = fs::absolute(root_path / lib_path_str);
 
-    // TODO: Should this use a safer primitive? Library creation is a rare event, but I think I will eventually
-    // have the primitive I need.
-    if (!fs::exists(storage_dir_)) {
-        util::check_arg(
-                mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}", storage_dir_.c_str(), lib_path_str, mode
-        );
-
-        // TODO: It's important to set sensible permissions on these directories, so that group users have read access.
-        fs::create_directories(storage_dir_);
-    }
     struct stat st;
-    if (::stat(storage_dir_.c_str(), &st) == 0) {
+    // TODO: Root path is assumed to exist.
+    if (::stat(root_path.c_str(), &st) == 0) {
         new_dir_mode_ = st.st_mode & DIR_MODE_MASK;
     } else
-        throw std::system_error(
-                errno, std::generic_category(), fmt::format("Could not fstat library directory", storage_dir_.c_str())
+        storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>(
+                "Could not fstat root directory {}: {}", root_path.c_str(), std::strerror(errno)
         );
+
+    Directory root_path_fd(*posix_, root_path, root_path);
+    if (mode > OpenMode::READ) {
+        // TODO: It's important to set sensible permissions on these directories, so that group users have read access.
+        bool created = root_path_fd.mkdir(lib_path_str, DIR_MODE_MASK);
+        if (created)
+            root_path_fd.sync();
+    }
+    // Can we open it? The mkdir above could have reported EEXIST but it was actually a file.
+    // TODO: If OpenMode::READ, and we get ENOENT, we'd throw a KeyNotFound which is weird. Write a unit test to shed
+    // light.
+    Directory storage_dir_fd(*posix_, root_path_fd, lib_path_str);
+    storage_dir_fd.close();
+    root_path_fd.close();
+
+    // if (!fs::exists(storage_dir_)) {
+    //     // TODO: This isn't "unexpected". Need to create a few more errors, but don't want to recompile the world.
+    //     storage::check<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>(
+    //             mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}", storage_dir_.c_str(), lib_path_str, mode
+    //     );
+
+    //     // TODO: It's important to set sensible permissions on these directories, so that group users have read
+    //     access. std::error_code error; fs::create_directories(storage_dir_, error); if (error)
+    //         raise_io_error(error.value(), fmt::format("Failed to create storage dir {}", storage_dir_.c_str()));
+    // } else if (!fs::is_directory(storage_dir_))
+    //     // TODO: This isn't "unexpected". Need to create a few more errors, but don't want to recompile the world.
+    //     storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>(
+    //             "Storage path {} already exists but is not a directory", storage_dir_.c_str()
+    //     );
 }
 
 FileBackedStorage::FileBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
@@ -377,9 +403,9 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
 
     bool retried_stale = false;
     while (true) {
-        Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+        Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_);
         storage_dir_fd.mkdir(key_name, new_dir_mode_);
-        Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+        Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name);
         try {
             File tmp_key_fd(
                     *posix_, key_type_dir_fd, tmp_file_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
@@ -407,9 +433,9 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
             key_type_dir_fd.close();
             storage_dir_fd.close();
             break;
-        } catch (const std::system_error& e) {
+        } catch (const StaleFileDescriptor& e) {
             key_type_dir_fd.unlinkat_swallow_errors(tmp_file_name);
-            if (e.code().value() == ESTALE && !retried_stale) {
+            if (!retried_stale) {
                 retried_stale = true;
                 continue;
             }
