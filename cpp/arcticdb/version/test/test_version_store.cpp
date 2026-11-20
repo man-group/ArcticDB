@@ -22,8 +22,10 @@
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/util/key_utils.hpp>
+#include <arcticdb/storage/test/in_memory_store.hpp>
 
 #include <chrono>
+#include <set>
 #include <thread>
 
 struct VersionStoreTest : arcticdb::TestStore {
@@ -1306,4 +1308,33 @@ TEST(DeleteTreesResponsiblyStats, DataKeysConsideredCountsBeforeExclusion) {
     EXPECT_EQ(stats.index_keys_deleted, 1u);
     EXPECT_EQ(stats.data_keys_considered, 2u);
     EXPECT_EQ(stats.data_keys_deleted, 0u);
+}
+
+TEST(IterateSnapshots, RethrowsKeyNotFoundWithoutKeys) {
+    using namespace arcticdb;
+    auto store = std::make_shared<InMemoryStore>();
+    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"snap"}, SegmentInMemory{});
+    ASSERT_THROW(
+            iterate_snapshots(
+                    store, [](VariantKey&) { throw storage::KeyNotFoundException(std::string("Key Not Found Error")); }
+            ),
+            storage::KeyNotFoundException
+    );
+}
+
+TEST(IterateSnapshots, IgnoresKeyNotFoundForVisitedSnapshot) {
+    using namespace arcticdb;
+    auto store = std::make_shared<InMemoryStore>();
+    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"deleted_snap"}, SegmentInMemory{});
+    store->write_sync(KeyType::SNAPSHOT_REF, StreamId{"live_snap"}, SegmentInMemory{});
+
+    std::set<StreamId> visited;
+    iterate_snapshots(store, [&visited](VariantKey& vk) {
+        visited.insert(variant_key_id(vk));
+        if (variant_key_id(vk) == StreamId{"deleted_snap"}) {
+            throw storage::KeyNotFoundException(vk);
+        }
+    });
+
+    ASSERT_EQ(visited, (std::set<StreamId>{StreamId{"deleted_snap"}, StreamId{"live_snap"}}));
 }
