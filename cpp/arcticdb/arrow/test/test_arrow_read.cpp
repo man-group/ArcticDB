@@ -65,7 +65,7 @@ const auto kDynamicStringType = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimensio
 // Converts a UTF_DYNAMIC64 source segment into dest's block starting at frame row first_row, as an Arrow read does
 void convert_string_segment(
         const Column& source, Column& dest, std::string_view col_name, size_t first_row,
-        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options, ColumnTruncation truncate = {}
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options, FrameTruncation truncate = {}
 ) {
     const auto dest_size = data_type_size(dest.type());
     const auto num_rows = source.row_count();
@@ -305,7 +305,7 @@ TEST_P(ArrowStringColumnRead, EndTruncatedSecondSegment) {
     constexpr size_t kSecondSegmentRows = 30'000;
     // Not a multiple of 8, so the bitmap ends in a partial byte
     constexpr size_t kRowsRead = 10'003;
-    const auto read_ends_in_second_segment = ColumnTruncation{std::nullopt, kFirstSegmentRows + kRowsRead};
+    const auto read_ends_in_second_segment = FrameTruncation{std::nullopt, kFirstSegmentRows + kRowsRead};
     auto read_options = ReadOptions();
     read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
     auto [dest_type, block_config] =
