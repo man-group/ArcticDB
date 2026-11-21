@@ -509,16 +509,22 @@ bool FileBackedStorage::do_iterate_type_until_match(
     DirCloser close_dir(dirp);
     struct dirent* dir_entry = nullptr;
     while ((dir_entry = posix_->readdir(dirp))) {
-        std::string_view file_name(dir_entry->d_name);
+        const size_t file_name_length = strlen(dir_entry->d_name);
+        std::string_view file_name(dir_entry->d_name, file_name_length);
         if (skip_during_listing(file_name))
             continue;
 
         const auto prefix_matches = stream_id_prefix_matcher(prefix);
-        VariantKey key{variant_key_from_bytes(
-                reinterpret_cast<uint8_t*>(dir_entry->d_name), strlen(dir_entry->d_name), key_type
-        )};
-        if (variant_key_type(key) == key_type && prefix_matches(variant_key_id(key)) && visitor(std::move(key)))
-            return true;
+        try {
+            VariantKey key{
+                    variant_key_from_bytes(reinterpret_cast<uint8_t*>(dir_entry->d_name), file_name_length, key_type)
+            };
+            if (variant_key_type(key) == key_type && prefix_matches(variant_key_id(key)) && visitor(std::move(key)))
+                return true;
+        } catch (const ArcticCategorizedException<ErrorCategory::INTERNAL>& e) {
+            // TODO: The upstream code unconditionally logs, but the message is unhelpful without the file name.
+            log::storage().info("File name '{}' could not be parsed into a VariantKey {}", file_name, e.what());
+        }
     }
     // TODO: Need to check errno here. read_dir can return NULL on error too.
 
