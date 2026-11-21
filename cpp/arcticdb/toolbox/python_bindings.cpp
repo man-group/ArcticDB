@@ -6,6 +6,11 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <cctype>
+#include <charconv>
+#include <cstdint>
+#include <string_view>
+
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
 #include <arcticdb/version/symbol_list.hpp>
@@ -16,10 +21,323 @@
 #include <arcticdb/toolbox/library_tool.hpp>
 #include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
+#include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::toolbox::apy {
+
+namespace {
+
+py::dict latency_to_py(const query_stats::LatencyHistogram& h) {
+    py::dict d;
+    d["count"] = h.count;
+    d["total_ms"] = h.total_ms();
+    d["mean_ms"] = h.mean_ms();
+    d["min_ms"] = h.min_ms();
+    d["p50_ms"] = h.p50_ms();
+    d["p95_ms"] = h.p95_ms();
+    d["p99_ms"] = h.p99_ms();
+    d["max_ms"] = h.max_ms();
+    return d;
+}
+
+py::dict storage_map_to_py(const query_stats::StorageStatsMap& smap) {
+    using namespace arcticdb::query_stats;
+    py::dict backends;
+    for (const auto& [backend, ops] : smap) {
+        py::dict ops_dict;
+        for (const auto& [op, key_types] : ops) {
+            py::dict kt_dict;
+            for (const auto& [kt, st] : key_types) {
+                py::dict s;
+                s["ok"] = st.ok;
+                s["not_found"] = st.not_found;
+                s["conflict"] = st.conflict;
+                s["unsupported"] = st.unsupported;
+                s["error"] = st.error;
+                s["count"] = st.total_count();
+                s["bytes"] = st.bytes;
+                s["items"] = st.items;
+                s["pages"] = st.pages;
+                s["partial_delete_retries"] = st.partial_delete_retries;
+                s["latency"] = latency_to_py(st.latency);
+                s["error_latency"] = latency_to_py(st.error_latency);
+                kt_dict[py::str(kt)] = std::move(s);
+            }
+            ops_dict[py::str(to_string(op))] = std::move(kt_dict);
+        }
+        backends[py::str(to_string(backend))] = std::move(ops_dict);
+    }
+    return backends;
+}
+
+py::dict http_map_to_py(const query_stats::HttpStatsMap& hmap) {
+    py::dict services;
+    for (const auto& [svc, ops] : hmap) {
+        py::dict ops_dict;
+        for (const auto& [op, st] : ops) {
+            py::dict s;
+            s["requests"] = st.requests;
+            s["attempts"] = st.attempts;
+            s["retries"] = st.retries;
+            s["status_2xx"] = st.status_2xx;
+            s["status_3xx"] = st.status_3xx;
+            s["status_4xx"] = st.status_4xx;
+            s["status_5xx"] = st.status_5xx;
+            s["throttled"] = st.throttled;
+            s["network_errors"] = st.network_errors;
+            s["checksum_mismatch_retries"] = st.checksum_mismatch_retries;
+            s["new_connections"] = st.new_connections;
+            s["backoff_time_ms"] = static_cast<double>(st.backoff_time_ns) / 1e6;
+            s["request_latency"] = latency_to_py(st.request_latency);
+            s["attempt_latency"] = latency_to_py(st.attempt_latency);
+            s["dns_latency"] = latency_to_py(st.dns_latency);
+            s["tcp_connect_latency"] = latency_to_py(st.tcp_connect_latency);
+            s["tls_handshake_latency"] = latency_to_py(st.tls_handshake_latency);
+            s["ttfb_latency"] = latency_to_py(st.ttfb_latency);
+            s["transfer_latency"] = latency_to_py(st.transfer_latency);
+            ops_dict[py::str(op)] = std::move(s);
+        }
+        services[py::str(svc)] = std::move(ops_dict);
+    }
+    return services;
+}
+
+py::dict api_map_to_py(const query_stats::ApiStatsMap& amap) {
+    using namespace arcticdb::query_stats;
+    py::dict out;
+    for (const auto& [op, st] : amap) {
+        py::dict s;
+        s["ok"] = st.ok;
+        s["error"] = st.error;
+        s["count"] = st.total_count();
+        s["latency"] = latency_to_py(st.latency);
+        s["error_latency"] = latency_to_py(st.error_latency);
+        out[py::str(to_string(op))] = std::move(s);
+    }
+    return out;
+}
+
+py::dict symbol_map_to_py(const query_stats::SymbolStatsMap& sym_map) {
+    py::dict out;
+    for (const auto& [sym, st] : sym_map) {
+        py::dict s;
+        s["reads"] = st.reads;
+        s["writes"] = st.writes;
+        s["deletes"] = st.deletes;
+        s["exists"] = st.exists;
+        s["lists"] = st.lists;
+        s["errors"] = st.errors;
+        s["total_ops"] = st.total_ops();
+        s["bytes_read"] = st.bytes_read;
+        s["bytes_written"] = st.bytes_written;
+        s["http_requests"] = st.http_requests;
+        s["http_retries"] = st.http_retries;
+        s["storage_latency"] = latency_to_py(st.storage_latency);
+        out[py::str(sym)] = std::move(s);
+    }
+    return out;
+}
+
+py::dict thread_pool_to_py(const query_stats::ThreadPoolStats& tp) {
+    py::dict d;
+    d["tasks"] = tp.tasks;
+    d["expired"] = tp.expired;
+    d["wait_latency"] = latency_to_py(tp.wait_latency);
+    d["run_latency"] = latency_to_py(tp.run_latency);
+    return d;
+}
+
+py::dict pool_gauge_to_py(const query_stats::PoolGaugeSnapshot& pg) {
+    py::dict d;
+    d["pending_tasks"] = pg.pending_tasks;
+    d["active_threads"] = pg.active_threads;
+    d["total_threads"] = pg.total_threads;
+    d["max_threads"] = pg.max_threads;
+    return d;
+}
+
+py::dict snapshot_to_py(const query_stats::QueryStatsSnapshot& snap) {
+    using namespace arcticdb::query_stats;
+    py::dict out;
+    out["wall_time_ms"] = snap.wall_time_ms;
+    out["storage"] = storage_map_to_py(snap.storage);
+    out["http"] = http_map_to_py(snap.http);
+    out["api"] = api_map_to_py(snap.api);
+
+    py::dict by_lib;
+    for (const auto& [lib, lb] : snap.by_library) {
+        py::dict ldict;
+        ldict["storage"] = storage_map_to_py(lb.storage);
+        ldict["http"] = http_map_to_py(lb.http);
+        ldict["api"] = api_map_to_py(lb.api);
+        ldict["by_symbol"] = symbol_map_to_py(lb.by_symbol);
+        ldict["dropped_symbols"] = lb.dropped_symbols;
+        by_lib[py::str(lib)] = std::move(ldict);
+    }
+    out["by_library"] = std::move(by_lib);
+    out["by_symbol"] = symbol_map_to_py(snap.by_symbol);
+    out["dropped_symbols"] = snap.dropped_symbols;
+
+    py::dict tp_dict;
+    tp_dict["cpu"] = thread_pool_to_py(snap.thread_pools.cpu);
+    tp_dict["io"] = thread_pool_to_py(snap.thread_pools.io);
+    tp_dict["semaphore_waits"] = snap.thread_pools.semaphore_waits;
+    tp_dict["semaphore_wait_latency"] = latency_to_py(snap.thread_pools.semaphore_wait_latency);
+    out["thread_pools"] = std::move(tp_dict);
+
+    py::dict vm_dict;
+    vm_dict["hits"] = snap.caches.version_map.hits;
+    vm_dict["misses"] = snap.caches.version_map.misses;
+    vm_dict["reloads"] = snap.caches.version_map.reloads;
+    vm_dict["ref_retries"] = snap.caches.version_map.ref_retries;
+    vm_dict["chain_hops"] = snap.caches.version_map.chain_hops;
+
+    py::dict dd_dict;
+    dd_dict["hits"] = snap.caches.dedup_map.hits;
+    dd_dict["misses"] = snap.caches.dedup_map.misses;
+    dd_dict["bytes_saved"] = snap.caches.dedup_map.bytes_saved;
+
+    py::dict cc_dict;
+    cc_dict["hits"] = snap.caches.config_cache.hits;
+    cc_dict["misses"] = snap.caches.config_cache.misses;
+
+    py::dict caches_dict;
+    caches_dict["version_map"] = std::move(vm_dict);
+    caches_dict["dedup_map"] = std::move(dd_dict);
+    caches_dict["config_cache"] = std::move(cc_dict);
+    out["caches"] = std::move(caches_dict);
+
+    py::dict codec_dict;
+    codec_dict["encodes"] = snap.codec.encodes;
+    codec_dict["decodes"] = snap.codec.decodes;
+    codec_dict["encode_uncompressed_bytes"] = snap.codec.encode_uncompressed_bytes;
+    codec_dict["encode_compressed_bytes"] = snap.codec.encode_compressed_bytes;
+    codec_dict["decode_compressed_bytes"] = snap.codec.decode_compressed_bytes;
+    codec_dict["decode_uncompressed_bytes"] = snap.codec.decode_uncompressed_bytes;
+    codec_dict["encode_compression_ratio"] = snap.codec.encode_compression_ratio();
+    codec_dict["decode_compression_ratio"] = snap.codec.decode_compression_ratio();
+    codec_dict["encode_latency"] = latency_to_py(snap.codec.encode_latency);
+    codec_dict["decode_latency"] = latency_to_py(snap.codec.decode_latency);
+    out["codec"] = std::move(codec_dict);
+
+    py::dict query_dict;
+    query_dict["queries"] = snap.query.queries;
+    query_dict["segments_total"] = snap.query.segments_total;
+    query_dict["segments_pruned_index"] = snap.query.segments_pruned_index;
+    query_dict["segments_pruned_column_stats"] = snap.query.segments_pruned_column_stats;
+    query_dict["segments_read"] = snap.query.segments_read;
+    query_dict["columns_total"] = snap.query.columns_total;
+    query_dict["columns_projected"] = snap.query.columns_projected;
+    query_dict["rows_total"] = snap.query.rows_total;
+    query_dict["rows_selected"] = snap.query.rows_selected;
+    out["query"] = std::move(query_dict);
+
+    py::dict locks_dict;
+    for (const auto& [kind, lk] : snap.locks) {
+        py::dict ld;
+        ld["acquires"] = lk.acquires;
+        ld["conflicts"] = lk.conflicts;
+        ld["retries"] = lk.retries;
+        ld["timeouts"] = lk.timeouts;
+        ld["wait_latency"] = latency_to_py(lk.wait_latency);
+        locks_dict[py::str(to_string(kind))] = std::move(ld);
+    }
+    out["locks"] = std::move(locks_dict);
+
+    py::dict boundary_dict;
+    for (const auto& [phase, st] : snap.boundary) {
+        py::dict bd;
+        bd["count"] = st.count;
+        bd["latency"] = latency_to_py(st.latency);
+        boundary_dict[py::str(to_string(phase))] = std::move(bd);
+    }
+    out["boundary"] = std::move(boundary_dict);
+
+    py::dict clauses_dict;
+    for (const auto& [kind, st] : snap.processing.clauses) {
+        py::dict cd;
+        cd["executions"] = st.executions;
+        cd["rows_in"] = st.rows_in;
+        cd["rows_out"] = st.rows_out;
+        cd["latency"] = latency_to_py(st.latency);
+        clauses_dict[py::str(to_string(kind))] = std::move(cd);
+    }
+    py::dict adm_dict;
+    adm_dict["units_admitted"] = snap.processing.admission.units_admitted;
+    adm_dict["residency_waits"] = snap.processing.admission.residency_waits;
+    adm_dict["segments_dispatched"] = snap.processing.admission.segments_dispatched;
+    adm_dict["read_window_waits"] = snap.processing.admission.read_window_waits;
+    adm_dict["residency_wait_latency"] = latency_to_py(snap.processing.admission.residency_wait_latency);
+    adm_dict["read_window_wait_latency"] = latency_to_py(snap.processing.admission.read_window_wait_latency);
+
+    py::dict proc_dict;
+    proc_dict["clauses"] = std::move(clauses_dict);
+    proc_dict["admission"] = std::move(adm_dict);
+    out["processing"] = std::move(proc_dict);
+
+    py::dict rps_dict;
+    rps_dict["count"] = snap.stream.rows_per_segment.count;
+    rps_dict["sum"] = snap.stream.rows_per_segment.sum;
+    rps_dict["mean"] = snap.stream.rows_per_segment.mean();
+    rps_dict["min"] = snap.stream.rows_per_segment.min_value();
+    rps_dict["p50"] = snap.stream.rows_per_segment.p50();
+    rps_dict["p95"] = snap.stream.rows_per_segment.p95();
+    rps_dict["p99"] = snap.stream.rows_per_segment.p99();
+    rps_dict["max"] = snap.stream.rows_per_segment.max;
+
+    py::dict comp_dict;
+    for (const auto& [kind, st] : snap.stream.compactions) {
+        py::dict cd;
+        cd["count"] = st.count;
+        cd["input_segments"] = st.input_segments;
+        cd["output_segments"] = st.output_segments;
+        cd["latency"] = latency_to_py(st.latency);
+        comp_dict[py::str(to_string(kind))] = std::move(cd);
+    }
+
+    py::dict conf_dict;
+    for (const auto& [kind, cnt] : snap.stream.conflicts) {
+        conf_dict[py::str(to_string(kind))] = cnt;
+    }
+
+    py::dict stream_dict;
+    stream_dict["data_segments_written"] = snap.stream.data_segments_written;
+    stream_dict["staged_segments_written"] = snap.stream.staged_segments_written;
+    stream_dict["small_segments_written"] = snap.stream.small_segments_written;
+    stream_dict["rows_per_segment"] = std::move(rps_dict);
+    stream_dict["incomplete_chain_loads"] = snap.stream.incomplete_chain_loads;
+    stream_dict["incomplete_chain_hops"] = snap.stream.incomplete_chain_hops;
+    stream_dict["incomplete_iteration_loads"] = snap.stream.incomplete_iteration_loads;
+    stream_dict["incomplete_iteration_segments"] = snap.stream.incomplete_iteration_segments;
+    stream_dict["compactions"] = std::move(comp_dict);
+    stream_dict["conflicts"] = std::move(conf_dict);
+    out["stream"] = std::move(stream_dict);
+
+    py::dict lmdb_dict;
+    lmdb_dict["open_envs"] = snap.resources.lmdb.open_envs;
+    lmdb_dict["map_size_bytes"] = snap.resources.lmdb.map_size_bytes;
+    lmdb_dict["used_bytes"] = snap.resources.lmdb.used_bytes;
+    lmdb_dict["max_map_utilization_ratio"] = snap.resources.lmdb.max_map_utilization_ratio;
+    lmdb_dict["active_readers"] = snap.resources.lmdb.active_readers;
+    lmdb_dict["map_full_errors"] = snap.resources.lmdb.map_full_errors;
+
+    py::dict res_dict;
+    res_dict["cpu_pool"] = pool_gauge_to_py(snap.resources.cpu_pool);
+    res_dict["io_pool"] = pool_gauge_to_py(snap.resources.io_pool);
+    res_dict["write_semaphore_in_flight"] = snap.resources.write_semaphore_in_flight;
+    res_dict["write_semaphore_limit"] = snap.resources.write_semaphore_limit;
+    res_dict["version_map_entries"] = snap.resources.version_map_entries;
+    res_dict["config_cache_libraries"] = snap.resources.config_cache_libraries;
+    res_dict["config_cache_storages"] = snap.resources.config_cache_storages;
+    res_dict["lmdb"] = std::move(lmdb_dict);
+    out["resources"] = std::move(res_dict);
+
+    return out;
+}
+
+} // namespace
 
 void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& base_exception) {
     auto tools = m.def_submodule("tools", "Library management tool hooks");
@@ -171,10 +489,164 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
     using namespace arcticdb::query_stats;
     auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");
 
-    query_stats_module.def("reset_stats", []() { QueryStats::instance()->reset_stats(); });
-    query_stats_module.def("enable", []() { QueryStats::instance()->enable(); });
-    query_stats_module.def("disable", []() { QueryStats::instance()->disable(); });
+    py::class_<QueryStatsSnapshot>(query_stats_module, "_QueryStatsSnapshot")
+            .def("to_dict", [](const QueryStatsSnapshot& self) { return snapshot_to_py(self); })
+            .def("diff", &QueryStatsSnapshot::diff, py::call_guard<py::gil_scoped_release>());
+
+    py::class_<CollectorOptions>(query_stats_module, "CollectorOptions")
+            .def(py::init<>())
+            .def_readwrite("by_library", &CollectorOptions::by_library)
+            .def_readwrite("by_symbol", &CollectorOptions::by_symbol)
+            .def_readwrite("max_symbols", &CollectorOptions::max_symbols)
+            .def_readwrite("isolate", &CollectorOptions::isolate);
+
+    py::class_<CollectorSession, std::shared_ptr<CollectorSession>>(query_stats_module, "CollectorSession")
+            .def(py::init<>([](bool by_library, bool by_symbol, size_t max_symbols, bool isolate) {
+                     CollectorOptions opts;
+                     opts.by_library = by_library;
+                     opts.by_symbol = by_symbol;
+                     opts.max_symbols = max_symbols;
+                     opts.isolate = isolate;
+                     return std::make_shared<CollectorSession>(opts, /*auto_enter=*/false);
+                 }),
+                 py::arg("by_library") = true,
+                 py::arg("by_symbol") = false,
+                 py::arg("max_symbols") = 1000,
+                 py::arg("isolate") = false)
+            .def("enter", &CollectorSession::enter)
+            .def("exit", &CollectorSession::exit)
+            .def("is_entered", &CollectorSession::is_entered)
+            .def(
+                    "reset",
+                    [](CollectorSession& self) { self.collector()->reset(); },
+                    py::call_guard<py::gil_scoped_release>()
+            )
+            .def(
+                    "snapshot_raw",
+                    [](const CollectorSession& self) { return self.snapshot(); },
+                    py::call_guard<py::gil_scoped_release>()
+            )
+            .def("snapshot", [](const CollectorSession& self) {
+                QueryStatsSnapshot snap;
+                {
+                    py::gil_scoped_release release;
+                    snap = self.snapshot();
+                }
+                return snapshot_to_py(snap);
+            });
+
+    query_stats_module.def(
+            "reset_stats", []() { QueryStats::instance()->reset_stats(); }, py::call_guard<py::gil_scoped_release>()
+    );
+    query_stats_module.def(
+            "enable", []() { QueryStats::instance()->enable(); }, py::call_guard<py::gil_scoped_release>()
+    );
+    query_stats_module.def(
+            "disable", []() { QueryStats::instance()->disable(); }, py::call_guard<py::gil_scoped_release>()
+    );
     query_stats_module.def("is_enabled", []() { return QueryStats::instance()->is_enabled(); });
-    query_stats_module.def("get_stats", []() { return QueryStats::instance()->get_stats(); });
+    query_stats_module.def("is_active", []() { return arcticdb::query_stats::is_active(); });
+    query_stats_module.def("record_boundary_normalize", [](uint64_t duration_ns) {
+        arcticdb::query_stats::record_boundary_op(BoundaryPhase::Normalize, duration_ns);
+    });
+    query_stats_module.def("record_boundary_denormalize", [](uint64_t duration_ns) {
+        arcticdb::query_stats::record_boundary_op(BoundaryPhase::Denormalize, duration_ns);
+    });
+    query_stats_module.def(
+            "get_stats", []() { return QueryStats::instance()->get_stats(); }, py::call_guard<py::gil_scoped_release>()
+    );
+    query_stats_module.def(
+            "get_structured_snapshot",
+            []() { return QueryStats::instance()->get_structured_snapshot(); },
+            py::call_guard<py::gil_scoped_release>()
+    );
+    query_stats_module.def("get_structured_stats", []() {
+        QueryStatsSnapshot snap;
+        {
+            py::gil_scoped_release release;
+            snap = QueryStats::instance()->get_structured_snapshot();
+        }
+        return snapshot_to_py(snap);
+    });
+    query_stats_module.def(
+            "configure_prometheus",
+            [](const std::string& host,
+               const std::string& port,
+               const std::string& job_name,
+               const std::string& instance,
+               const std::string& prometheus_env,
+               const std::string& model) {
+                const auto has_non_whitespace = [](std::string_view value) {
+                    for (unsigned char ch : value) {
+                        if (std::isspace(ch) == 0) {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        has_non_whitespace(host), "Prometheus host must be non-empty"
+                );
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        !port.empty(), "Prometheus port must be non-empty"
+                );
+                uint32_t port_num = 0;
+                const auto [ptr, ec] = std::from_chars(port.data(), port.data() + port.size(), port_num);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        ec == std::errc{} && ptr == port.data() + port.size() && port_num >= 1U && port_num <= 65535U,
+                        "Invalid Prometheus port '{}'. Expected an integer in [1, 65535].",
+                        port
+                );
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        has_non_whitespace(job_name), "Prometheus job_name must be non-empty"
+                );
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        has_non_whitespace(instance), "Prometheus instance must be non-empty"
+                );
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        has_non_whitespace(prometheus_env), "Prometheus prometheus_env must be non-empty"
+                );
+                std::string model_lower;
+                model_lower.reserve(model.size());
+                for (unsigned char ch : model) {
+                    model_lower.push_back(static_cast<char>(std::tolower(ch)));
+                }
+                arcticdb::MetricsConfig::Model m = arcticdb::MetricsConfig::Model::PULL;
+                if (model_lower == "pull") {
+                    m = arcticdb::MetricsConfig::Model::PULL;
+                } else if (model_lower == "push") {
+                    m = arcticdb::MetricsConfig::Model::PUSH;
+                } else {
+                    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                            "Unsupported Prometheus model '{}'. Expected 'pull' or 'push'.", model
+                    );
+                }
+                arcticdb::MetricsConfig cfg{host, port, job_name, instance, prometheus_env, m};
+                arcticdb::PrometheusInstance::instance()->configure(cfg);
+            },
+            py::arg("host") = "127.0.0.1",
+            py::arg("port") = "9108",
+            py::arg("job_name") = "arcticdb",
+            py::arg("instance") = "local",
+            py::arg("prometheus_env") = "local",
+            py::arg("model") = "pull",
+            py::call_guard<py::gil_scoped_release>()
+    );
+    query_stats_module.def(
+            "push_prometheus_metrics",
+            []() { return arcticdb::PrometheusInstance::instance()->push(); },
+            py::call_guard<py::gil_scoped_release>()
+    );
+    query_stats_module.def(
+            "enable_prometheus_sink",
+            [](bool include_library) { arcticdb::query_stats::enable_prometheus_sink(include_library); },
+            py::arg("include_library") = false,
+            py::call_guard<py::gil_scoped_release>()
+    );
+    query_stats_module.def(
+            "disable_prometheus_sink",
+            []() { arcticdb::query_stats::disable_prometheus_sink(); },
+            py::call_guard<py::gil_scoped_release>()
+    );
 }
 } // namespace arcticdb::toolbox::apy
