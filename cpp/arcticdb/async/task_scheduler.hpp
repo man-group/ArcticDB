@@ -12,6 +12,7 @@
 #include <arcticdb/util/string_utils.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/executors/IOThreadPoolExecutor.h>
@@ -108,10 +109,130 @@ class TaskStatsLoggingObserver : public folly::ThreadPoolExecutor::TaskObserver 
     std::string pool_;
 };
 
-template<typename SchedulerType>
-struct SchedulerWrapper : public SchedulerType {
+class QueryStatsTaskObserver : public folly::ThreadPoolExecutor::TaskObserver {
+  public:
+    explicit QueryStatsTaskObserver(query_stats::PoolKind pool) noexcept : pool_(pool) {}
 
+    void taskProcessed(const folly::ThreadPoolExecutor::ProcessedTaskInfo& info) noexcept override {
+        if (info.expired && query_stats::is_active()) {
+            query_stats::record_pool_task_expired(pool_);
+        }
+    }
+
+  private:
+    query_stats::PoolKind pool_;
+};
+
+namespace detail {
+inline thread_local bool tl_in_instrumented_submit = false;
+
+struct ScopedInstrumentedSubmit {
+    bool prev;
+    ScopedInstrumentedSubmit() noexcept : prev(tl_in_instrumented_submit) { tl_in_instrumented_submit = true; }
+    ~ScopedInstrumentedSubmit() noexcept { tl_in_instrumented_submit = prev; }
+};
+
+struct ScopedPoolTaskRecorder {
+    query_stats::PoolKind pool;
+    query_stats::TimePoint start;
+    uint64_t wait_ns;
+
+    ~ScopedPoolTaskRecorder() noexcept {
+        const uint64_t run_ns = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()
+        );
+        query_stats::record_pool_task(pool, wait_ns, run_ns);
+    }
+};
+
+// First base class of SchedulerWrapper so SchedulerType joins all threads before active_tasks_ is destroyed.
+struct ActiveTaskCounterBase {
+    std::atomic<int64_t> active_tasks_{0};
+};
+
+struct ScopedActiveCounter {
+    std::atomic<int64_t>& counter;
+    explicit ScopedActiveCounter(std::atomic<int64_t>& c) noexcept : counter(c) {
+        counter.fetch_add(1, std::memory_order_relaxed);
+    }
+    ~ScopedActiveCounter() noexcept { counter.fetch_sub(1, std::memory_order_relaxed); }
+    ARCTICDB_NO_MOVE_OR_COPY(ScopedActiveCounter);
+};
+
+template<bool Enabled>
+struct ScopedOptionalActiveCounter {
+    explicit ScopedOptionalActiveCounter(std::atomic<int64_t>&) noexcept {}
+};
+
+template<>
+struct ScopedOptionalActiveCounter<true> : ScopedActiveCounter {
+    using ScopedActiveCounter::ScopedActiveCounter;
+};
+} // namespace detail
+
+template<typename SchedulerType, query_stats::PoolKind Pool = query_stats::PoolKind::Cpu>
+struct SchedulerWrapper : private detail::ActiveTaskCounterBase, public SchedulerType {
+
+    using SchedulerType::add;
     using SchedulerType::SchedulerType;
+
+    void add(folly::Func func) override { add(std::move(func), std::chrono::milliseconds(0), nullptr); }
+
+    void add(folly::Func func, std::chrono::milliseconds expiration, folly::Func expireCallback = nullptr) override {
+        if (detail::tl_in_instrumented_submit) {
+            SchedulerType::add(std::move(func), expiration, std::move(expireCallback));
+            return;
+        }
+        if (query_stats::is_active()) {
+            auto ctx = query_stats::capture_context();
+            if (expireCallback) {
+                expireCallback = [ctx, expireCallback = std::move(expireCallback)]() mutable {
+                    query_stats::RestoredContextGuard guard(ctx);
+                    expireCallback();
+                };
+            }
+            const auto enqueue_tp = std::chrono::steady_clock::now();
+            detail::ScopedInstrumentedSubmit submit_guard;
+            SchedulerType::add(
+                    [this, ctx = std::move(ctx), enqueue_tp, func = std::move(func)]() mutable {
+                        [[maybe_unused]] detail::ScopedOptionalActiveCounter<Pool == query_stats::PoolKind::Io>
+                                active_guard(active_tasks_);
+                        const auto start_tp = std::chrono::steady_clock::now();
+                        query_stats::RestoredContextGuard guard(ctx);
+                        const uint64_t wait_ns = static_cast<uint64_t>(std::max<int64_t>(
+                                0, std::chrono::duration_cast<std::chrono::nanoseconds>(start_tp - enqueue_tp).count()
+                        ));
+                        detail::ScopedPoolTaskRecorder recorder{Pool, start_tp, wait_ns};
+                        func();
+                    },
+                    expiration,
+                    std::move(expireCallback)
+            );
+            return;
+        }
+        if constexpr (Pool == query_stats::PoolKind::Io) {
+            detail::ScopedInstrumentedSubmit submit_guard;
+            SchedulerType::add(
+                    [this, func = std::move(func)]() mutable {
+                        detail::ScopedActiveCounter active_guard(active_tasks_);
+                        func();
+                    },
+                    expiration,
+                    std::move(expireCallback)
+            );
+            return;
+        }
+        detail::ScopedInstrumentedSubmit submit_guard;
+        SchedulerType::add(std::move(func), expiration, std::move(expireCallback));
+    }
+
+    [[nodiscard]] std::atomic<int64_t>& active_task_counter() noexcept { return active_tasks_; }
+
+    [[nodiscard]] uint64_t active_task_count() const noexcept {
+        return static_cast<uint64_t>(std::max<int64_t>(0, active_tasks_.load(std::memory_order_relaxed)));
+    }
+
+    void reset_active_tasks() noexcept { active_tasks_.store(0, std::memory_order_relaxed); }
 
     void set_active_threads(size_t n) { SchedulerType::activeThreads_.store(n); }
 
@@ -254,6 +375,8 @@ class TaskScheduler {
         ARCTICDB_RUNTIME_DEBUG(
                 log::schedule(), "Task scheduler created with {:d} {:d}", cpu_thread_count_, io_thread_count_
         );
+        cpu_exec_.addTaskObserver(std::make_unique<QueryStatsTaskObserver>(query_stats::PoolKind::Cpu));
+        io_exec_.addTaskObserver(std::make_unique<QueryStatsTaskObserver>(query_stats::PoolKind::Io));
         if (ConfigsMap::instance()->get_int("TaskScheduler.LogTaskStats", 0) != 0) {
             cpu_exec_.addTaskObserver(std::make_unique<TaskStatsLoggingObserver>("CPU"));
             io_exec_.addTaskObserver(std::make_unique<TaskStatsLoggingObserver>("IO"));
@@ -274,6 +397,22 @@ class TaskScheduler {
                 cpu_exec_.kDefaultMaxQueueSize
         );
         std::lock_guard lock{cpu_mutex_};
+        if (query_stats::is_active()) {
+            auto ctx = query_stats::capture_context();
+            const auto enqueue_tp = std::chrono::steady_clock::now();
+            detail::ScopedInstrumentedSubmit submit_guard;
+            return cpu_exec_.addFuture(
+                    [ctx = std::move(ctx), enqueue_tp, task = std::move(task)]() mutable -> decltype(auto) {
+                        const auto start_tp = std::chrono::steady_clock::now();
+                        query_stats::RestoredContextGuard guard(ctx);
+                        const uint64_t wait_ns = static_cast<uint64_t>(
+                                std::chrono::duration_cast<std::chrono::nanoseconds>(start_tp - enqueue_tp).count()
+                        );
+                        detail::ScopedPoolTaskRecorder recorder{query_stats::PoolKind::Cpu, start_tp, wait_ns};
+                        return task();
+                    }
+            );
+        }
         return cpu_exec_.addFuture(std::move(task));
     }
 
@@ -289,7 +428,31 @@ class TaskScheduler {
                 io_exec_.getPendingTaskCount()
         );
         std::lock_guard lock{io_mutex_};
-        return io_exec_.addFuture(std::move(task));
+        if (query_stats::is_active()) {
+            auto ctx = query_stats::capture_context();
+            const auto enqueue_tp = std::chrono::steady_clock::now();
+            auto* active_counter = &io_exec_.active_task_counter();
+            detail::ScopedInstrumentedSubmit submit_guard;
+            return io_exec_.addFuture(
+                    [active_counter, ctx = std::move(ctx), enqueue_tp, task = std::move(task)](
+                    ) mutable -> decltype(auto) {
+                        detail::ScopedActiveCounter active_guard(*active_counter);
+                        const auto start_tp = std::chrono::steady_clock::now();
+                        query_stats::RestoredContextGuard guard(ctx);
+                        const uint64_t wait_ns = static_cast<uint64_t>(
+                                std::chrono::duration_cast<std::chrono::nanoseconds>(start_tp - enqueue_tp).count()
+                        );
+                        detail::ScopedPoolTaskRecorder recorder{query_stats::PoolKind::Io, start_tp, wait_ns};
+                        return task();
+                    }
+            );
+        }
+        auto* active_counter = &io_exec_.active_task_counter();
+        detail::ScopedInstrumentedSubmit submit_guard;
+        return io_exec_.addFuture([active_counter, task = std::move(task)]() mutable -> decltype(auto) {
+            detail::ScopedActiveCounter active_guard(*active_counter);
+            return task();
+        });
     }
 
     static std::shared_ptr<TaskSchedulerPtrWrapper> instance_;
@@ -330,12 +493,12 @@ class TaskScheduler {
         io_exec_.set_max_threads(n);
     }
 
-    SchedulerWrapper<CPUSchedulerType>& cpu_exec() {
+    SchedulerWrapper<CPUSchedulerType, query_stats::PoolKind::Cpu>& cpu_exec() {
         ARCTICDB_TRACE(log::schedule(), "Getting CPU executor: {}", cpu_exec_.getTaskQueueSize());
         return cpu_exec_;
     }
 
-    SchedulerWrapper<IOSchedulerType>& io_exec() {
+    SchedulerWrapper<IOSchedulerType, query_stats::PoolKind::Io>& io_exec() {
         ARCTICDB_TRACE(log::schedule(), "Getting IO executor: {}", io_exec_.getPendingTaskCount());
         return io_exec_;
     }
@@ -347,6 +510,8 @@ class TaskScheduler {
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "IO exec num threads: {}", io_exec_.numActiveThreads());
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "CPU exec num threads: {}", cpu_exec_.numActiveThreads());
         set_active_threads(0);
+        cpu_exec_.reset_active_tasks();
+        io_exec_.reset_active_tasks();
         set_max_threads(0);
         io_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started));
         cpu_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("CPUPool"));
@@ -366,8 +531,8 @@ class TaskScheduler {
   private:
     size_t cpu_thread_count_;
     size_t io_thread_count_;
-    SchedulerWrapper<CPUSchedulerType> cpu_exec_;
-    SchedulerWrapper<IOSchedulerType> io_exec_;
+    SchedulerWrapper<CPUSchedulerType, query_stats::PoolKind::Cpu> cpu_exec_;
+    SchedulerWrapper<IOSchedulerType, query_stats::PoolKind::Io> io_exec_;
     std::mutex cpu_mutex_;
     std::mutex io_mutex_;
 };

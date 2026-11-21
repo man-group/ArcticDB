@@ -50,9 +50,26 @@ bool TaskScheduler::is_forked() { return TaskScheduler::forked_; }
 
 void TaskScheduler::set_forked(bool val) { TaskScheduler::forked_ = val; }
 
-void TaskScheduler::init() { TaskScheduler::instance_ = std::make_shared<TaskSchedulerPtrWrapper>(new TaskScheduler); }
+void TaskScheduler::init() {
+    TaskScheduler::instance_ = std::make_shared<TaskSchedulerPtrWrapper>(new TaskScheduler);
+    query_stats::set_pool_gauge_provider([](query_stats::PoolGaugeSnapshot& cpu, query_stats::PoolGaugeSnapshot& io) {
+        if (!TaskScheduler::is_initialized() || TaskScheduler::is_forked() || !TaskScheduler::instance_->ptr_) {
+            return;
+        }
+        auto* ts = TaskScheduler::instance_->ptr_;
+        cpu.pending_tasks = static_cast<uint64_t>(ts->cpu_exec().getTaskQueueSize());
+        cpu.active_threads = static_cast<uint64_t>(ts->cpu_exec().numActiveThreads());
+        cpu.total_threads = static_cast<uint64_t>(ts->cpu_exec().numThreads());
+        cpu.max_threads = static_cast<uint64_t>(ts->cpu_thread_count());
+        io.pending_tasks = static_cast<uint64_t>(ts->io_exec().getPendingTaskCount());
+        io.max_threads = static_cast<uint64_t>(ts->io_thread_count());
+        io.active_threads = std::min(ts->io_exec().active_task_count(), io.max_threads);
+        io.total_threads = static_cast<uint64_t>(ts->io_exec().numThreads());
+    });
+}
 
 TaskSchedulerPtrWrapper::~TaskSchedulerPtrWrapper() {
+    query_stats::set_pool_gauge_provider(nullptr);
     ptr_->stop_orphaned_threads();
     delete ptr_;
 }

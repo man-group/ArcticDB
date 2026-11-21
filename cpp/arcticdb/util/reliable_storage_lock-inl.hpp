@@ -13,6 +13,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <mutex>
 
@@ -127,7 +128,7 @@ void ReliableStorageLock<ClockType>::clear_locks(const std::vector<AcquiredLockI
 }
 
 template<class ClockType>
-ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
+ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock_impl() const {
     auto [existing_locks, latest] = get_all_locks();
     if (latest.has_value()) {
         auto expires = get_expiration(get_ref_key(latest.value()));
@@ -141,8 +142,30 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
 }
 
 template<class ClockType>
+ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
+    const bool track = arcticdb::query_stats::is_active();
+    const auto start = track ? std::chrono::steady_clock::now() : arcticdb::query_stats::TimePoint{};
+    auto res = try_take_lock_impl();
+    if (track) {
+        const bool acquired = std::holds_alternative<AcquiredLock>(res);
+        const auto elapsed_ns = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()
+        );
+        arcticdb::query_stats::record_lock_event(
+                arcticdb::query_stats::LockKind::ReliableStorageLock, acquired, acquired ? 0 : 1, 0, false, elapsed_ns
+        );
+    }
+    return res;
+}
+
+template<class ClockType>
 AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
     // We don't use the ExponentialBackoff because we want to be able to wait indefinitely
+    const bool track = arcticdb::query_stats::is_active();
+    const auto start = track ? std::chrono::steady_clock::now() : arcticdb::query_stats::TimePoint{};
+    uint64_t conflicts = 0;
+    uint64_t retries = 0;
+
     auto max_wait = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::nanoseconds(timeout()));
     auto min_wait = max_wait / 16;
     auto current_wait = min_wait;
@@ -153,12 +176,22 @@ AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
         return current_wait * factor;
     };
 
-    auto acquired_lock = try_take_lock();
+    auto acquired_lock = try_take_lock_impl();
 
     while (!std::holds_alternative<AcquiredLock>(acquired_lock)) {
+        ++conflicts;
+        ++retries;
         std::this_thread::sleep_for(jittered_wait());
         current_wait = std::min(current_wait * 2, max_wait);
-        acquired_lock = try_take_lock();
+        acquired_lock = try_take_lock_impl();
+    }
+    if (track) {
+        const auto elapsed_ns = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()
+        );
+        arcticdb::query_stats::record_lock_event(
+                arcticdb::query_stats::LockKind::ReliableStorageLock, true, conflicts, retries, false, elapsed_ns
+        );
     }
     return std::get<AcquiredLock>(acquired_lock);
 }
@@ -210,6 +243,8 @@ std::optional<ActiveLock> ReliableStorageLock<ClockType>::inspect_latest_lock() 
 
 template<class ClockType>
 AcquiredLockId ReliableStorageLock<ClockType>::force_take_lock(timestamp custom_timeout) const {
+    const bool track = arcticdb::query_stats::is_active();
+    const auto start = track ? std::chrono::steady_clock::now() : arcticdb::query_stats::TimePoint{};
     auto [existing_locks, latest] = get_all_locks();
     auto force_next_id = get_force_next_id(latest);
     auto result = try_take_id(existing_locks, force_next_id, custom_timeout);
@@ -217,10 +252,28 @@ AcquiredLockId ReliableStorageLock<ClockType>::force_take_lock(timestamp custom_
             result,
             [&](AcquiredLock& acquired_lock) {
                 log::lock().info("Forcefully acquired a lock with id {}", acquired_lock);
+                if (track) {
+                    const auto elapsed_ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                          std::chrono::steady_clock::now() - start
+                    )
+                                                                          .count());
+                    arcticdb::query_stats::record_lock_event(
+                            arcticdb::query_stats::LockKind::ReliableStorageLock, true, 0, 0, false, elapsed_ns
+                    );
+                }
                 return acquired_lock;
             },
             [&](LockInUse&) -> AcquiredLockId {
                 log::lock().error("Failed to acquire a lock with force.");
+                if (track) {
+                    const auto elapsed_ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                          std::chrono::steady_clock::now() - start
+                    )
+                                                                          .count());
+                    arcticdb::query_stats::record_lock_event(
+                            arcticdb::query_stats::LockKind::ReliableStorageLock, false, 1, 0, false, elapsed_ns
+                    );
+                }
                 throw LostReliableLock{};
             }
     );

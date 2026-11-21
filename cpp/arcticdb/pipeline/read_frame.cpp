@@ -26,7 +26,10 @@
 #include <arcticdb/codec/segment_identifier.hpp>
 #include <arcticdb/pipeline/string_reducers.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
+#include <algorithm>
+#include <chrono>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb::pipelines {
@@ -621,6 +624,21 @@ void check_data_left_for_subsequent_fields(
     );
 }
 
+namespace {
+struct DecodePayloadBytes {
+    uint64_t compressed = 0;
+    uint64_t uncompressed = 0;
+};
+
+void add_encoded_field_bytes(DecodePayloadBytes& acc, const EncodedFieldImpl& field) {
+    if (field.has_ndarray()) {
+        const auto& nda = field.ndarray();
+        acc.compressed += static_cast<uint64_t>(encoding_sizes::ndarray_field_compressed_size(nda));
+        acc.uncompressed += static_cast<uint64_t>(encoding_sizes::uncompressed_size(nda));
+    }
+}
+} // namespace
+
 void decode_into_frame_static( // with or without filters, row range or date range
         SegmentInMemory& frame, PipelineContextRow& context, const storage::KeySegmentPair& key_seg,
         const DecodePathData& shared_data, std::any& handler_data, const ReadQuery& read_query,
@@ -628,6 +646,20 @@ void decode_into_frame_static( // with or without filters, row range or date ran
 ) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     ARCTICDB_DEBUG(log::version(), "Statically decoding segment with key {}", key_seg.atom_key());
+    const bool qs_active = query_stats::is_active();
+    const auto qs_start = qs_active ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    DecodePayloadBytes qs_payload{};
+    auto finish_qs = [&]() {
+        if (qs_active) {
+            const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                    0,
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qs_start)
+                            .count()
+            ));
+            query_stats::record_codec_decode(dur_ns, qs_payload.compressed, qs_payload.uncompressed);
+        }
+    };
+
     const auto& seg = key_seg.segment();
     const uint8_t* data = seg.buffer().data();
     const uint8_t* begin = data;
@@ -647,10 +679,16 @@ void decode_into_frame_static( // with or without filters, row range or date ran
     if (data != end || !fields.empty()) {
         auto string_pool_data = skip_to_string_pool(hdr, data);
         decode_string_pool(hdr, string_pool_data, begin, end, context);
+        if (qs_active && hdr.has_string_pool_field()) {
+            add_encoded_field_bytes(qs_payload, hdr.string_pool_field());
+        }
 
         auto& index_field = fields.at(0u);
         const auto index_field_offset = data;
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
+        if (qs_active && index_fieldcount > 0 && context.fetch_index()) {
+            add_encoded_field_bytes(qs_payload, index_field);
+        }
         // Truncation applies only to columns that decode via the arrow path. Computed lazily
         std::optional<ColumnTruncation> truncate_range;
         const ColumnTruncation no_truncation;
@@ -661,6 +699,9 @@ void decode_into_frame_static( // with or without filters, row range or date ran
                 truncate_range = get_truncate_range(
                         frame, context, read_query, encoding_version, index_field, index_field_offset
                 );
+                if (qs_active && !context.fetch_index() && std::holds_alternative<IndexRange>(read_query.row_filter)) {
+                    add_encoded_field_bytes(qs_payload, index_field);
+                }
             }
             return *truncate_range;
         };
@@ -670,8 +711,10 @@ void decode_into_frame_static( // with or without filters, row range or date ran
         }
 
         StaticColumnMappingIterator it(context, index_fieldcount);
-        if (it.invalid())
+        if (it.invalid()) {
+            finish_qs();
             return;
+        }
 
         while (it.has_next()) {
             advance_skipped_cols(data, it, fields, hdr); // if we have column filter
@@ -707,6 +750,9 @@ void decode_into_frame_static( // with or without filters, row range or date ran
                     context.string_pool_ptr(),
                     read_options
             );
+            if (qs_active) {
+                add_encoded_field_bytes(qs_payload, encoded_field);
+            }
 
             ARCTICDB_TRACE(
                     log::codec(), "Decoded or expanded static column {} to position {}", field_name, data - begin
@@ -721,6 +767,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
             }
         }
     }
+    finish_qs();
     ARCTICDB_TRACE(log::codec(), "Frame decoded into static schema");
 }
 
@@ -741,6 +788,20 @@ void decode_into_frame_dynamic(
 ) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     ARCTICDB_DEBUG(log::version(), "Dynamically decoding segment with key {}", key_seg.atom_key());
+    const bool qs_active = query_stats::is_active();
+    const auto qs_start = qs_active ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    DecodePayloadBytes qs_payload{};
+    auto finish_qs = [&]() {
+        if (qs_active) {
+            const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                    0,
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qs_start)
+                            .count()
+            ));
+            query_stats::record_codec_decode(dur_ns, qs_payload.compressed, qs_payload.uncompressed);
+        }
+    };
+
     const auto& seg = key_seg.segment();
     const uint8_t* data = seg.buffer().data();
     const uint8_t* begin = data;
@@ -757,11 +818,17 @@ void decode_into_frame_dynamic(
     if (!hdr.body_fields().empty()) {
         auto string_pool_data = skip_to_string_pool(hdr, data);
         decode_string_pool(hdr, string_pool_data, begin, end, context);
+        if (qs_active && hdr.has_string_pool_field()) {
+            add_encoded_field_bytes(qs_payload, hdr.string_pool_field());
+        }
 
         const auto& fields = hdr.body_fields();
         auto& index_field = fields.at(0u);
         auto index_field_offset = data;
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
+        if (qs_active && index_fieldcount > 0 && context.fetch_index()) {
+            add_encoded_field_bytes(qs_payload, index_field);
+        }
         // Truncation applies only to columns that decode via the arrow path. Computed lazily
         std::optional<ColumnTruncation> truncate_range;
         const ColumnTruncation no_truncation;
@@ -773,6 +840,9 @@ void decode_into_frame_dynamic(
                 truncate_range = get_truncate_range(
                         frame, context, read_query, encoding_version, index_field, index_field_offset
                 );
+                if (qs_active && !context.fetch_index() && std::holds_alternative<IndexRange>(read_query.row_filter)) {
+                    add_encoded_field_bytes(qs_payload, index_field);
+                }
             }
             return *truncate_range;
         };
@@ -820,6 +890,9 @@ void decode_into_frame_dynamic(
                     context.string_pool_ptr(),
                     read_options
             );
+            if (qs_active) {
+                add_encoded_field_bytes(qs_payload, encoded_field);
+            }
             ARCTICDB_TRACE(
                     log::codec(),
                     "Decoded or expanded dynamic column {} to position {}",
@@ -841,6 +914,7 @@ void decode_into_frame_dynamic(
     } else {
         ARCTICDB_DEBUG(log::version(), "Empty segment");
     }
+    finish_qs();
 }
 
 /*
