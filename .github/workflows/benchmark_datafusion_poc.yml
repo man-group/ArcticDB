@@ -676,15 +676,19 @@ jobs:
             '
 
       # Everything the box needs from the PoC tree besides the two wheels: the
-      # bench package, and DataFusion's query files at the crate's pinned rev
-      # (cargo's own checkout of the git dependency), which bench.perf_tpch and
-      # bench.perf_asof read.
+      # bench package, and DataFusion's query files, which bench.perf_tpch and
+      # bench.perf_asof read. They come from the PoC's vendored DataFusion
+      # (poc/rust/datafusion); older PoC trees, still dispatchable by poc_ref,
+      # use cargo's checkout of the git dependency instead.
       - name: stage the bench inputs
         env:
           KEY: ${{ needs.reuse.outputs.crate_key }}
         run: |
           set -euo pipefail
-          df=$(find out/cargo/git/checkouts -mindepth 2 -maxdepth 2 -path '*/datafusion-*/*' -type d | head -1)
+          df=poc/rust/datafusion
+          if [ ! -d "$df/benchmarks/sql_benchmarks/tpch/benchmarks" ]; then
+            df=$(find out/cargo/git/checkouts -mindepth 2 -maxdepth 2 -path '*/datafusion-*/*' -type d | head -1)
+          fi
           test -d "$df/benchmarks/sql_benchmarks/tpch/benchmarks"
           mkdir -p stage/datafusion/benchmarks stage/src/rust stage/bin
           cp -r "$df/benchmarks/sql_benchmarks" stage/datafusion/benchmarks/
