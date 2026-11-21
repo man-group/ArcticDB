@@ -15,6 +15,7 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/single_file_storage.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 
 #include <algorithm>
 #include <memory>
@@ -261,7 +262,7 @@ class Storages {
 
   private:
     template<typename Fn>
-    void visit_storages(bool primary_only, Fn&& fn) {
+    void visit_storages(bool primary_only, const Fn& fn) {
         if (primary_only) {
             fn(primary());
             return;
