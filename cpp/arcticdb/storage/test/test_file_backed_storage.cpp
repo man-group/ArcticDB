@@ -56,12 +56,13 @@ class TempDir {
 };
 
 FileBackedStorage get_storage(
-        const fs::path& dir, const std::shared_ptr<PosixInterface>& posix = std::make_shared<RealPosix>()
+        const fs::path& dir, storage::OpenMode open_mode = storage::OpenMode::DELETE,
+        const std::shared_ptr<PosixInterface>& posix = std::make_shared<RealPosix>()
 ) {
     proto::file_storage::Config cfg;
     cfg.set_dir_path(dir.generic_string());
     storage::LibraryPath library_path("test_lib", '.');
-    return FileBackedStorage(library_path, storage::OpenMode::DELETE, cfg, posix);
+    return FileBackedStorage(library_path, open_mode, cfg, posix);
 }
 
 TEST(FileStorageInit, FileExistsWhereLibraryWouldGo) {
@@ -89,6 +90,21 @@ TEST(FileStorageInit, NoPermissionToCreateLibrary) {
     // Existence check succeeds, but then can't create the library directory.
     ::chmod(temp_dir.get().c_str(), 0500);
     ASSERT_THROW(get_storage(temp_dir.get()), PermissionException);
+}
+
+TEST(FileStorageInit, ReadOnlyMode) {
+    TempDir temp_dir(*::testing::UnitTest::GetInstance()->current_test_info());
+    // Make sure the temp directory deletion succeeds.
+    BOOST_SCOPE_EXIT(&temp_dir) { ::chmod(temp_dir.get().c_str(), 07777); }
+    BOOST_SCOPE_EXIT_END
+
+    auto library_dir = temp_dir.get() / "test_lib"; // TODO: Pull "test_lib" into constant.
+    int res = ::mkdir(library_dir.c_str(), 0500);
+    ASSERT_EQ(res, 0);
+
+    // Writing no longer possible, but if the library directory exists, should succeed.
+    ::chmod(temp_dir.get().c_str(), 0500);
+    get_storage(temp_dir.get(), storage::OpenMode::READ);
 }
 
 class FileBackedStorageFixture : public ::testing::Test {
