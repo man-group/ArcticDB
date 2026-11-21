@@ -73,6 +73,15 @@ class Library {
         storages_->visit_object_sizes(type, prefix, visitor);
     }
 
+    [[nodiscard]] bool supports_object_metadata_listing() const {
+        return storages_->supports_object_metadata_listing();
+    }
+
+    void visit_object_metadata(KeyType type, const std::string& prefix, const ObjectMetadataVisitor& visitor) {
+        ARCTICDB_SAMPLE(VisitObjectMetadata, 0)
+        storages_->visit_object_metadata(type, prefix, visitor);
+    }
+
     /**
      * Scan through every key of the given type until one matches the predicate.
      *

@@ -15,7 +15,9 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/single_file_storage.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -60,6 +62,12 @@ class Storages {
     [[nodiscard]] bool supports_object_size_calculation() {
         return std::all_of(storages_.begin(), storages_.end(), [](const auto& storage) {
             return storage->supports_object_size_calculation();
+        });
+    }
+
+    [[nodiscard]] bool supports_object_metadata_listing() const {
+        return std::ranges::all_of(storages_, [](const auto& storage) {
+            return storage->supports_object_metadata_listing();
         });
     }
 
@@ -186,14 +194,15 @@ class Storages {
     void visit_object_sizes(
             KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor, bool primary_only = true
     ) {
-        if (primary_only) {
-            primary().visit_object_sizes(key_type, prefix, visitor);
-            return;
-        }
+        visit_storages(primary_only, [&](Storage& storage) { storage.visit_object_sizes(key_type, prefix, visitor); });
+    }
 
-        for (const auto& storage : storages_) {
-            storage->visit_object_sizes(key_type, prefix, visitor);
-        }
+    void visit_object_metadata(
+            KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor, bool primary_only = true
+    ) {
+        visit_storages(primary_only, [&](Storage& storage) {
+            storage.visit_object_metadata(key_type, prefix, visitor);
+        });
     }
 
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate, bool primary_only = true) {
@@ -252,6 +261,18 @@ class Storages {
     [[nodiscard]] std::string name() const { return primary().name(); }
 
   private:
+    template<typename Fn>
+    void visit_storages(bool primary_only, const Fn& fn) {
+        if (primary_only) {
+            fn(primary());
+            return;
+        }
+
+        for (const auto& storage : storages_) {
+            fn(*storage);
+        }
+    }
+
     Storage& primary() {
         util::check(!storages_.empty(), "No storages configured");
         return *storages_[0];
