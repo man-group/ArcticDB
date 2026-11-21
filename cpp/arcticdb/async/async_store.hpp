@@ -15,6 +15,7 @@
 #include <folly/futures/Future.h>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/version/enriched_op_log_payload.hpp>
 
 namespace arcticdb::toolbox::apy {
 class LibraryTool;
@@ -85,7 +86,11 @@ class AsyncStore : public Store {
                                               encoding_version_
                                       })
                 .via(&async::io_executor())
-                .thenValue(WriteSegmentTask{library_});
+                .thenValue([lib = library_, cache = write_capture_cache()](storage::KeySegmentPair&& ks) {
+                    lib->write(ks);
+                    record_captured_write_if_enabled(cache, ks);
+                    return std::move(ks).variant_key();
+                });
     }
 
     folly::Future<entity::VariantKey> write(
@@ -112,7 +117,11 @@ class AsyncStore : public Store {
                                               encoding_version_
                                       })
                 .via(&async::io_executor())
-                .thenValue(WriteSegmentTask{library_});
+                .thenValue([lib = library_, cache = write_capture_cache()](storage::KeySegmentPair&& ks) {
+                    lib->write(ks);
+                    record_captured_write_if_enabled(cache, ks);
+                    return std::move(ks).variant_key();
+                });
     }
 
     folly::Future<VariantKey> write(stream::PartialKey pk, SegmentInMemory&& segment) override {
@@ -176,7 +185,9 @@ class AsyncStore : public Store {
                 codec_,
                 encoding_version_
         }();
-        return WriteSegmentTask{library_}(std::move(encoded));
+        library_->write(encoded);
+        record_captured_write_if_enabled(write_capture_cache(), encoded);
+        return std::move(encoded).variant_key();
     }
 
     entity::VariantKey write_sync(stream::PartialKey pk, SegmentInMemory&& segment) override {
@@ -517,6 +528,7 @@ class AsyncStore : public Store {
                 std::move(dedup_lookup),
                 [&, this](NewObject&& obj) {
                     library_->write(obj);
+                    record_captured_write_if_enabled(write_capture_cache(), obj);
                     return SliceAndKey{std::move(slice), std::move(obj).atom_key()};
                 },
                 [&](ExistingObject&& obj) { return SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }
@@ -570,6 +582,26 @@ class AsyncStore : public Store {
 
   private:
     friend class arcticdb::toolbox::apy::LibraryTool;
+
+    static void record_captured_write_if_enabled(
+            const std::shared_ptr<WriteCaptureCache>& cache, storage::KeySegmentPair& ks
+    ) {
+        if (!cache || !is_enriched_op_log_enabled() || !std::holds_alternative<AtomKey>(ks.variant_key())) {
+            return;
+        }
+        auto seg_ptr = ks.segment_ptr();
+        if (!seg_ptr) {
+            return;
+        }
+        const auto& ak = ks.atom_key();
+        if (ak.type() == KeyType::TABLE_DATA) {
+            cache->record_data(ak, *seg_ptr);
+        } else if (ak.type() == KeyType::TABLE_INDEX) {
+            cache->record_index(ak, *seg_ptr);
+        } else if (ak.type() == KeyType::COLUMN_STATS) {
+            cache->record_column_stats(ak, *seg_ptr);
+        }
+    }
 
     static std::vector<std::vector<entity::VariantKey>> chunk_keys(
             std::vector<entity::VariantKey>&& keys, size_t batch_size

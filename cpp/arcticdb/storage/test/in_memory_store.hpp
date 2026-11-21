@@ -16,6 +16,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/version/enriched_op_log_payload.hpp>
 
 #include <folly/futures/Future.h>
 
@@ -550,6 +551,19 @@ class InMemoryStore : public Store {
 
     void add_segment(const AtomKey& key, SegmentInMemory&& seg) {
         StorageFailureSimulator::instance()->go(FailureType::WRITE);
+        if (write_capture_cache() && is_enriched_op_log_enabled() &&
+            (key.type() == KeyType::TABLE_DATA || key.type() == KeyType::TABLE_INDEX ||
+             key.type() == KeyType::COLUMN_STATS)) {
+            Segment encoded = encode_dispatch(seg.clone(), codec_, EncodingVersion::V1);
+            (void)encoded.calculate_size();
+            if (key.type() == KeyType::TABLE_DATA) {
+                write_capture_cache()->record_data(key, encoded);
+            } else if (key.type() == KeyType::TABLE_INDEX) {
+                write_capture_cache()->record_index(key, encoded);
+            } else {
+                write_capture_cache()->record_column_stats(key, encoded);
+            }
+        }
         std::lock_guard lock{mutex_};
         ARCTICDB_DEBUG(log::storage(), "Adding segment with key {}", key);
         seg_by_atom_key_[key] = std::make_unique<SegmentInMemory>(std::move(seg));

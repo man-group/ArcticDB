@@ -44,6 +44,24 @@ class Store : public stream::StreamSink, public stream::StreamSource, public std
     virtual std::string name() const = 0;
 
     virtual storage::OpenMode open_mode() const = 0;
+
+    [[nodiscard]] std::optional<CapturedVersionWrite> take_captured_version_write(
+            const StreamId& stream_id, entity::VersionId version_id
+    ) override {
+        return write_capture_cache_->take(stream_id, version_id);
+    }
+
+    void discard_captured_version_write(const StreamId& stream_id, entity::VersionId version_id) override {
+        write_capture_cache_->discard(stream_id, version_id);
+    }
+
+  protected:
+    [[nodiscard]] const std::shared_ptr<WriteCaptureCache>& write_capture_cache() const noexcept {
+        return write_capture_cache_;
+    }
+
+  private:
+    std::shared_ptr<WriteCaptureCache> write_capture_cache_ = std::make_shared<WriteCaptureCache>();
 };
 
 } // namespace arcticdb
