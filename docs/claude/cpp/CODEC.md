@@ -199,6 +199,10 @@ Encoding version is configured via `LibraryOptions.encoding_version`. Segment ro
 
 Larger blocks = better compression ratio but more memory during decompression.
 
+### Query Statistics Instrumentation
+
+- `Segment::has_size()` and `Segment::size_or_calculate()` (`codec/segment.hpp`) return the cached serialized byte size when already known, avoiding unnecessary V1 protobuf header re-serialization during `Storage`/`AsyncStorage` NVI and `DeDupMap` byte accounting. See [../python/TOOLBOX.md](../python/TOOLBOX.md).
+
 ## Related Documentation
 
 - [ENTITY.md](ENTITY.md) - Data types being encoded

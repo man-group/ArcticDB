@@ -314,6 +314,11 @@ Write using `write_frame(IndexPartialKey, frame, slicing, store)`. Read using `r
 - Decompression parallelized across threads
 - Network latency hidden by pipelining
 
+### Query Statistics Instrumentation
+
+- Direct plain reads (`read_frame.cpp:decode_into_frame_static`, `read_frame.cpp:decode_into_frame_dynamic`) record decode latency and encoded field payload bytes (`encoding_sizes::ndarray_field_compressed_size` / `uncompressed_size`) via `query_stats::record_codec_decode` when `query_stats::is_active()`.
+- `pipeline_utils.cpp:create_python_read_result` wraps C++ read-result construction in `query_stats::BoundaryOpScope(BoundaryPhase::CppOutput)`. See [../python/TOOLBOX.md](../python/TOOLBOX.md).
+
 ## Related Documentation
 
 - [CODEC.md](CODEC.md) - Compression details

@@ -275,3 +275,8 @@ def reader_process(uri, lib_name, symbol, cache_interval_ns):
 | `flush()` | Clears entire cache |
 | `flush_entry()` | Clears cache for one symbol |
 | `get_version_to_read()` | Version lookup with cache bypass retry |
+
+### Query Statistics Instrumentation
+
+- **Cache lookups & conflicts** (gated on `query_stats::is_active()`): `VersionMapImpl` (`cpp/arcticdb/version/version_map.hpp`) records `hits` in `check_reload`, `misses` and `reloads` in `storage_reload` (`is_reload = !entry->empty()`, separating cold/nonexistent misses from refreshes of previously loaded entries), `chain_hops` in `follow_version_chain`, `ref_retries` in `load_via_ref_key`, and `WriteConflictKind::NonIncreasingVersion` in `do_write`. `ConfigCache::get_descriptor` (`cpp/arcticdb/storage/config_cache.hpp`) records `hits` and `misses`.
+- **Live entry gauges** (always maintained via relaxed atomics): `VersionMapImpl` tracks `version_map_entries` via `query_stats::detail::adjust_version_map_entries` in `get_entry`, `flush`, and `~VersionMapImpl()`; `ConfigCache` tracks `config_cache_libraries` and `config_cache_storages` via `query_stats::detail::adjust_config_cache_counts` in `add_library`, `refresh_config`, and `~ConfigCache()`. See [../python/TOOLBOX.md](../python/TOOLBOX.md).

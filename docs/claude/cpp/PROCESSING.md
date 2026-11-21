@@ -427,6 +427,12 @@ Translates to C++ expression tree internally.
 - Aggregation partitioned across threads
 - Final merge step for parallel aggregations
 
+### Query Statistics Instrumentation
+
+- `ClauseInfo::clause_kind_` (`clause_utils.hpp`, tagged on all 18 clause subclasses in `clause.hpp`) supplies a low-cardinality `query_stats::ClauseKind` for per-clause execution timing and row counts in `MemSegmentProcessingTask` (`async/tasks.hpp`).
+- `ComponentManager::count_rows()` (`component_manager.hpp`, `component_manager.cpp`) counts logical rows across entity IDs (deduplicating column-partitioned slices via `min_col_start`) for clause `rows_in`/`rows_out` reporting.
+- `ProcessingUnitAdmissionHandler` (`version/admission_handler.hpp`) tracks residency-budget waits (`admit_initial_processing_units` / `on_processing_unit_complete` using atomic `admit_start_ns_` → `record_admission_unit`) and `PendingRead` read-window waits (`enqueue_processing_unit_locked` / `dispatch_reads` → `record_admission_segment`). See [../python/TOOLBOX.md](../python/TOOLBOX.md).
+
 ## Error Handling
 
 Type mismatches throw `SchemaException`. Invalid operations throw `UserInputException`.

@@ -207,6 +207,12 @@ Note that `TaskScheduler::forked_`, `is_forked()` and `set_forked()` are dead: n
 - Batch results instead of per-row callbacks
 - Consider progress callbacks carefully
 
+### Query Statistics Instrumentation
+
+- **GIL wait tracking**: `ScopedGILLock`, `TimedGilAcquire`, and `TimedGilRelease` (`python/gil_lock.hpp`) time GIL acquisition/re-acquisition into `BoundaryPhase::GilWait` when `query_stats::is_active()` (`TimedGilRelease` disarms safely if `!Py_IsInitialized()`). Used at the pybind entry gate (`util/pybind_mutex.hpp:SingleThreadMutexHolder::ensure_single_thread_cpp_pybind_entry`) and across C++/Python callback and conversion paths (`python_handlers.cpp`, `python_strings.cpp`, `version/python_bindings.cpp`, `version/version_store_api.cpp`, `version/local_versioned_engine.cpp`).
+- **Input boundary conversion**: `python_to_tensor_frame.cpp:py_input_item_to_frame` wraps Python-to-C++ frame conversion in `query_stats::BoundaryOpScope(BoundaryPhase::CppInput)`.
+- **GIL-releasing Prometheus bindings**: `python_bindings_common.cpp` binds `PrometheusInstance::configure` and `PrometheusInstance::push` with `py::call_guard<py::gil_scoped_release>()` (and `toolbox/python_bindings.cpp` similarly releases the GIL around Prometheus, snapshot, and sink bindings). See [../python/TOOLBOX.md](../python/TOOLBOX.md).
+
 ## Debugging
 
 Enable debug logging: `arcticdb_ext.set_config_string("Log.Level", "DEBUG")`. Inspect bindings with `dir(arcticdb_ext)` and `help(arcticdb_ext.VersionStore)`.

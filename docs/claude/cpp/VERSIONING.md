@@ -358,3 +358,9 @@ LOCK keys are only used for the compaction phase of the symbol list concurrent d
 | `cpp/arcticdb/util/storage_lock.hpp` | Storage lock interface |
 | `cpp/arcticdb/util/reliable_storage_lock.hpp` | Reliable distributed locking |
 | `cpp/arcticdb/version/local_versioned_engine.cpp` | Version management |
+
+## Query Statistics Instrumentation
+
+- **Library API RED & context tags**: `PythonVersionStore` public API entrypoints (`version_store_api.cpp`, plus `version/python_bindings.cpp` for `HasSymbol`) wrap calls in `query_stats::ApiOpScope` using `LocalVersionedEngine::library_name()` (`local_versioned_engine.hpp`) and mark `DataError` batch items as errors; `LocalVersionedEngine` (`local_versioned_engine.cpp`) pushes `query_stats::ContextTagScope` so indirect keys (`SYMBOL_LIST`, `LOCK`, HTTP) inherit the active symbol.
+- **Query pruning & compactions**: `version_core.cpp` records index vs column-stats pruning, column projection, and row selection (`read_indexed_keys_to_pipeline` → `record_query_pruning`), sets `write_semaphore_limit`, and records `SortMerge`, `Incomplete`, and `Defragment` compactions (`sort_merge_impl`, `compact_incomplete_impl`, `defragment_symbol_data_impl` → `record_compaction`).
+- **SymbolList & DeDupMap**: `SymbolList` (`symbol_list.hpp`, `symbol_list.cpp`) records `CompactionKind::SymbolList` compactions (including `StorageLock` wait) and `WriteConflictKind::{SymbolListLoadRetry, ConcurrentSymbolListCompaction}` conflicts; `DeDupMap::empty()` (`de_dup_map.hpp`) lets dedup lookups skip empty maps so non-dedup writes do not record false misses. See [../python/TOOLBOX.md](../python/TOOLBOX.md).

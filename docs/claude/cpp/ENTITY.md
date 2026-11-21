@@ -123,6 +123,10 @@ ArcticDB exception classes (in `cpp/arcticdb/util/`):
 - `StringId` - Symbol name as string (e.g., "my_symbol")
 - `NumericId` - Symbol as numeric ID (internal use)
 
+## Prometheus Metrics
+
+`PrometheusInstance` (`cpp/arcticdb/entity/metrics.hpp`, `metrics.cpp`) manages ArcticDB's global pull (`prometheus::Exposer` on `/metrics`) or push (`prometheus::Gateway`) metrics endpoint (configured once per process via `configure()`). `registerCollectable()` and `unregisterCollectable()` attach and detach scrape-time `prometheus::Collectable` providers (such as `query_stats`'s `PrometheusStatsSink`). `metrics_mutex_` serializes `configure()`, metric registration/updates/removal, `registerCollectable()`/`unregisterCollectable()`, and snapshot acquisition in `push()`/`get_metrics()` (releasing the lock before invoking `Collect()` or `PushAdd()`). See [../python/TOOLBOX.md](../python/TOOLBOX.md).
+
 ## Key Files
 
 | File | Purpose |
@@ -133,6 +137,7 @@ ArcticDB exception classes (in `cpp/arcticdb/util/`):
 | `types.hpp` | Data types and type descriptors |
 | `field_collection.hpp` | Field/column collection |
 | `protobufs.hpp` | Protobuf conversion helpers |
+| `metrics.hpp` / `metrics.cpp` | `PrometheusInstance` registry, exposer/gateway, and collectable hooks |
 
 ## Usage
 

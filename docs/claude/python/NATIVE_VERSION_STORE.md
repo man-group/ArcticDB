@@ -114,6 +114,10 @@ When `output_format="polars"`, `NativeVersionStore._apply_polars_sorted_flag_to_
 
 `PythonVersionStore` is defined in `cpp/arcticdb/version/version_store_api.cpp` and provides `write()` and `read()` methods that work with `InputTensorFrame` and `OutputTensorFrame`.
 
+### Query Statistics Instrumentation
+
+`NativeVersionStore._try_normalize` and `NativeVersionStore._adapt_frame_data` (`python/arcticdb/version_store/_store.py`) check `arcticdb_ext.tools.query_stats.is_active()` and record Python/Arrow normalization and denormalization durations (`BoundaryPhase::Normalize` / `BoundaryPhase::Denormalize`) via `record_boundary_normalize` and `record_boundary_denormalize` in `finally` blocks. See [TOOLBOX.md](TOOLBOX.md).
+
 ## Configuration
 
 Store configuration is passed to C++ via `NativeVersionStore.create_store_from_config(config)`. Runtime settings can be adjusted via `arcticdb_ext.set_config_int()` and `set_config_string()`.

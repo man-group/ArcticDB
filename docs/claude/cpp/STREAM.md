@@ -210,6 +210,10 @@ Create an `Aggregator` with a `StreamDescriptor` and segment size (default 100,0
 - Streaming approach limits memory usage
 - Preallocated buffers reduce allocation overhead
 
+### Query Statistics Instrumentation
+
+- `incompletes.cpp:load_via_list` records incomplete append chain loads and hop counts (`query_stats::record_incomplete_chain_load(hops, /*via_iteration=*/false)`), and `incompletes.cpp:load_via_iteration` records iteration-mode staged segment loads and segment counts (`via_iteration=true`) when `query_stats::is_active()`. See [../python/TOOLBOX.md](../python/TOOLBOX.md).
+
 ## Related Documentation
 
 - [PIPELINE.md](PIPELINE.md) - How streaming fits in write path

@@ -94,6 +94,12 @@ The CPU count respects cgroup CPU limits (v1 and v2) for containerized environme
 
 ## Performance Considerations
 
+### Query Statistics Instrumentation
+
+- `TaskScheduler` (`task_scheduler.hpp`, `task_scheduler.cpp`): `SchedulerWrapper::add`, `submit_cpu_task`, and `submit_io_task` propagate `query_stats::CapturedContext` (`folly::RequestContext`) and record CPU/IO queue-wait and run latencies when `query_stats::is_active()`; `QueryStatsTaskObserver` records expired tasks. `ActiveTaskCounterBase` tracks currently executing IO tasks for live IO `active_threads`, and `TaskScheduler::init()` / `~TaskSchedulerPtrWrapper()` registers/clears the scrape-time pool gauge provider via `query_stats::set_pool_gauge_provider`.
+- `AsyncStore` (`async_store.hpp`, `async_store.cpp`): `write_maybe_blocking` fast-paths `semaphore->try_wait()` so only contended acquires record `record_semaphore_wait`, and guards `write_semaphore_in_flight` and `semaphore->post()` with an RAII `PermitGuard`; `lookup_match_in_dedup_map` skips `DeDupMap::empty()` and records dedup hits, misses, and `Segment::size_or_calculate()` bytes saved; `write_if_new` calls `record_data_segment_written` post-write (excluding dedup hits and failed writes).
+- Codec, write & processing tasks (`tasks.hpp`, `tasks.cpp`): `EncodeAtomTask`/`EncodeSegmentTask`/`EncodeRefTask` and `DecodeSegmentTask`/`DecodeSliceTask` record encode/decode latencies and `encoding_sizes` payload byte counts; `WriteSegmentTask` calls `record_data_segment_written` post-write; `MemSegmentProcessingTask` records per-clause timing and `rows_in`/`rows_out` (via `ComponentManager::count_rows`, skipping empty-input no-ops).
+
 ### Thread Pool Sizing
 
 - CPU pool: Match physical cores for compute tasks
