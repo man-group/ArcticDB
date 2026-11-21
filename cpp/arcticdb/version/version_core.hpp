@@ -92,7 +92,8 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
         std::vector<std::vector<EntityId>>&& entity_ids_vec_fut,
-        const std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses, bool fail_fast = true
+        const std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses, bool fail_fast = true,
+        std::shared_ptr<ComponentManager> component_manager = nullptr
 );
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
@@ -223,7 +224,7 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store, VersionIdentifier version_info, ReadQuery& read_query,
-        const ReadOptions& read_options
+        const ReadOptions& read_options, bool record_query_stats = false
 );
 } // namespace arcticdb::version_store
 

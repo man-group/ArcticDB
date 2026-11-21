@@ -6,7 +6,10 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <algorithm>
 #include <atomic>
+#include <optional>
+#include <unordered_map>
 
 #include <arcticdb/processing/component_manager.hpp>
 
@@ -48,6 +51,55 @@ void ComponentManager::decrement_entity_fetch_count(EntityId id) {
 
 void ComponentManager::update_entity_fetch_count(EntityId id, EntityFetchCount count) {
     registry_.get<std::atomic<EntityFetchCount>>(id).store(count);
+}
+
+uint64_t ComponentManager::count_rows(const std::vector<EntityId>& ids) const {
+    if (ids.empty()) {
+        return 0;
+    }
+    std::shared_lock lock(mtx_);
+    auto entity_row_count = [this](EntityId id) -> std::optional<uint64_t> {
+        if (!registry_.valid(id)) {
+            return std::nullopt;
+        }
+        if (const auto* mem_seg_ptr = registry_.try_get<std::shared_ptr<SegmentInMemory>>(id);
+            mem_seg_ptr && *mem_seg_ptr && !(*mem_seg_ptr)->is_null()) {
+            return static_cast<uint64_t>((*mem_seg_ptr)->row_count());
+        }
+        if (const auto* seg_ptr = registry_.try_get<std::shared_ptr<Segment>>(id); seg_ptr && *seg_ptr) {
+            return static_cast<uint64_t>((*seg_ptr)->descriptor().row_count());
+        }
+        return std::nullopt;
+    };
+
+    if (ids.size() == 1) {
+        return entity_row_count(ids[0]).value_or(0);
+    }
+
+    uint64_t unkeyed_total = 0;
+    std::unordered_map<pipelines::RowRange, uint64_t, pipelines::RowRange::Hasher> rows_by_range;
+    rows_by_range.reserve(ids.size());
+    for (const auto id : ids) {
+        const auto rows = entity_row_count(id);
+        if (!rows.has_value()) {
+            continue;
+        }
+        if (const auto* row_range_ptr = registry_.try_get<std::shared_ptr<pipelines::RowRange>>(id);
+            row_range_ptr && *row_range_ptr) {
+            auto [it, inserted] = rows_by_range.emplace(**row_range_ptr, *rows);
+            if (!inserted) {
+                it->second = std::max(it->second, *rows);
+            }
+        } else {
+            unkeyed_total += *rows;
+        }
+    }
+
+    uint64_t total = unkeyed_total;
+    for (const auto& entry : rows_by_range) {
+        total += entry.second;
+    }
+    return total;
 }
 
 } // namespace arcticdb

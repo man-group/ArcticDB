@@ -109,7 +109,7 @@ bool is(const std::shared_ptr<Clause>& clause) {
 OutputSchema modify_schema(OutputSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses);
 
 struct PassthroughClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Passthrough};
 
     PassthroughClause() = default;
     ARCTICDB_MOVE_COPY_DEFAULT(PassthroughClause)
@@ -141,7 +141,7 @@ struct PassthroughClause {
 };
 
 struct FilterClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Filter};
     std::shared_ptr<ComponentManager> component_manager_;
     std::shared_ptr<ExpressionContext> expression_context_;
     PipelineOptimisation optimisation_;
@@ -200,7 +200,7 @@ struct FilterClause {
 };
 
 struct ProjectClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Project};
     std::shared_ptr<ComponentManager> component_manager_;
     std::string output_column_;
     std::shared_ptr<ExpressionContext> expression_context_;
@@ -260,7 +260,7 @@ struct ProjectClause {
 
 template<typename GrouperType, typename BucketizerType>
 struct PartitionClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::GroupByPartition};
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string grouping_column_;
@@ -337,7 +337,7 @@ struct NamedAggregator {
 };
 
 struct AggregationClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Aggregation};
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string grouping_column_;
@@ -381,7 +381,7 @@ template<ResampleBoundary closed_boundary>
 struct ResampleClause {
     using BucketGeneratorT = std::function<std::vector<
             timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, const ResampleOrigin&)>;
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Resample};
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string rule_;
@@ -448,7 +448,7 @@ template<ResampleBoundary closed_boundary>
 struct is_resample<ResampleClause<closed_boundary>> : std::true_type {};
 
 struct RemoveColumnPartitioningClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::RemoveColumnPartitioning};
     std::shared_ptr<ComponentManager> component_manager_;
     mutable bool warning_shown = false; // folly::Poly can't deal with atomic_bool
     size_t incompletes_after_;
@@ -488,7 +488,7 @@ struct RemoveColumnPartitioningClause {
 };
 
 struct SplitClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Split};
     std::shared_ptr<ComponentManager> component_manager_;
     const size_t rows_;
 
@@ -523,7 +523,7 @@ struct SplitClause {
 };
 
 struct SortClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Sort};
     std::shared_ptr<ComponentManager> component_manager_;
     const std::string column_;
     size_t incompletes_after_;
@@ -562,7 +562,7 @@ struct SortClause {
 };
 
 struct MergeClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Merge};
     std::shared_ptr<ComponentManager> component_manager_;
     stream::Index index_;
     stream::VariantColumnPolicy density_policy_;
@@ -601,7 +601,7 @@ struct MergeClause {
 };
 
 struct ColumnStatsGenerationClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::ColumnStats};
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators_;
@@ -652,7 +652,7 @@ struct ColumnStatsGenerationClause {
 struct RowRangeClause {
     enum class RowRangeType : uint8_t { HEAD, TAIL, RANGE };
 
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::RowRange};
     std::shared_ptr<ComponentManager> component_manager_;
     RowRangeType row_range_type_;
     // As passed into head or tail
@@ -727,7 +727,7 @@ struct RowRangeClause {
 
 struct DateRangeClause {
 
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::DateRange};
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     // Time range to keep, inclusive of start and end
@@ -772,7 +772,7 @@ struct DateRangeClause {
 };
 
 struct ConcatClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Concat};
     std::shared_ptr<ComponentManager> component_manager_;
     JoinType join_type_;
 
@@ -806,7 +806,7 @@ struct ConcatClause {
 };
 
 struct WriteClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::Write};
     std::shared_ptr<ComponentManager> component_manager_;
     IndexPartialKey index_partial_key_;
     std::shared_ptr<DeDupMap> dedup_map_;
@@ -871,7 +871,7 @@ struct HashedSource;
 ///
 /// INSERT: Each row in source_ not matched by the target will be inserted
 struct MergeUpdateClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::MergeUpdate};
     std::shared_ptr<ComponentManager> component_manager_;
     /// Defines the order in which the columns will be iterated. Currently, it's the same as the order in which the user
     /// passed it via the API. In future query optimization can reoder it. Does not contain duplicates.
@@ -998,7 +998,7 @@ struct CompactDataClause {
      * grounds that small changes to the input distribution could cause large changes to the optimal output
      * distribution, resulting in all of the data being resliced after a small append, for instance.
      */
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::CompactData};
     std::shared_ptr<ComponentManager> component_manager_;
     uint64_t rows_per_segment_;
     std::shared_ptr<InputFrame> frame_;
@@ -1040,7 +1040,7 @@ struct CompactDataClause {
 };
 
 struct RenameColumnsClause {
-    ClauseInfo clause_info_;
+    ClauseInfo clause_info_{query_stats::ClauseKind::RenameColumns};
     std::shared_ptr<ComponentManager> component_manager_;
     ankerl::unordered_dense::map<std::string, std::string, util::TransparentStringHash, std::equal_to<>>
             column_renames_;

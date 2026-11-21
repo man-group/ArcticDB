@@ -25,6 +25,7 @@
 #include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/name_validation.hpp>
 #include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
@@ -1470,7 +1471,8 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                                     (*slice_added)[pos] = 1;
                                 }
                             }
-                            return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
+                            return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids), component_manager)(
+                            );
                         });
         // Make sure we always mark a unit complete even if it fails, so we don't block loading the next one.
         processing_fut = std::move(processing_fut).ensure([admission]() { admission->on_processing_unit_complete(); });
@@ -1481,14 +1483,15 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
         std::vector<std::vector<EntityId>>&& entity_ids_vec,
-        const std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses, const bool fail_fast
+        const std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses, const bool fail_fast,
+        std::shared_ptr<ComponentManager> component_manager
 ) {
     auto scheduling_iterations = num_scheduling_iterations(*clauses);
     folly::Future<std::vector<std::vector<EntityId>>> entity_ids_vec_fut(std::move(entity_ids_vec));
     for (auto i = 0UL; i < scheduling_iterations; ++i) {
         entity_ids_vec_fut =
                 std::move(entity_ids_vec_fut)
-                        .thenValue([clauses, scheduling_iterations, i, fail_fast](
+                        .thenValue([clauses, scheduling_iterations, i, fail_fast, component_manager](
                                            std::vector<std::vector<EntityId>>&& entity_id_vectors
                                    ) {
                             ARCTICDB_RUNTIME_DEBUG(
@@ -1511,9 +1514,9 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
                                 ARCTICDB_RUNTIME_DEBUG(
                                         log::memory(), "Scheduling work for entity ids: {}", unit_of_work
                                 );
-                                work_futures.emplace_back(async::submit_cpu_task(
-                                        async::MemSegmentProcessingTask{*clauses, std::move(unit_of_work)}
-                                ));
+                                work_futures.emplace_back(async::submit_cpu_task(async::MemSegmentProcessingTask{
+                                        *clauses, std::move(unit_of_work), component_manager
+                                }));
                             }
 
                             return (fail_fast ? folly::collect(std::move(work_futures))
@@ -1569,10 +1572,10 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
 
     return (fail_fast ? folly::collect(std::move(*futures)) : collect_all_then_rethrow(std::move(*futures)))
             .via(&async::io_executor())
-            .thenValueInline([clauses, fail_fast](auto&& entity_ids_vec) {
+            .thenValueInline([clauses, fail_fast, component_manager](auto&& entity_ids_vec) {
                 remove_processed_clauses(*clauses);
                 return schedule_remaining_iterations(
-                        std::forward<decltype(entity_ids_vec)>(entity_ids_vec), clauses, fail_fast
+                        std::forward<decltype(entity_ids_vec)>(entity_ids_vec), clauses, fail_fast, component_manager
                 );
             });
 }
@@ -1719,7 +1722,7 @@ void check_can_perform_processing(
 
 static void read_indexed_keys_to_pipeline(
         const std::shared_ptr<PipelineContext>& pipeline_context, ReadQuery& read_query,
-        const ReadOptions& read_options, IndexInformation& index_information
+        const ReadOptions& read_options, IndexInformation& index_information, bool record_query_stats = false
 ) {
     auto maybe_reader = get_index_segment_reader(pipeline_context, std::move(index_information.index_));
     if (!maybe_reader) {
@@ -1742,14 +1745,62 @@ static void read_indexed_keys_to_pipeline(
             read_query, pipeline_context, dynamic_schema, bucketize_dynamic
     );
 
+    uint64_t pruned_by_col_stats = 0;
     if (index_information.column_stats_.has_value()) {
         auto& [data, query_metadata] = *index_information.column_stats_;
-        queries.push_back(create_column_stats_filter(std::move(data), tsd, std::move(query_metadata)));
+        auto cs_filter = create_column_stats_filter(std::move(data), tsd, std::move(query_metadata));
+        if (record_query_stats && query_stats::is_active()) {
+            queries.push_back([cs_filter = std::move(cs_filter), &pruned_by_col_stats](
+                                      const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input
+                              ) mutable {
+                const uint64_t before =
+                        input ? static_cast<uint64_t>(input->count()) : static_cast<uint64_t>(isr.size());
+                auto out = cs_filter(isr, std::move(input));
+                const uint64_t after = out ? static_cast<uint64_t>(out->count()) : 0ULL;
+                if (before > after) {
+                    pruned_by_col_stats += (before - after);
+                }
+                return out;
+            });
+        } else {
+            queries.push_back(std::move(cs_filter));
+        }
     }
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
     pipeline_context->rows_ = index_segment_reader.tsd().total_rows();
+    if (record_query_stats && query_stats::is_active()) {
+        const uint64_t segments_total = static_cast<uint64_t>(index_segment_reader.size());
+        const uint64_t segments_read = static_cast<uint64_t>(pipeline_context->slice_and_keys_.size());
+        const uint64_t pruned_index = (segments_total >= segments_read + pruned_by_col_stats)
+                                              ? (segments_total - segments_read - pruned_by_col_stats)
+                                              : 0ULL;
+        const uint64_t columns_total = static_cast<uint64_t>(tsd.as_stream_descriptor().fields().size());
+        const uint64_t columns_projected =
+                pipeline_context->overall_column_bitset_.has_value()
+                        ? static_cast<uint64_t>(pipeline_context->overall_column_bitset_->count())
+                        : columns_total;
+        uint64_t rows_selected = 0;
+        std::unordered_set<pipelines::RowRange, pipelines::RowRange::Hasher> seen_row_ranges;
+        seen_row_ranges.reserve(pipeline_context->slice_and_keys_.size());
+        for (const auto& sk : pipeline_context->slice_and_keys_) {
+            const auto rr = sk.slice().rows();
+            if (seen_row_ranges.insert(rr).second && rr.second >= rr.first) {
+                rows_selected += static_cast<uint64_t>(rr.second - rr.first);
+            }
+        }
+        query_stats::record_query_pruning(
+                segments_total,
+                pruned_index,
+                pruned_by_col_stats,
+                segments_read,
+                columns_total,
+                columns_projected,
+                static_cast<uint64_t>(tsd.total_rows()),
+                rows_selected
+        );
+    }
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
     // Capture the end index of the last existing row-slice before discarding the reader. This is needed by
     // prepare_append on the inline-compaction path, and avoids retaining the whole index segment in the context.
@@ -2674,6 +2725,10 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
 
     std::vector<FrameSlice> slices;
     std::vector<folly::Future<VariantKey>> write_futures;
+    const bool qs_active = query_stats::is_active();
+    const auto qs_start = qs_active ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
+    const uint64_t qs_input_segments =
+            static_cast<uint64_t>(std::distance(pipeline_context->incompletes_begin(), pipeline_context->end()));
     auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
     auto index = stream::index_type_from_descriptor(pipeline_context->on_disk_descriptor());
     util::variant_match(
@@ -2765,6 +2820,16 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
     );
 
     auto keys = folly::collect(write_futures).get();
+    if (qs_active) {
+        const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                0,
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qs_start)
+                        .count()
+        ));
+        query_stats::record_compaction(
+                query_stats::CompactionKind::SortMerge, qs_input_segments, static_cast<uint64_t>(keys.size()), dur_ns
+        );
+    }
     auto vit =
             collate_and_write(store, pipeline_context, slices, keys, pipeline_context->incompletes_after(), user_meta);
     return vit;
@@ -2820,6 +2885,10 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
         check_incompletes_index_ranges_dont_overlap(pipeline_context, initial_index_sorted_status, append_to_existing);
     }
     std::vector<FrameSlice> slices;
+    const bool qs_active = query_stats::is_active();
+    const auto qs_start = qs_active ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
+    const uint64_t qs_input_segments =
+            static_cast<uint64_t>(std::distance(pipeline_context->incompletes_begin(), pipeline_context->end()));
     bool dynamic_schema = write_options.dynamic_schema;
     // The pipeline descriptor rather than the first segment's: an empty staged segment sorts first but has no index
     // for the aggregator to use.
@@ -2860,7 +2929,24 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
 
     return util::variant_match(
             std::move(result),
-            [&slices, &pipeline_context, &store, &user_meta](CompactionWrittenKeys&& written_keys) -> VersionedItem {
+            [&slices, &pipeline_context, &store, &user_meta, qs_active, qs_start, qs_input_segments](
+                    CompactionWrittenKeys&& written_keys
+            ) -> VersionedItem {
+                if (qs_active) {
+                    const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                            0,
+                            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                    std::chrono::steady_clock::now() - qs_start
+                            )
+                                    .count()
+                    ));
+                    query_stats::record_compaction(
+                            query_stats::CompactionKind::Incomplete,
+                            qs_input_segments,
+                            static_cast<uint64_t>(written_keys.size()),
+                            dur_ns
+                    );
+                }
                 auto vit = collate_and_write(
                         store,
                         pipeline_context,
@@ -2959,6 +3045,12 @@ VersionedItem defragment_symbol_data_impl(
 
     // in the new index segment, we will start appending after this value
     std::vector<FrameSlice> slices;
+    const bool qs_active = query_stats::is_active();
+    const auto qs_start = qs_active ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
+    const uint64_t qs_input_segments = static_cast<uint64_t>(
+            pre_defragmentation_info.pipeline_context->slice_and_keys_.size() -
+            pre_defragmentation_info.append_after.value()
+    );
     const auto index = index_type_from_descriptor(pre_defragmentation_info.pipeline_context->on_disk_descriptor());
     auto policies = std::make_tuple(
             index,
@@ -3001,7 +3093,24 @@ VersionedItem defragment_symbol_data_impl(
 
     return util::variant_match(
             std::move(result),
-            [&slices, &pre_defragmentation_info, &store](CompactionWrittenKeys&& written_keys) -> VersionedItem {
+            [&slices, &pre_defragmentation_info, &store, qs_active, qs_start, qs_input_segments](
+                    CompactionWrittenKeys&& written_keys
+            ) -> VersionedItem {
+                if (qs_active) {
+                    const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                            0,
+                            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                    std::chrono::steady_clock::now() - qs_start
+                            )
+                                    .count()
+                    ));
+                    query_stats::record_compaction(
+                            query_stats::CompactionKind::Defragment,
+                            qs_input_segments,
+                            static_cast<uint64_t>(written_keys.size()),
+                            dur_ns
+                    );
+                }
                 return collate_and_write(
                         store,
                         pre_defragmentation_info.pipeline_context,
@@ -3081,7 +3190,7 @@ void set_row_id_if_index_only(
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store, VersionIdentifier version_info, ReadQuery& read_query,
-        const ReadOptions& read_options
+        const ReadOptions& read_options, bool record_query_stats
 ) {
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
@@ -3096,7 +3205,9 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
             },
             [&](const std::shared_ptr<IndexInformation>& index_info) {
                 pipeline_context->stream_id_ = to_atom(index_info->index_.first).id();
-                read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, *index_info);
+                read_indexed_keys_to_pipeline(
+                        pipeline_context, read_query, read_options, *index_info, record_query_stats
+                );
             }
     );
 
@@ -3183,6 +3294,30 @@ static ReadOptions modify_read_options_from_norm_meta(const PipelineContext& con
     }
 }
 
+namespace {
+struct ReadSetupPipelineContextTask : async::BaseTask {
+    std::shared_ptr<Store> store_;
+    VersionIdentifier version_info_;
+    std::shared_ptr<ReadQuery> read_query_;
+    ReadOptions read_options_;
+
+    ReadSetupPipelineContextTask(
+            std::shared_ptr<Store> store, VersionIdentifier version_info, std::shared_ptr<ReadQuery> read_query,
+            ReadOptions read_options
+    ) :
+        store_(std::move(store)),
+        version_info_(std::move(version_info)),
+        read_query_(std::move(read_query)),
+        read_options_(std::move(read_options)) {}
+
+    std::shared_ptr<PipelineContext> operator()() {
+        return setup_pipeline_context(
+                store_, std::move(version_info_), *read_query_, read_options_, /*record_query_stats=*/true
+        );
+    }
+};
+} // namespace
+
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
@@ -3191,7 +3326,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     auto start_pipeline = [store, read_query, read_options, handler_data](VersionIdentifier&& resolved_version) {
         auto res_versioned_item = generate_result_versioned_item(resolved_version);
         return async::submit_io_task(
-                       SetupPipelineContextTask{store, std::move(resolved_version), read_query, read_options}
+                       ReadSetupPipelineContextTask{store, std::move(resolved_version), read_query, read_options}
         )
                 .via(&async::cpu_executor())
                 .thenValue([store,
@@ -3905,8 +4040,13 @@ folly::Future<SymbolProcessingResult> read_and_process(
                     [store, version_info, read_query, read_options, component_manager](auto&& resolved_version
                     ) -> folly::Future<SymbolProcessingResult> {
                         auto res_versioned_item = generate_result_versioned_item(resolved_version);
-                        auto pipeline_context =
-                                setup_pipeline_context(store, std::move(resolved_version), *read_query, read_options);
+                        auto pipeline_context = setup_pipeline_context(
+                                store,
+                                std::move(resolved_version),
+                                *read_query,
+                                read_options,
+                                /*record_query_stats=*/true
+                        );
 
                         schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
                                 !pipeline_context->multi_key_,
@@ -3971,6 +4111,7 @@ size_t n_segments_live_during_compaction() {
             res
     );
     util::check(res > 0, "VersionStore.NumSegmentsLiveDuringCompaction must be strictly positive but was {}", res);
+    query_stats::detail::set_write_semaphore_limit(static_cast<uint64_t>(res));
     return static_cast<size_t>(res);
 }
 

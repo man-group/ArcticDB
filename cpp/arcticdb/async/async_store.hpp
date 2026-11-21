@@ -131,14 +131,43 @@ class AsyncStore : public Store {
             stream::PartialKey pk, SegmentInMemory&& segment, std::shared_ptr<folly::NativeSemaphore> semaphore
     ) override {
         log::version().debug("Waiting for semaphore for write_maybe_blocking {}", pk);
-        semaphore->wait();
+        if (query_stats::is_active()) {
+            if (!semaphore->try_wait()) {
+                const auto wait_start = std::chrono::steady_clock::now();
+                semaphore->wait();
+                const auto wait_ns = static_cast<uint64_t>(std::max<int64_t>(
+                        0,
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now() - wait_start
+                        )
+                                .count()
+                ));
+                query_stats::record_semaphore_wait(wait_ns);
+            }
+        } else {
+            semaphore->wait();
+        }
+        query_stats::detail::adjust_write_semaphore_in_flight(1);
+        struct PermitGuard {
+            std::shared_ptr<folly::NativeSemaphore> sem;
+            bool armed{true};
+            ~PermitGuard() noexcept {
+                if (armed) {
+                    query_stats::detail::adjust_write_semaphore_in_flight(-1);
+                    sem->post();
+                }
+            }
+        } permit_guard{semaphore};
         log::version().debug("Starting write_maybe_blocking {}", pk);
-        return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment))
-                .thenTryInline([semaphore](folly::Try<VariantKey> keyTry) {
-                    semaphore->post();
-                    keyTry.throwUnlessValue();
-                    return keyTry.value();
-                });
+        auto fut = write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment))
+                           .thenTryInline([semaphore](folly::Try<VariantKey> keyTry) {
+                               query_stats::detail::adjust_write_semaphore_in_flight(-1);
+                               semaphore->post();
+                               keyTry.throwUnlessValue();
+                               return keyTry.value();
+                           });
+        permit_guard.armed = false;
+        return fut;
     }
 
     entity::VariantKey write_sync(
@@ -196,7 +225,10 @@ class AsyncStore : public Store {
         return async::submit_io_task(WriteCompressedTask{std::move(ks), library_});
     }
 
-    void write_compressed_sync(storage::KeySegmentPair ks) override { library_->write(ks); }
+    void write_compressed_sync(storage::KeySegmentPair ks) override {
+        library_->write(ks);
+        record_data_segment_written(ks);
+    }
 
     void update_compressed_sync(storage::KeySegmentPair ks, storage::UpdateOpts opts) override {
         library_->update(ks, opts);
@@ -491,6 +523,7 @@ class AsyncStore : public Store {
                 std::move(dedup_lookup),
                 [&, this](NewObject&& obj) {
                     library_->write(obj);
+                    record_data_segment_written(obj);
                     return SliceAndKey{std::move(slice), std::move(obj).atom_key()};
                 },
                 [&](ExistingObject&& obj) { return SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }

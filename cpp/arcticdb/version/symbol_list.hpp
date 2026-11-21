@@ -195,8 +195,12 @@ class SymbolList {
                 return WillAttemptCompaction::NO_INSUFFICIENT_PERMISSIONS;
             return WillAttemptCompaction::YES;
         }();
+        size_t load_attempt = 0;
         LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go(
-                [this, &version_map, &store, will_attempt_compaction]() {
+                [this, &version_map, &store, will_attempt_compaction, &load_attempt]() {
+                    if (load_attempt++ > 0) {
+                        query_stats::record_write_conflict(query_stats::WriteConflictKind::SymbolListLoadRetry);
+                    }
                     return attempt_load(version_map, store, data_, will_attempt_compaction);
                 }
         );
@@ -211,11 +215,13 @@ class SymbolList {
         if (will_attempt_compaction == WillAttemptCompaction::YES && needs_compaction(load_result)) {
             ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Compaction necessary. Obtaining lock...");
             try {
+                const std::optional<query_stats::TimePoint> compaction_start =
+                        query_stats::is_active() ? std::make_optional(std::chrono::steady_clock::now()) : std::nullopt;
                 if (StorageLock lock{StringId{CompactionLockName}}; lock.try_lock(store)) {
                     OnExit x([&lock, &store] { lock.unlock(store); });
 
                     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Running compaction under lock");
-                    compact_internal(store, load_result);
+                    compact_internal(store, load_result, compaction_start);
                 } else {
                     ARCTICDB_RUNTIME_DEBUG(
                             log::symbol(),
@@ -252,7 +258,10 @@ class SymbolList {
     static void clear(const std::shared_ptr<Store>& store);
 
   private:
-    void compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const;
+    void compact_internal(
+            const std::shared_ptr<Store>& store, LoadResult& load_result,
+            std::optional<query_stats::TimePoint> compaction_start = std::nullopt
+    ) const;
 
     [[nodiscard]] bool needs_compaction(const LoadResult& load_result) const;
 };

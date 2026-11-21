@@ -8,19 +8,30 @@
 
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/version/de_dup_map.hpp>
 
 namespace arcticdb::async {
 DeDupLookupResult lookup_match_in_dedup_map(
         const std::shared_ptr<DeDupMap>& de_dup_map, storage::KeySegmentPair& key_seg
 ) {
-    std::optional<AtomKey> de_dup_key;
-    if (!de_dup_map || !(de_dup_key = de_dup_map->get_key_if_present(key_seg.atom_key()))) {
+    if (!de_dup_map || de_dup_map->empty()) {
         ARCTICDB_DEBUG(log::version(), "No existing key with same contents: writing new object {}", key_seg.atom_key());
         return key_seg;
-    } else {
+    }
+    if (auto de_dup_key = de_dup_map->get_key_if_present(key_seg.atom_key())) {
         ARCTICDB_DEBUG(log::version(), "Found existing key with same contents: using existing object {}", *de_dup_key);
+        if (query_stats::is_active()) {
+            const uint64_t saved =
+                    key_seg.segment_ptr() ? static_cast<uint64_t>(key_seg.segment_ptr()->size_or_calculate()) : 0;
+            query_stats::record_dedup_lookup(/*hit=*/true, saved);
+        }
         return *de_dup_key;
     }
+    ARCTICDB_DEBUG(log::version(), "No existing key with same contents: writing new object {}", key_seg.atom_key());
+    if (query_stats::is_active()) {
+        query_stats::record_dedup_lookup(/*hit=*/false, 0);
+    }
+    return key_seg;
 }
 } // namespace arcticdb::async

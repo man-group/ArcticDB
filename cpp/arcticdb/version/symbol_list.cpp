@@ -851,18 +851,25 @@ bool has_recent_compaction(const std::shared_ptr<Store>& store, const std::optio
 
 size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
     auto version_map = data_.version_map_;
-    LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store]() {
-        return attempt_load(version_map, store, data_, WillAttemptCompaction::YES);
-    });
+    size_t load_attempt = 0;
+    LoadResult load_result =
+            ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store, &load_attempt]() {
+                if (load_attempt++ > 0) {
+                    query_stats::record_write_conflict(query_stats::WriteConflictKind::SymbolListLoadRetry);
+                }
+                return attempt_load(version_map, store, data_, WillAttemptCompaction::YES);
+            });
     auto num_symbol_list_keys = load_result.journal_.total_key_count;
 
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Forcing compaction. Obtaining lock...");
+    const std::optional<query_stats::TimePoint> compaction_start =
+            query_stats::is_active() ? std::make_optional(std::chrono::steady_clock::now()) : std::nullopt;
     StorageLock lock{StringId{CompactionLockName}};
     lock.lock_timeout(store, 10000);
     OnExit x([&lock, &store] { lock.unlock(store); });
 
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Running compaction under lock");
-    compact_internal(store, load_result);
+    compact_internal(store, load_result, compaction_start);
     return num_symbol_list_keys;
 }
 
@@ -929,8 +936,12 @@ void delete_superseded_keys(const std::shared_ptr<Store>& store, JournalResult& 
     flush();
 }
 
-void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const {
+void SymbolList::compact_internal(
+        const std::shared_ptr<Store>& store, LoadResult& load_result,
+        std::optional<query_stats::TimePoint> compaction_start
+) const {
     if (has_recent_compaction(store, load_result.journal_.compaction_key)) {
+        query_stats::record_write_conflict(query_stats::WriteConflictKind::ConcurrentSymbolListCompaction);
         // legacy arcticc symbol list entries don't get correctly listed when doing `iterate_type`, so can mess
         // up racing symbol list compaction detection.
         ARCTICDB_RUNTIME_DEBUG(
@@ -941,8 +952,20 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
         return;
     }
 
+    const bool qs_active = query_stats::is_active();
+    const auto qs_start =
+            qs_active ? compaction_start.value_or(std::chrono::steady_clock::now()) : query_stats::TimePoint{};
+    const uint64_t input_keys = static_cast<uint64_t>(load_result.journal_.total_key_count);
     auto written = write_symbols(store, std::move(load_result.symbols_), compaction_id, data_.type_holder_);
     delete_superseded_keys(store, load_result.journal_, std::get<AtomKey>(written));
+    if (qs_active) {
+        const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                0,
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qs_start)
+                        .count()
+        ));
+        query_stats::record_compaction(query_stats::CompactionKind::SymbolList, input_keys, 1ULL, dur_ns);
+    }
 }
 
 } // namespace arcticdb

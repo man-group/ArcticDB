@@ -43,6 +43,8 @@ class DeDupMap {
         }
     }
 
+    [[nodiscard]] bool empty() const noexcept { return de_dup_map_.empty(); }
+
   private:
     std::unordered_map<ContentHash, std::vector<AtomKey>> de_dup_map_;
 };

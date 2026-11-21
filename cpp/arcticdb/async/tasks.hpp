@@ -24,6 +24,9 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/codec/encoding_sizes.hpp>
+#include <arcticdb/codec/magic_words.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 
 namespace arcticdb::async {
@@ -31,6 +34,127 @@ namespace arcticdb::async {
 using KeyType = entity::KeyType;
 using AtomKey = entity::AtomKey;
 using IndexValue = entity::IndexValue;
+
+struct CodecPayloadBytes {
+    uint64_t compressed = 0;
+    uint64_t uncompressed = 0;
+};
+
+inline void add_encoded_field_bytes(CodecPayloadBytes& acc, const EncodedFieldImpl& field) {
+    if (field.has_ndarray()) {
+        const auto& nda = field.ndarray();
+        acc.compressed += static_cast<uint64_t>(encoding_sizes::ndarray_field_compressed_size(nda));
+        acc.uncompressed += static_cast<uint64_t>(encoding_sizes::uncompressed_size(nda));
+    }
+}
+
+inline CodecPayloadBytes segment_encoded_payload_bytes(const Segment& enc_seg) {
+    CodecPayloadBytes acc{};
+    const auto& hdr = enc_seg.header();
+    if (hdr.has_metadata_field()) {
+        add_encoded_field_bytes(acc, hdr.metadata_field());
+    }
+    if (hdr.encoding_version() == EncodingVersion::V2) {
+        if (hdr.has_index_descriptor_field()) {
+            add_encoded_field_bytes(acc, hdr.index_descriptor_field());
+        }
+        if (hdr.has_column_fields()) {
+            add_encoded_field_bytes(acc, hdr.column_fields());
+        }
+    }
+    const auto& body_fields = hdr.body_fields();
+    if (!body_fields.empty()) {
+        for (std::size_t i = 0; i < body_fields.size(); ++i) {
+            add_encoded_field_bytes(acc, body_fields.at(i));
+        }
+    } else if (hdr.encoding_version() == EncodingVersion::V2 && hdr.has_column_fields() &&
+               hdr.column_fields().has_ndarray() && enc_seg.buffer().data() != nullptr &&
+               hdr.footer_offset() + sizeof(EncodedMagic) <= enc_seg.buffer().bytes()) {
+        // encode_v2 writes column field metadata into the compressed footer without populating hdr.body_fields().
+        const uint8_t* footer_ptr = enc_seg.buffer().data() + hdr.footer_offset();
+        util::check_magic<EncodedMagic>(footer_ptr);
+        auto decoded_body_fields = decode_encoded_fields(hdr, footer_ptr, enc_seg.buffer().data());
+        decoded_body_fields.regenerate_offsets();
+        for (std::size_t i = 0; i < decoded_body_fields.size(); ++i) {
+            add_encoded_field_bytes(acc, decoded_body_fields.at(i));
+        }
+    }
+    if (hdr.has_string_pool_field()) {
+        add_encoded_field_bytes(acc, hdr.string_pool_field());
+    }
+    return acc;
+}
+
+inline CodecPayloadBytes segment_decoded_payload_bytes(
+        const Segment& seg, const SegmentInMemory* projected_target = nullptr
+) {
+    CodecPayloadBytes acc{};
+    if (seg.buffer().data() == nullptr) {
+        return acc;
+    }
+    const auto& hdr = seg.header();
+    if (hdr.has_metadata_field()) {
+        add_encoded_field_bytes(acc, hdr.metadata_field());
+    }
+    if (hdr.encoding_version() == EncodingVersion::V2) {
+        if (hdr.has_index_descriptor_field()) {
+            add_encoded_field_bytes(acc, hdr.index_descriptor_field());
+        }
+        if (hdr.has_column_fields()) {
+            add_encoded_field_bytes(acc, hdr.column_fields());
+        }
+    }
+    const auto& body_fields = hdr.body_fields();
+    if (!body_fields.empty()) {
+        if (projected_target == nullptr) {
+            for (std::size_t i = 0; i < body_fields.size(); ++i) {
+                add_encoded_field_bytes(acc, body_fields.at(i));
+            }
+        } else {
+            projected_target->init_column_map();
+            const auto& desc = seg.descriptor();
+            const std::size_t n = std::min(desc.fields().size(), body_fields.size());
+            for (std::size_t i = 0; i < n; ++i) {
+                if (projected_target->column_index(desc.fields(i).name()).has_value()) {
+                    add_encoded_field_bytes(acc, body_fields.at(i));
+                }
+            }
+        }
+    }
+    if (hdr.has_string_pool_field()) {
+        add_encoded_field_bytes(acc, hdr.string_pool_field());
+    }
+    return acc;
+}
+
+inline void record_data_segment_written(const storage::KeySegmentPair& key_seg) {
+    if (!query_stats::is_active()) {
+        return;
+    }
+    const auto key_type = key_seg.key_type();
+    if (key_type == KeyType::TABLE_DATA || key_type == KeyType::APPEND_DATA) {
+        const auto seg_ptr = key_seg.segment_ptr();
+        const uint64_t rows = seg_ptr ? static_cast<uint64_t>(seg_ptr->descriptor().row_count()) : 0ULL;
+        query_stats::record_segment_written(rows, key_type == KeyType::APPEND_DATA);
+    }
+}
+
+inline Segment encode_dispatch_with_stats(
+        SegmentInMemory&& segment, const arcticdb::proto::encoding::VariantCodec& codec_meta,
+        EncodingVersion encoding_version
+) {
+    if (!query_stats::is_active()) {
+        return ::arcticdb::encode_dispatch(std::move(segment), codec_meta, encoding_version);
+    }
+    const auto start = std::chrono::steady_clock::now();
+    auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment), codec_meta, encoding_version);
+    const auto duration_ns = static_cast<uint64_t>(std::max<int64_t>(
+            0, std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()
+    ));
+    const auto payload = segment_encoded_payload_bytes(enc_seg);
+    query_stats::record_codec_encode(duration_ns, payload.uncompressed, payload.compressed);
+    return enc_seg;
+}
 
 struct EncodeAtomTask : BaseTask {
     using PartialKey = stream::PartialKey;
@@ -75,7 +199,7 @@ struct EncodeAtomTask : BaseTask {
     storage::KeySegmentPair encode() {
         ARCTICDB_DEBUG(log::codec(), "Encoding object with partial key {}", partial_key_);
         ARCTICDB_DEBUG_THROW(5)
-        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        auto enc_seg = encode_dispatch_with_stats(std::move(segment_), *codec_meta_, encoding_version_);
         auto content_hash = get_segment_hash(enc_seg);
 
         AtomKey k = partial_key_.build_key(creation_ts_, content_hash);
@@ -106,7 +230,7 @@ struct EncodeSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeSegmentTask)
 
     storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        auto enc_seg = encode_dispatch_with_stats(std::move(segment_), *codec_meta_, encoding_version_);
         return {std::move(key_), std::move(enc_seg)};
     }
 
@@ -137,7 +261,7 @@ struct EncodeRefTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeRefTask)
 
     [[nodiscard]] storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        auto enc_seg = encode_dispatch_with_stats(std::move(segment_), *codec_meta_, encoding_version_);
         auto k = RefKey{id_, key_type_};
         return {std::move(k), std::move(enc_seg)};
     }
@@ -159,6 +283,7 @@ struct WriteSegmentTask : BaseTask {
         ARCTICDB_SAMPLE(WriteSegmentTask, 0)
         auto k = key_seg.variant_key();
         lib_->write(key_seg);
+        record_data_segment_written(key_seg);
         return k;
     }
 };
@@ -293,6 +418,7 @@ struct CopyCompressedTask : BaseTask {
                     );
                     auto return_key = target_key_seg.variant_key();
                     lib_->write(target_key_seg);
+                    record_data_segment_written(target_key_seg);
                     return return_key;
                 },
                 source_key_
@@ -446,7 +572,20 @@ struct DecodeSegmentTask : BaseTask {
         );
 
         try {
-            auto decoded_segment = decode_segment(*key_segment.segment_ptr());
+            if (!query_stats::is_active()) {
+                auto decoded_segment = decode_segment(*key_segment.segment_ptr());
+                return {std::move(key_segment).variant_key(), std::move(decoded_segment)};
+            }
+            auto& seg_ref = *key_segment.segment_ptr();
+            const auto start = std::chrono::steady_clock::now();
+            auto decoded_segment = decode_segment(seg_ref);
+            const auto duration_ns = static_cast<uint64_t>(std::max<int64_t>(
+                    0,
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start)
+                            .count()
+            ));
+            const auto payload = segment_decoded_payload_bytes(seg_ref);
+            query_stats::record_codec_decode(duration_ns, payload.compressed, payload.uncompressed);
             return {std::move(key_segment).variant_key(), std::move(decoded_segment)};
         } catch (const std::exception& e) {
             codec::raise<ErrorCode::E_DECODE_ERROR>(
@@ -494,13 +633,16 @@ struct SegmentFunctionTask : BaseTask {
 struct MemSegmentProcessingTask : BaseTask {
     std::vector<std::shared_ptr<Clause>> clauses_;
     std::vector<EntityId> entity_ids_;
+    std::shared_ptr<ComponentManager> component_manager_;
     timestamp creation_time_;
 
     explicit MemSegmentProcessingTask(
-            std::vector<std::shared_ptr<Clause>> clauses, std::vector<EntityId>&& entity_ids
+            std::vector<std::shared_ptr<Clause>> clauses, std::vector<EntityId>&& entity_ids,
+            std::shared_ptr<ComponentManager> component_manager = nullptr
     ) :
         clauses_(std::move(clauses)),
         entity_ids_(std::move(entity_ids)),
+        component_manager_(std::move(component_manager)),
         creation_time_(util::SysClock::coarse_nanos_since_epoch()) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
@@ -511,7 +653,26 @@ struct MemSegmentProcessingTask : BaseTask {
         const auto time_in_queue = double(nanos_start - creation_time_) / BILLION;
         ARCTICDB_RUNTIME_DEBUG(log::inmem(), "Segment processing task running after {}s queue time", time_in_queue);
         for (auto it = clauses_.cbegin(); it != clauses_.cend(); ++it) {
-            entity_ids_ = (*it)->process(std::move(entity_ids_));
+            if (query_stats::is_active() && !entity_ids_.empty()) {
+                const uint64_t rows_in = component_manager_ ? component_manager_->count_rows(entity_ids_) : 0;
+                const auto qs_start = std::chrono::steady_clock::now();
+                entity_ids_ = (*it)->process(std::move(entity_ids_));
+                const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                        0,
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now() - qs_start
+                        )
+                                .count()
+                ));
+                const auto clause_kind = (*it)->clause_info().clause_kind_;
+                uint64_t rows_out = component_manager_ ? component_manager_->count_rows(entity_ids_) : 0;
+                if (rows_out == 0 && rows_in > 0 && clause_kind == query_stats::ClauseKind::Write) {
+                    rows_out = rows_in;
+                }
+                query_stats::record_clause_exec(clause_kind, dur_ns, rows_in, rows_out);
+            } else {
+                entity_ids_ = (*it)->process(std::move(entity_ids_));
+            }
 
             auto next_it = std::next(it);
             if (next_it != clauses_.cend() &&
@@ -613,6 +774,7 @@ struct WriteCompressedTask : BaseTask {
 
     folly::Future<folly::Unit> write() {
         lib_->write(kv_);
+        record_data_segment_written(kv_);
         return folly::makeFuture();
     }
 
@@ -637,8 +799,10 @@ struct WriteCompressedBatchTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteCompressedBatchTask)
 
     folly::Future<folly::Unit> write() {
-        for (auto&& kv : kvs_)
+        for (auto&& kv : kvs_) {
             lib_->write(kv);
+            record_data_segment_written(kv);
+        }
 
         return folly::makeFuture();
     }

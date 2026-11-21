@@ -198,6 +198,10 @@ class ComponentManager {
         registry_.remove<T>(entt);
     }
 
+    // Read-only logical row count across entity_ids (deduplicates column-partitioned slices via col_range->start() ==
+    // 0).
+    [[nodiscard]] uint64_t count_rows(const std::vector<EntityId>& ids) const;
+
   private:
     void decrement_entity_fetch_count(EntityId id);
     void update_entity_fetch_count(EntityId id, EntityFetchCount count);
@@ -243,7 +247,7 @@ class ComponentManager {
     }
 
     entt::registry registry_;
-    std::shared_mutex mtx_;
+    mutable std::shared_mutex mtx_;
 };
 
 } // namespace arcticdb

@@ -23,6 +23,7 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <iterator>
 #include <ranges>
 
@@ -104,6 +105,9 @@ inline std::vector<AppendMapEntry> load_via_iteration(
 
         output.emplace_back(std::move(entry));
     });
+    if (!output.empty() && query_stats::is_active()) {
+        query_stats::record_incomplete_chain_load(static_cast<uint64_t>(output.size()), /*via_iteration=*/true);
+    }
     return output;
 }
 
@@ -470,14 +474,19 @@ std::vector<AppendMapEntry> load_via_list(
     auto [next_key, total_rows] = read_head(store, stream_id);
     std::vector<AppendMapEntry> output;
 
+    uint64_t hops = 0;
     try {
         while (next_key && (!load_up_to || next_key != load_up_to.value())) {
             auto entry = append_map_entry_from_key(store, next_key.value(), load_data);
             next_key = entry.next_key_;
             output.emplace_back(std::move(entry));
+            ++hops;
         }
     } catch (const storage::KeyNotFoundException&) {
         // Most likely compacted up to this point
+    }
+    if (hops > 0 && query_stats::is_active()) {
+        query_stats::record_incomplete_chain_load(hops, /*via_iteration=*/false);
     }
     return output;
 }

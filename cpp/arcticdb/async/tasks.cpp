@@ -48,7 +48,18 @@ pipelines::SegmentAndSlice DecodeSliceTask::decode_into_slice(storage::KeySegmen
             ranges_and_key_.col_range_.first + (descriptor.field_count() - descriptor.index().field_count());
     ARCTICDB_TRACE(log::codec(), "Creating segment");
     SegmentInMemory segment_in_memory(std::move(descriptor));
-    decode_into_memory_segment(seg, hdr, segment_in_memory, desc);
+    if (query_stats::is_active()) {
+        const auto start = std::chrono::steady_clock::now();
+        decode_into_memory_segment(seg, hdr, segment_in_memory, desc);
+        const auto duration_ns = static_cast<uint64_t>(std::max<int64_t>(
+                0,
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()
+        ));
+        const auto payload = segment_decoded_payload_bytes(seg, &segment_in_memory);
+        query_stats::record_codec_decode(duration_ns, payload.compressed, payload.uncompressed);
+    } else {
+        decode_into_memory_segment(seg, hdr, segment_in_memory, desc);
+    }
     segment_in_memory.set_row_data(std::max(segment_in_memory.row_count() - 1, ranges_and_key_.row_range().diff() - 1));
     segment_in_memory.mark_from_disk();
     return pipelines::SegmentAndSlice(std::move(ranges_and_key_), std::move(segment_in_memory));

@@ -37,6 +37,7 @@
 #include <arcticdb/async/batch_read_args.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_utils.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/lock_table.hpp>
 
 namespace arcticdb {
@@ -120,6 +121,12 @@ class VersionMapImpl {
   public:
     VersionMapImpl() = default;
 
+    ~VersionMapImpl() {
+        if (!map_.empty()) {
+            query_stats::detail::adjust_version_map_entries(-static_cast<int64_t>(map_.size()));
+        }
+    }
+
     ARCTICDB_NO_MOVE_OR_COPY(VersionMapImpl)
 
     void set_validate(bool value) { validate_ = value; }
@@ -163,15 +170,20 @@ class VersionMapImpl {
             if (cached_penultimate_index)
                 entry->keys_.push_back(*cached_penultimate_index);
         } else {
+            uint64_t chain_hops = 0;
             do {
                 ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
                 auto [key, seg] = store->read_sync(next_key.value());
                 next_key = read_segment_with_keys(seg, entry, load_progress);
                 set_latest_version(entry, latest_version);
+                ++chain_hops;
             } while (next_key && continue_when_loading_version(load_strategy, load_progress, latest_version) &&
                      continue_when_loading_from_time(load_strategy, load_progress) &&
                      continue_when_loading_latest(load_strategy, entry) &&
                      continue_when_loading_undeleted(load_strategy, entry, load_progress));
+            if (query_stats::is_active()) {
+                query_stats::record_version_map_chain_hops(chain_hops);
+            }
         }
         entry->load_progress_ = load_progress;
     }
@@ -196,6 +208,7 @@ class VersionMapImpl {
                 if (--max_trials <= 0) {
                     throw;
                 }
+                query_stats::record_version_map_ref_retry();
                 // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
                 log::version().warn(
                         "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",
@@ -213,7 +226,11 @@ class VersionMapImpl {
 
     void flush() {
         std::lock_guard lock(map_mutex_);
+        const auto prev = map_.size();
         map_.clear();
+        if (prev > 0) {
+            query_stats::detail::adjust_version_map_entries(-static_cast<int64_t>(prev));
+        }
     }
 
     void load_via_iteration(
@@ -557,6 +574,7 @@ class VersionMapImpl {
         ARCTICDB_DEBUG(log::version(), "Check reload in function {} for id {}", function, stream_id);
 
         if (has_cached_entry(stream_id, load_strategy)) {
+            query_stats::record_version_map_cache(/*hit=*/true, /*is_reload=*/false);
             return get_entry(stream_id);
         }
 
@@ -606,6 +624,7 @@ class VersionMapImpl {
 
                 if (!is_version_increasing) {
                     if (prevent_non_increasing_version_id) {
+                        query_stats::record_write_conflict(query_stats::WriteConflictKind::NonIncreasingVersion);
                         storage::raise<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(
                                 "Trying to write TABLE_INDEX key with a non-increasing version. New version: {}, Last "
                                 "version: {}, symbol: {}. This is most likely due to parallel writes to the same "
@@ -902,7 +921,11 @@ class VersionMapImpl {
         if (auto result = map_.find(stream_id); result != std::end(map_))
             return result->second;
 
-        return map_.try_emplace(stream_id, std::make_shared<VersionMapEntry>(stream_id)).first->second;
+        auto [it, inserted] = map_.try_emplace(stream_id, std::make_shared<VersionMapEntry>(stream_id));
+        if (inserted) {
+            query_stats::detail::adjust_version_map_entries(1);
+        }
+        return it->second;
     }
 
     AtomKey write_entry_to_storage(
@@ -947,6 +970,8 @@ class VersionMapImpl {
          */
 
         auto entry = get_entry(stream_id);
+        const bool is_reload = !entry->empty();
+        query_stats::record_version_map_cache(/*hit=*/false, is_reload);
         entry->clear();
         const auto clock_unsync_tolerance =
                 ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE);
