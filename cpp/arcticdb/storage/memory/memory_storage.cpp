@@ -30,9 +30,6 @@ std::string MemoryStorage::name() const { return "memory_storage-0"; }
 
 void MemoryStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
-    auto query_stat_operation_time = query_stats::add_task_count_and_time(
-            query_stats::TaskType::Memory_PutObject, variant_key_type(key_seg.variant_key())
-    );
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
 
@@ -53,19 +50,10 @@ void MemoryStorage::do_write(KeySegmentPair& key_seg) {
                 key_vec.try_emplace(key, key_seg.segment().clone());
             }
     );
-    query_stats::add(
-            query_stats::TaskType::Memory_PutObject,
-            variant_key_type(key_seg.variant_key()),
-            query_stats::StatType::SIZE_BYTES,
-            key_seg.segment().size()
-    );
 }
 
 void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
-    auto query_stat_operation_time = query_stats::add_task_count_and_time(
-            query_stats::TaskType::Memory_PutObject, variant_key_type(key_seg.variant_key())
-    );
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
     auto it = key_vec.find(key_seg.variant_key());
@@ -82,12 +70,6 @@ void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
 
     add_serialization_fields(key_seg);
     key_vec.insert(std::make_pair(key_seg.variant_key(), key_seg.segment().clone()));
-    query_stats::add(
-            query_stats::TaskType::Memory_PutObject,
-            variant_key_type(key_seg.variant_key()),
-            query_stats::StatType::SIZE_BYTES,
-            key_seg.segment().size()
-    );
 }
 
 void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts) {
@@ -97,22 +79,12 @@ void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor
 
 KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     ARCTICDB_SAMPLE(MemoryStorageRead, 0)
-    auto query_stat_operation_time = query_stats::add_task_count_and_time(
-            query_stats::TaskType::Memory_GetObject, variant_key_type(variant_key)
-    );
     auto& key_vec = data_[variant_key_type(variant_key)];
     auto it = key_vec.find(variant_key);
 
     if (it != key_vec.end()) {
         ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key));
         auto seg = it->second.clone();
-        query_stats::add(
-                query_stats::TaskType::Memory_GetObject,
-                variant_key_type(variant_key),
-                query_stats::StatType::SIZE_BYTES,
-                seg.size()
-        );
-
         return {std::move(variant_key), std::move(seg)};
     } else {
         throw KeyNotFoundException(variant_key);
@@ -121,42 +93,47 @@ KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
 
 bool MemoryStorage::do_key_exists(const VariantKey& key) {
     ARCTICDB_SAMPLE(MemoryStorageKeyExists, 0)
-    auto query_stat_operation_time =
-            query_stats::add_task_count_and_time(query_stats::TaskType::Memory_HeadObject, variant_key_type(key));
     const auto& key_vec = data_[variant_key_type(key)];
     auto it = key_vec.find(key);
     return it != key_vec.end();
 }
 
-void MemoryStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
+void MemoryStorage::do_remove_single(VariantKey&& variant_key, RemoveOpts opts, bool record_legacy) {
     ARCTICDB_SAMPLE(MemoryStorageRemove, 0)
-    auto query_stat_operation_time = query_stats::add_task_count_and_time(
-            query_stats::TaskType::Memory_DeleteObject, variant_key_type(variant_key)
-    );
-    auto& key_vec = data_[variant_key_type(variant_key)];
+    const auto key_type = variant_key_type(variant_key);
+    auto& key_vec = data_[key_type];
 
     auto it = key_vec.find(variant_key);
 
     if (it != key_vec.end()) {
-        ARCTICDB_DEBUG(
-                log::storage(), "Removed key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key)
-        );
-        query_stats::add(
-                query_stats::TaskType::Memory_DeleteObject,
-                variant_key_type(variant_key),
-                query_stats::StatType::SIZE_BYTES,
-                it->second.size()
-        );
+        ARCTICDB_DEBUG(log::storage(), "Removed key {}: {}", key_type, variant_key_view(variant_key));
+        if (query_stats::is_active()) {
+            const uint64_t sz = it->second.size();
+            query_stats::note_deleted_bytes(sz);
+            if (record_legacy) {
+                query_stats::record_legacy_memory_delete(key_type, sz);
+            }
+        }
         key_vec.erase(it);
     } else if (!opts.ignores_missing_key_) {
+        if (record_legacy && query_stats::is_active()) {
+            query_stats::record_legacy_memory_delete(key_type, 0);
+        }
         throw KeyNotFoundException(variant_key);
+    } else if (record_legacy && query_stats::is_active()) {
+        query_stats::record_legacy_memory_delete(key_type, 0);
     }
+}
+
+void MemoryStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
+    do_remove_single(std::move(variant_key), opts, /*record_legacy=*/false);
 }
 
 void MemoryStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
     ARCTICDB_SAMPLE(MemoryStorageRemoveMultiple, 0)
-    for (auto&& variant_key : variant_keys)
-        do_remove(std::move(variant_key), opts);
+    for (auto&& variant_key : variant_keys) {
+        do_remove_single(std::move(variant_key), opts, /*record_legacy=*/true);
+    }
 }
 
 bool MemoryStorage::do_fast_delete() {
@@ -168,8 +145,6 @@ bool MemoryStorage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
     ARCTICDB_SAMPLE(MemoryStorageItType, 0)
-    auto query_stat_operation_time =
-            query_stats::add_task_count_and_time(query_stats::TaskType::Memory_ListObjects, key_type);
     auto& key_vec = data_[key_type];
     auto prefix_matcher = stream_id_prefix_matcher(prefix);
 

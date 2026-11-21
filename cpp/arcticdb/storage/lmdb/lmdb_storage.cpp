@@ -12,6 +12,7 @@
 #include <arcticdb/storage/mock/lmdb_mock_client.hpp>
 
 #include <filesystem>
+#include <string_view>
 
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/constants.hpp>
@@ -384,6 +385,34 @@ template<class T>
 T or_else(T val, T or_else_val, T def = T()) {
     return val == def ? or_else_val : val;
 }
+
+int count_lmdb_reader_line(const char* msg, void* ctx) {
+    if (msg == nullptr) {
+        return 0;
+    }
+    std::string_view line(msg);
+    while (!line.empty() && line.front() == ' ') {
+        line.remove_prefix(1);
+    }
+    // Skip "(no active readers)", "(no reader locks)", and header "    pid     thread     txnid".
+    if (line.empty() || line.front() < '0' || line.front() > '9') {
+        return 0;
+    }
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || line.back() == ' ')) {
+        line.remove_suffix(1);
+    }
+    // Inactive/reset reader slots print "-" as txnid.
+    if (!line.empty() && line.back() != '-') {
+        ++(*static_cast<uint64_t*>(ctx));
+    }
+    return 0;
+}
+
+uint64_t count_active_lmdb_readers(MDB_env* env) noexcept {
+    uint64_t count = 0;
+    ::mdb_reader_list(env, &count_lmdb_reader_line, &count);
+    return count;
+}
 } // namespace
 
 unsigned int lmdb_extra_env_flags() {
@@ -442,6 +471,22 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     env().set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
     env().set_max_readers(or_else(conf.max_readers(), 1024U));
     env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS | lmdb_extra_env_flags());
+    if (!conf.use_mock_storage_for_testing()) {
+        auto* raw_env = &lmdb_instance_->env_;
+        lmdb_instance_->gauge_handle_ = query_stats::register_lmdb_env_gauge(
+                [raw_env](uint64_t& map_size_bytes, uint64_t& used_bytes, uint64_t& active_readers) {
+                    MDB_envinfo info{};
+                    MDB_stat stat{};
+                    if (::mdb_env_info(raw_env->handle(), &info) == MDB_SUCCESS &&
+                        ::mdb_env_stat(raw_env->handle(), &stat) == MDB_SUCCESS) {
+                        map_size_bytes = static_cast<uint64_t>(info.me_mapsize);
+                        used_bytes = (static_cast<uint64_t>(info.me_last_pgno) + 1ULL) *
+                                     static_cast<uint64_t>(stat.ms_psize);
+                        active_readers = count_active_lmdb_readers(raw_env->handle());
+                    }
+                }
+        );
+    }
 
     auto txn = ::lmdb::txn::begin(env());
 

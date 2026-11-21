@@ -13,6 +13,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp> // brings entity::VariantKey into arcticdb::storage for the below
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -167,6 +168,7 @@ void raise_lmdb_exception(const ::lmdb::error& e, const std::string& object_name
     }
 
     if (error_code == MDB_MAP_FULL) {
+        query_stats::record_lmdb_map_full();
         throw LMDBMapFullException(fmt::format("Map Full Error: {}", error_message_suffix));
     }
 

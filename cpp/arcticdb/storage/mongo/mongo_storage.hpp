@@ -23,6 +23,8 @@ class MongoStorage final : public Storage {
 
     std::string name() const final;
 
+    query_stats::StorageBackend backend_type() const noexcept final { return query_stats::StorageBackend::Mongo; }
+
   private:
     void do_write(KeySegmentPair& key_seg) final;
 

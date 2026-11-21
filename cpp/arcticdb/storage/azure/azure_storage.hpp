@@ -25,6 +25,8 @@ class AzureStorage final : public Storage {
 
     std::string name() const final;
 
+    query_stats::StorageBackend backend_type() const noexcept final { return query_stats::StorageBackend::Azure; }
+
     std::optional<size_t> max_delete_batch_size() const final override;
 
   protected:

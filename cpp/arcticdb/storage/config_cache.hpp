@@ -15,6 +15,7 @@
 #include <arcticdb/storage/protobuf_mappings.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/storages.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <optional>
 
@@ -30,12 +31,21 @@ class ConfigCache {
         refresh_config();
     }
 
+    ~ConfigCache() {
+        query_stats::detail::adjust_config_cache_counts(
+                -static_cast<int64_t>(descriptor_map_.size()), -static_cast<int64_t>(storage_configs_.size())
+        );
+    }
+
     std::optional<LibraryDescriptor> get_descriptor(const LibraryPath& path) {
         std::lock_guard<std::mutex> lock{mutex_};
         auto descriptor = descriptor_map_.find(path);
-        if (descriptor == descriptor_map_.end())
+        if (descriptor == descriptor_map_.end()) {
+            query_stats::record_config_cache(/*hit=*/false);
             return std::nullopt;
+        }
 
+        query_stats::record_config_cache(/*hit=*/true);
         return descriptor->second;
     }
 
@@ -47,7 +57,9 @@ class ConfigCache {
     void add_library(const LibraryPath& path, const LibraryDescriptor& desc) {
         config_resolver_->add_library(environment_name_, encode_library_descriptor(desc));
         std::lock_guard<std::mutex> lock{mutex_};
-        descriptor_map_.emplace(path, desc);
+        if (descriptor_map_.emplace(path, desc).second) {
+            query_stats::detail::adjust_config_cache_counts(1, 0);
+        }
     }
 
     std::vector<LibraryPath> list_libraries(std::string_view prefix) {
@@ -120,17 +132,27 @@ class ConfigCache {
   private:
     void refresh_config() {
         std::lock_guard<std::mutex> lock{mutex_};
-        descriptor_map_.clear();
-        storage_configs_.clear();
 
+        std::unordered_map<LibraryPath, LibraryDescriptor> next_descriptors;
         auto libraries = config_resolver_->get_libraries(environment_name_);
         for (auto& [library_path, descriptor] : libraries) {
-            descriptor_map_.try_emplace(library_path, decode_library_descriptor(descriptor));
+            next_descriptors.try_emplace(library_path, decode_library_descriptor(descriptor));
         }
+
+        std::unordered_map<StorageName, arcticdb::proto::storage::VariantStorage> next_storages;
         auto storages = config_resolver_->get_storages(environment_name_);
         for (auto& [storage_name, config] : storages) {
-            storage_configs_.try_emplace(StorageName(storage_name), config);
+            next_storages.try_emplace(StorageName(storage_name), config);
         }
+
+        const int64_t old_l = static_cast<int64_t>(descriptor_map_.size());
+        const int64_t old_s = static_cast<int64_t>(storage_configs_.size());
+        const int64_t new_l = static_cast<int64_t>(next_descriptors.size());
+        const int64_t new_s = static_cast<int64_t>(next_storages.size());
+
+        descriptor_map_.swap(next_descriptors);
+        storage_configs_.swap(next_storages);
+        query_stats::detail::adjust_config_cache_counts(new_l - old_l, new_s - old_s);
     }
 
     EnvironmentName environment_name_;

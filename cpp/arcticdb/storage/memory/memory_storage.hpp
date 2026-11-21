@@ -23,6 +23,8 @@ class MemoryStorage final : public Storage {
 
     std::string name() const final;
 
+    query_stats::StorageBackend backend_type() const noexcept final { return query_stats::StorageBackend::Memory; }
+
   private:
     void do_write(KeySegmentPair& key_seg) final;
 
@@ -36,6 +38,8 @@ class MemoryStorage final : public Storage {
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
     KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts) final;
+
+    void do_remove_single(VariantKey&& variant_key, RemoveOpts opts, bool record_legacy);
 
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 

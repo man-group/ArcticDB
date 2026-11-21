@@ -157,6 +157,7 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         if (it->first.bucket_name == bucket_name && it->first.s3_object_name.rfind(name_prefix, 0) == 0 &&
             it->second.has_value()) {
             output.s3_object_names.emplace_back(it->first.s3_object_name);
+            output.s3_object_sizes.emplace_back(it->second->size());
         }
     }
     if (it != s3_contents_.end()) {

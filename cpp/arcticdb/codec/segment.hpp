@@ -120,10 +120,14 @@ class Segment {
 
     size_t write_proto_header(uint8_t* dst, size_t total_header_size);
 
+    [[nodiscard]] bool has_size() const noexcept { return size_.has_value(); }
+
     [[nodiscard]] std::size_t size() const {
         util::check(size_.has_value(), "Segment size has not been set");
         return *size_;
     }
+
+    [[nodiscard]] std::size_t size_or_calculate() { return size_.has_value() ? *size_ : calculate_size(); }
 
     [[nodiscard]] std::size_t calculate_size() {
         size_ = FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();

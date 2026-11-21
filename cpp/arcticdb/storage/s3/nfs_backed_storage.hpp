@@ -23,6 +23,8 @@ class NfsBackedStorage final : public Storage {
 
     std::string name() const final;
 
+    query_stats::StorageBackend backend_type() const noexcept final { return query_stats::StorageBackend::NfsBacked; }
+
     bool supports_object_size_calculation() const final override;
 
     std::optional<size_t> max_delete_batch_size() const final override;

@@ -150,17 +150,10 @@ void do_write_impl(
     auto& k = key_seg.variant_key();
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
     auto seg = key_seg.segment_ptr();
-    auto segment_size = seg->calculate_size();
 
-    auto query_stat_operation_time =
-            query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject, key_type);
     auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
 
-    if (put_object_result.is_success()) {
-        query_stats::add(
-                query_stats::TaskType::S3_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size
-        );
-    } else {
+    if (!put_object_result.is_success()) {
         auto& error = put_object_result.get_error();
         // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
         raise_s3_exception(error, s3_object_name);
@@ -185,20 +178,12 @@ KeySegmentPair do_read_impl(
     auto key_type = variant_key_type(variant_key);
     auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
-    auto query_stat_operation_time =
-            query_stats::add_task_count_and_time(query_stats::TaskType::S3_GetObject, key_type);
     auto get_object_result = s3_client.get_object(s3_object_name, bucket_name);
     auto unencoded_key = key_decoder(std::move(variant_key));
 
     if (get_object_result.is_success()) {
         ARCTICDB_SUBSAMPLE(S3StorageVisitSegment, 0)
         auto segment = std::move(get_object_result.get_output());
-        query_stats::add(
-                query_stats::TaskType::S3_GetObject,
-                key_type,
-                query_stats::StatType::SIZE_BYTES,
-                segment.calculate_size()
-        );
         return {VariantKey{unencoded_key}, std::move(segment)};
     } else {
         auto& error = get_object_result.get_error();
@@ -228,20 +213,9 @@ folly::Future<KeySegmentPair> do_async_read_impl(
     return s3_client.get_object_async(s3_object_name, bucket_name)
             .thenValue(
                     [vk = std::move(variant_key),
-                     decoder = std::forward<KeyDecoder>(key_decoder),
-                     key_type,
-                     start = std::chrono::steady_clock::now()](auto&& result) mutable -> KeySegmentPair {
-                        auto query_stat_operation_time = query_stats::add_task_count_and_time(
-                                query_stats::TaskType::S3_GetObjectAsync, key_type, start
-                        );
+                     decoder = std::forward<KeyDecoder>(key_decoder)](auto&& result) mutable -> KeySegmentPair {
                         if (result.is_success()) {
                             auto segment = std::move(result.get_output());
-                            query_stats::add(
-                                    query_stats::TaskType::S3_GetObjectAsync,
-                                    key_type,
-                                    query_stats::StatType::SIZE_BYTES,
-                                    segment.calculate_size()
-                            );
                             return KeySegmentPair(std::move(vk), std::move(segment));
                         } else {
                             auto unencoded_key = decoder(std::move(vk));
@@ -305,11 +279,10 @@ inline bool is_retryable_failed_delete(const std::string& error_code) {
 // Maximum number of DeleteObjects calls for one batch, i.e. the first call plus up to 4 retries
 inline constexpr size_t DELETE_OBJECTS_MAX_ATTEMPTS = 5;
 
-// S3 can accept the DeleteObjects request but reject some of the objects with a transient error (e.g. InternalError).
-// Deletes these objects again, with a bounded exponential backoff. Returns the objects that could not be deleted.
-// Raises if a DeleteObjects request fails as a whole.
-inline std::vector<s3::FailedDelete> delete_objects_with_retry(
-        std::vector<std::string> to_delete, const std::string& bucket_name, S3ClientInterface& s3_client
+template<typename ResolveKeyTypeLabel>
+inline std::vector<s3::FailedDelete> delete_objects_with_retry_impl(
+        std::vector<std::string> to_delete, const std::string& bucket_name, S3ClientInterface& s3_client,
+        query_stats::StorageBackend backend, ResolveKeyTypeLabel&& resolve_key_type_label
 ) {
     // Only used for its jittered wait, so the exception type is irrelevant
     ExponentialBackoff<S3RetryableException> backoff(100, 2000);
@@ -331,6 +304,13 @@ inline std::vector<s3::FailedDelete> delete_objects_with_retry(
             return std::move(failed_deletes);
         }
 
+        if (query_stats::is_active()) {
+            const auto label = resolve_key_type_label();
+            query_stats::record_partial_delete_retry(
+                    backend, label.empty() ? std::string_view("MIXED") : std::string_view(label)
+            );
+        }
+
         const auto& first_failure = failed_deletes.front();
         log::storage().warn(
                 "S3 failed to delete {} of {} objects with a retryable error, retrying. First failure: '{}' failed "
@@ -349,10 +329,27 @@ inline std::vector<s3::FailedDelete> delete_objects_with_retry(
     }
 }
 
+// S3 can accept the DeleteObjects request but reject some of the objects with a transient error (e.g. InternalError).
+// Deletes these objects again, with a bounded exponential backoff. Returns the objects that could not be deleted.
+// Raises if a DeleteObjects request fails as a whole.
+inline std::vector<s3::FailedDelete> delete_objects_with_retry(
+        std::vector<std::string> to_delete, const std::string& bucket_name, S3ClientInterface& s3_client,
+        query_stats::StorageBackend backend = query_stats::StorageBackend::S3, std::string_view key_type_label = "MIXED"
+) {
+    return delete_objects_with_retry_impl(
+            std::move(to_delete),
+            bucket_name,
+            s3_client,
+            backend,
+            [key_type_label]() noexcept { return key_type_label; }
+    );
+}
+
 template<class KeyBucketizer>
 void do_remove_impl(
         std::span<VariantKey> ks, const std::string& root_folder, const std::string& bucket_name,
-        S3ClientInterface& s3_client, KeyBucketizer&& bucketizer
+        S3ClientInterface& s3_client, KeyBucketizer&& bucketizer,
+        query_stats::StorageBackend backend = query_stats::StorageBackend::S3
 ) {
     ARCTICDB_SUBSAMPLE(S3StorageDeleteBatch, 0)
     boost::container::small_vector<FailedDelete, 1> failed_deletes;
@@ -367,21 +364,26 @@ void do_remove_impl(
 
     std::vector<std::string> to_delete;
     to_delete.reserve(ks.size());
+    std::optional<KeyType> single_key_type;
+    bool mixed_key_types = false;
     for (const auto& k : ks) {
-        auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+        const auto kt = variant_key_type(k);
+        if (!mixed_key_types) {
+            if (!single_key_type.has_value()) {
+                single_key_type = kt;
+            } else if (*single_key_type != kt) {
+                single_key_type.reset();
+                mixed_key_types = true;
+            }
+        }
+        auto key_type_dir = key_type_folder(root_folder, kt);
         to_delete.emplace_back(object_path(bucketizer.bucketize(key_type_dir, k), k));
     }
 
-    std::vector<std::optional<query_stats::RAIIAddTime>> stat_timers;
-    if (query_stats::QueryStats::instance()->is_enabled()) {
-        auto distinct_key_types = unique_key_types(ks);
-        stat_timers.reserve(distinct_key_types.size());
-        for (auto kt : distinct_key_types) {
-            stat_timers.emplace_back(query_stats::add_task_count_and_time(query_stats::TaskType::S3_DeleteObjects, kt));
-        }
-    }
-
-    for (auto& bad_key : delete_objects_with_retry(std::move(to_delete), bucket_name, s3_client)) {
+    for (auto& bad_key :
+         delete_objects_with_retry_impl(std::move(to_delete), bucket_name, s3_client, backend, [single_key_type]() {
+             return single_key_type.has_value() ? query_stats::key_type_name(*single_key_type) : std::string("MIXED");
+         })) {
         failed_deletes.emplace_back(std::move(bad_key.s3_object_name), std::move(bad_key.error_message));
     }
     raise_if_failed_deletes(failed_deletes);
@@ -390,10 +392,13 @@ void do_remove_impl(
 template<class KeyBucketizer>
 void do_remove_impl(
         VariantKey&& variant_key, const std::string& root_folder, const std::string& bucket_name,
-        S3ClientInterface& s3_client, KeyBucketizer&& bucketizer
+        S3ClientInterface& s3_client, KeyBucketizer&& bucketizer,
+        query_stats::StorageBackend backend = query_stats::StorageBackend::S3
 ) {
     std::array<VariantKey, 1> arr{std::move(variant_key)};
-    do_remove_impl(std::span(arr), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
+    do_remove_impl(
+            std::span(arr), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer), backend
+    );
 }
 
 template<class KeyBucketizer>
@@ -415,8 +420,8 @@ void do_remove_no_batching_impl(
     auto delete_results = folly::collect(std::move(delete_object_results)).via(&inline_executor).get();
 
     boost::container::small_vector<FailedDelete, 1> failed_deletes;
-    auto keys_and_delete_results = folly::gen::from(ks) | folly::gen::move |
-                                   folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
+    auto keys_and_delete_results =
+            folly::gen::from(ks) | folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
     for (auto&& [k, delete_object_result] : std::move(keys_and_delete_results)) {
         if (delete_object_result.is_success()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(k));
@@ -456,17 +461,10 @@ void do_write_if_none_impl(
     auto& k = kv.variant_key();
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
     auto& seg = *kv.segment_ptr();
-    auto segment_size = seg.calculate_size();
 
-    auto query_stat_operation_time =
-            query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject, key_type);
     auto put_object_result = s3_client.put_object(s3_object_name, seg, bucket_name, PutHeader::IF_NONE_MATCH);
 
-    if (put_object_result.is_success()) {
-        query_stats::add(
-                query_stats::TaskType::S3_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size
-        );
-    } else {
+    if (!put_object_result.is_success()) {
         auto& error = put_object_result.get_error();
         raise_s3_exception(error, s3_object_name);
     }
@@ -585,7 +583,7 @@ void adjust_for_directory_bucket_limitations(KeyType key_type, PathInfo& path_in
 
 inline bool do_iterate_type_impl(
         KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
-        Visitor<IterateTypePredicate>& visitor
+        Visitor<IterateTypePredicate>& visitor, query_stats::StorageBackend backend = query_stats::StorageBackend::S3
 ) {
     ARCTICDB_SAMPLE(S3StorageIterateType, 0)
 
@@ -595,11 +593,21 @@ inline bool do_iterate_type_impl(
 
     auto continuation_token = std::optional<std::string>();
     do {
-        auto query_stat_operation_time =
-                query_stats::add_task_count_and_time(query_stats::TaskType::S3_ListObjectsV2, key_type);
+        const bool track_stats = query_stats::is_active();
+        const auto page_start = track_stats ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
         auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
+        const auto page_ns = track_stats ? static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                         std::chrono::steady_clock::now() - page_start
+                                           )
+                                                                         .count())
+                                         : 0ULL;
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
+            if (track_stats) {
+                query_stats::record_storage_page(
+                        backend, query_stats::StorageOp::List, key_type, page_ns, output.s3_object_names.size()
+                );
+            }
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
             for (auto& s3_object_name : output.s3_object_names) {
@@ -617,9 +625,12 @@ inline bool do_iterate_type_impl(
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
+            if (track_stats) {
+                query_stats::record_storage_page(backend, query_stats::StorageOp::List, key_type, page_ns, 0);
+            }
             if (should_retry_with_directory_bucket_limitations(error.GetErrorType(), path_info, visitor)) {
                 adjust_for_directory_bucket_limitations(key_type, path_info, visitor);
-                return do_iterate_type_impl(key_type, bucket_name, s3_client, path_info, visitor);
+                return do_iterate_type_impl(key_type, bucket_name, s3_client, path_info, visitor, backend);
             }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
@@ -638,7 +649,7 @@ inline bool do_iterate_type_impl(
 
 inline void do_visit_object_sizes_for_type_impl(
         KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
-        Visitor<ObjectSizesVisitor>& visitor
+        Visitor<ObjectSizesVisitor>& visitor, query_stats::StorageBackend backend = query_stats::StorageBackend::S3
 ) {
     ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
     ARCTICDB_RUNTIME_DEBUG(
@@ -651,9 +662,21 @@ inline void do_visit_object_sizes_for_type_impl(
     auto continuation_token = std::optional<std::string>();
     ObjectSizes res{key_type};
     do {
+        const bool track_stats = query_stats::is_active();
+        const auto page_start = track_stats ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
         auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
+        const auto page_ns = track_stats ? static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                         std::chrono::steady_clock::now() - page_start
+                                           )
+                                                                         .count())
+                                         : 0ULL;
         if (list_objects_result.is_success()) {
             const auto& output = list_objects_result.get_output();
+            if (track_stats) {
+                query_stats::record_storage_page(
+                        backend, query_stats::StorageOp::VisitSizes, key_type, page_ns, output.s3_object_names.size()
+                );
+            }
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
 
@@ -668,9 +691,14 @@ inline void do_visit_object_sizes_for_type_impl(
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
+            if (track_stats) {
+                query_stats::record_storage_page(backend, query_stats::StorageOp::VisitSizes, key_type, page_ns, 0);
+            }
             if (should_retry_with_directory_bucket_limitations(error.GetErrorType(), path_info, visitor)) {
                 adjust_for_directory_bucket_limitations(key_type, path_info, visitor);
-                return do_visit_object_sizes_for_type_impl(key_type, bucket_name, s3_client, path_info, visitor);
+                return do_visit_object_sizes_for_type_impl(
+                        key_type, bucket_name, s3_client, path_info, visitor, backend
+                );
             }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
@@ -692,8 +720,6 @@ bool do_key_exists_impl(
     auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
 
-    auto query_stat_operation_time =
-            query_stats::add_task_count_and_time(query_stats::TaskType::S3_HeadObject, key_type);
     auto head_object_result = s3_client.head_object(s3_object_name, bucket_name);
 
     if (!head_object_result.is_success()) {

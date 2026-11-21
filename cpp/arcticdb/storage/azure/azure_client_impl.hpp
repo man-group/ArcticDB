@@ -11,6 +11,9 @@
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 
 namespace arcticdb::storage::azure {
+
+void install_query_stats_azure_policies(Azure::Storage::Blobs::BlobClientOptions& options);
+
 class RealAzureClient : public AzureClientWrapper {
   private:
     Azure::Storage::Blobs::BlobContainerClient container_client;

@@ -9,15 +9,20 @@
 #include <arcticdb/storage/async_storage.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/storage_options.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/stream/index.hpp>
 
+#include <boost/container/small_vector.hpp>
+#include <chrono>
 #include <optional>
 #include <set>
 #include <span>
+#include <string_view>
 
 namespace arcticdb::storage {
 
@@ -74,9 +79,163 @@ enum class SupportsAtomicWrites {
     NEEDS_TEST
 };
 
+namespace detail {
+
+class StorageOpGuard {
+  public:
+    StorageOpGuard(
+            query_stats::StorageBackend backend, query_stats::StorageOp op, entity::KeyType key_type,
+            std::string_view library, std::string_view symbol
+    ) noexcept :
+        backend_(backend),
+        op_(op),
+        key_type_(key_type),
+        library_(library),
+        symbol_(symbol),
+        start_(std::chrono::steady_clock::now()) {}
+
+    ~StorageOpGuard() noexcept {
+        if (!completed_) {
+            record(query_stats::StorageOutcome::Error,
+                   0,
+                   use_tracked_ ? tracked_items_ : 1,
+                   use_tracked_ ? tracked_subtract_ns_ : 0);
+        }
+    }
+
+    ARCTICDB_NO_MOVE_OR_COPY(StorageOpGuard);
+
+    void enable_iteration_tracking() noexcept {
+        use_tracked_ = true;
+        tracked_items_ = 0;
+        tracked_subtract_ns_ = 0;
+    }
+
+    void inc_items() noexcept { ++tracked_items_; }
+
+    uint64_t& subtract_ns_ref() noexcept { return tracked_subtract_ns_; }
+
+    void finish(query_stats::StorageOutcome outcome) noexcept {
+        finish(outcome, 0, use_tracked_ ? tracked_items_ : 1, use_tracked_ ? tracked_subtract_ns_ : 0);
+    }
+
+    void finish(
+            query_stats::StorageOutcome outcome, uint64_t bytes, uint64_t items = 1, uint64_t subtract_ns = 0
+    ) noexcept {
+        if (!completed_) {
+            record(outcome, bytes, items, subtract_ns);
+            completed_ = true;
+        }
+    }
+
+    void finish_tracked(query_stats::StorageOutcome outcome, uint64_t bytes = 0) noexcept {
+        finish(outcome, bytes, tracked_items_, tracked_subtract_ns_);
+    }
+
+  private:
+    void record(query_stats::StorageOutcome outcome, uint64_t bytes, uint64_t items, uint64_t subtract_ns) noexcept {
+        const auto total_ns = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_).count()
+        );
+        const uint64_t eff_ns = total_ns > subtract_ns ? (total_ns - subtract_ns) : 0;
+        query_stats::record_storage_op(backend_, op_, key_type_, outcome, eff_ns, bytes, items, library_, symbol_);
+    }
+
+    query_stats::StorageBackend backend_;
+    query_stats::StorageOp op_;
+    entity::KeyType key_type_;
+    std::string_view library_;
+    std::string_view symbol_;
+    query_stats::TimePoint start_;
+    uint64_t tracked_items_{1};
+    uint64_t tracked_subtract_ns_{0};
+    bool use_tracked_{false};
+    bool completed_{false};
+};
+
+class BatchDeleteOpGuard {
+  public:
+    BatchDeleteOpGuard(
+            query_stats::StorageBackend backend, std::span<const query_stats::BatchDeleteKeyInfo> keys,
+            std::string_view library
+    ) noexcept :
+        backend_(backend),
+        keys_(keys),
+        library_(library),
+        start_(std::chrono::steady_clock::now()) {}
+
+    ~BatchDeleteOpGuard() noexcept {
+        if (!completed_) {
+            record(query_stats::StorageOutcome::Error, 0);
+        }
+    }
+
+    ARCTICDB_NO_MOVE_OR_COPY(BatchDeleteOpGuard);
+
+    void finish(query_stats::StorageOutcome outcome, uint64_t bytes = 0) noexcept {
+        if (!completed_) {
+            record(outcome, bytes);
+            completed_ = true;
+        }
+    }
+
+  private:
+    void record(query_stats::StorageOutcome outcome, uint64_t bytes) noexcept {
+        const auto total_ns = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_).count()
+        );
+        query_stats::record_storage_batch_delete(backend_, keys_, outcome, total_ns, bytes, library_);
+    }
+
+    query_stats::StorageBackend backend_;
+    std::span<const query_stats::BatchDeleteKeyInfo> keys_;
+    std::string_view library_;
+    query_stats::TimePoint start_;
+    bool completed_{false};
+};
+
+template<typename Guard, typename Fn>
+decltype(auto) run_classified_storage_op(Guard& guard, Fn&& fn) {
+    try {
+        return fn();
+    } catch (const KeyNotFoundException&) {
+        guard.finish(query_stats::StorageOutcome::NotFound);
+        throw;
+    } catch (const DuplicateKeyException&) {
+        guard.finish(query_stats::StorageOutcome::Conflict);
+        throw;
+    } catch (const AtomicOperationFailedException&) {
+        guard.finish(query_stats::StorageOutcome::Conflict);
+        throw;
+    } catch (const NotImplementedException&) {
+        guard.finish(query_stats::StorageOutcome::Unsupported);
+        throw;
+    } catch (const UnsupportedAtomicOperationException&) {
+        guard.finish(query_stats::StorageOutcome::Unsupported);
+        throw;
+    }
+}
+
+struct VisitorTimeGuard {
+    uint64_t& accum_ns;
+    query_stats::TimePoint start;
+
+    explicit VisitorTimeGuard(uint64_t& accum) noexcept : accum_ns(accum), start(std::chrono::steady_clock::now()) {}
+    ~VisitorTimeGuard() noexcept {
+        accum_ns += static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()
+        );
+    }
+};
+
+} // namespace detail
+
 class Storage {
   public:
-    Storage(LibraryPath library_path, OpenMode mode) : lib_path_(std::move(library_path)), mode_(mode) {}
+    Storage(LibraryPath library_path, OpenMode mode) :
+        lib_path_(std::move(library_path)),
+        library_name_(lib_path_.empty() ? std::string{} : lib_path_.to_delim_path()),
+        mode_(mode) {}
 
     virtual ~Storage() = default;
 
@@ -85,36 +244,123 @@ class Storage {
     Storage(Storage&&) = default;
     Storage& operator=(Storage&&) = delete;
 
+    [[nodiscard]] virtual query_stats::StorageBackend backend_type() const noexcept {
+        return query_stats::StorageBackend::Custom;
+    }
+
+    [[nodiscard]] std::string_view library_name() const noexcept { return library_name_; }
+
     template<typename T>
     void write(T&& key_seg) {
         ARCTICDB_SAMPLE(StorageWrite, 0)
-        return do_write(key_seg);
+        if (!query_stats::is_active()) {
+            return do_write(key_seg);
+        }
+        const auto key_type = key_seg.key_type();
+        const auto sym = detail::extract_symbol_from_variant_key(key_seg.variant_key());
+        const uint64_t bytes = key_seg.segment_ptr() ? key_seg.segment_ptr()->size_or_calculate() : 0;
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::Write, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Write, key_type, library_name_, sym);
+        detail::run_classified_storage_op(guard, [&]() { do_write(key_seg); });
+        guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
     }
 
     template<typename T>
     void write_if_none(T&& kv) {
-        return do_write_if_none(kv);
+        if (!query_stats::is_active()) {
+            return do_write_if_none(kv);
+        }
+        const auto key_type = kv.key_type();
+        const auto sym = detail::extract_symbol_from_variant_key(kv.variant_key());
+        const uint64_t bytes = kv.segment_ptr() ? kv.segment_ptr()->size_or_calculate() : 0;
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::WriteIfNone, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::WriteIfNone, key_type, library_name_, sym);
+        detail::run_classified_storage_op(guard, [&]() { do_write_if_none(kv); });
+        guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
     }
 
     template<typename T>
     void update(T&& key_seg, UpdateOpts opts) {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
-        return do_update(key_seg, opts);
+        if (!query_stats::is_active()) {
+            return do_update(key_seg, opts);
+        }
+        const auto key_type = key_seg.key_type();
+        const auto sym = detail::extract_symbol_from_variant_key(key_seg.variant_key());
+        const uint64_t bytes = key_seg.segment_ptr() ? key_seg.segment_ptr()->size_or_calculate() : 0;
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::Update, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Update, key_type, library_name_, sym);
+        detail::run_classified_storage_op(guard, [&]() { do_update(key_seg, opts); });
+        guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
     }
 
     void read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
-        return do_read(std::move(variant_key), visitor, opts);
+        if (!query_stats::is_active()) {
+            return do_read(std::move(variant_key), visitor, opts);
+        }
+        const auto key_type = variant_key_type(variant_key);
+        const std::string sym(detail::extract_symbol_from_variant_key(variant_key));
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::Read, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Read, key_type, library_name_, sym);
+        const ReadVisitor wrapped_visitor = [&](const VariantKey& k, Segment&& seg) {
+            const uint64_t bytes = seg.size_or_calculate();
+            guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
+            visitor(k, std::move(seg));
+        };
+        detail::run_classified_storage_op(guard, [&]() { do_read(std::move(variant_key), wrapped_visitor, opts); });
+        guard.finish(query_stats::StorageOutcome::Ok, 0, 1);
     }
 
-    KeySegmentPair read(VariantKey&& variant_key, ReadKeyOpts opts) { return do_read(std::move(variant_key), opts); }
+    KeySegmentPair read(VariantKey&& variant_key, ReadKeyOpts opts) {
+        if (!query_stats::is_active()) {
+            return do_read(std::move(variant_key), opts);
+        }
+        const auto key_type = variant_key_type(variant_key);
+        const std::string sym(detail::extract_symbol_from_variant_key(variant_key));
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::Read, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Read, key_type, library_name_, sym);
+        auto res = detail::run_classified_storage_op(guard, [&]() { return do_read(std::move(variant_key), opts); });
+        const uint64_t bytes = res.segment_ptr() ? res.segment_ptr()->size_or_calculate() : 0;
+        guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
+        return res;
+    }
 
     [[nodiscard]] virtual bool has_async_api() const { return false; }
 
     virtual AsyncStorage* async_api() { util::raise_rte("Request for async API on non-async storage"); }
 
-    void remove(VariantKey&& variant_key, RemoveOpts opts) { do_remove(std::move(variant_key), opts); }
+    void remove(VariantKey&& variant_key, RemoveOpts opts) {
+        if (!query_stats::is_active()) {
+            return do_remove(std::move(variant_key), opts);
+        }
+        const auto key_type = variant_key_type(variant_key);
+        const std::string sym(detail::extract_symbol_from_variant_key(variant_key));
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::Delete, key_type);
+        query_stats::ScopedDeletedBytesTracker deleted_bytes;
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Delete, key_type, library_name_, sym);
+        detail::run_classified_storage_op(guard, [&]() { do_remove(std::move(variant_key), opts); });
+        guard.finish(query_stats::StorageOutcome::Ok, deleted_bytes.bytes(), 1);
+    }
 
-    void remove(std::span<VariantKey> variant_keys, RemoveOpts opts) { return do_remove(variant_keys, opts); }
+    void remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
+        if (!query_stats::is_active() || variant_keys.empty()) {
+            return do_remove(variant_keys, opts);
+        }
+        // Copy symbol strings up front so backends that move out of variant_keys cannot invalidate key_infos views.
+        boost::container::small_vector<std::string, 16> owned_syms;
+        owned_syms.reserve(variant_keys.size());
+        boost::container::small_vector<query_stats::BatchDeleteKeyInfo, 16> key_infos;
+        key_infos.reserve(variant_keys.size());
+        for (const auto& k : variant_keys) {
+            owned_syms.emplace_back(detail::extract_symbol_from_variant_key(k));
+            key_infos.push_back(query_stats::BatchDeleteKeyInfo{variant_key_type(k), owned_syms.back()});
+        }
+        query_stats::ContextTagScope tag(library_name_, {}, query_stats::StorageOp::DeleteBatch, std::nullopt);
+        query_stats::ScopedDeletedBytesTracker deleted_bytes;
+        detail::BatchDeleteOpGuard guard(backend_type(), key_infos, library_name_);
+        detail::run_classified_storage_op(guard, [&]() { do_remove(variant_keys, opts); });
+        guard.finish(query_stats::StorageOutcome::Ok, deleted_bytes.bytes());
+    }
 
     [[nodiscard]] bool supports_prefix_matching() const { return do_supports_prefix_matching(); }
 
@@ -138,7 +384,18 @@ class Storage {
         return supports_atomic_writes_.value();
     }
 
-    bool fast_delete() { return do_fast_delete(); }
+    bool fast_delete() {
+        if (!query_stats::is_active()) {
+            return do_fast_delete();
+        }
+        query_stats::ContextTagScope tag(library_name_, {}, query_stats::StorageOp::FastDelete, KeyType::UNDEFINED);
+        detail::StorageOpGuard guard(
+                backend_type(), query_stats::StorageOp::FastDelete, KeyType::UNDEFINED, library_name_, {}
+        );
+        const bool res = detail::run_classified_storage_op(guard, [&]() { return do_fast_delete(); });
+        guard.finish(query_stats::StorageOutcome::Ok, 0, 1);
+        return res;
+    }
 
     // Maximum number of keys this storage will accept in a single do_remove(span) call
     // std::nullopt means no limit (e.g. LMDB, memory)
@@ -146,14 +403,46 @@ class Storage {
 
     virtual void cleanup() {}
 
-    inline bool key_exists(const VariantKey& key) { return do_key_exists(key); }
+    inline bool key_exists(const VariantKey& key) {
+        if (!query_stats::is_active()) {
+            return do_key_exists(key);
+        }
+        const auto key_type = variant_key_type(key);
+        const auto sym = detail::extract_symbol_from_variant_key(key);
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::Exists, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Exists, key_type, library_name_, sym);
+        const bool exists = detail::run_classified_storage_op(guard, [&]() { return do_key_exists(key); });
+        guard.finish(exists ? query_stats::StorageOutcome::Ok : query_stats::StorageOutcome::NotFound, 0, 1);
+        return exists;
+    }
 
     void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix = std::string()) {
-        const IterateTypePredicate predicate_visitor = [&visitor](VariantKey&& k) {
-            visitor(std::move(k));
+        if (!query_stats::is_active()) {
+            const IterateTypePredicate predicate_visitor = [&visitor](VariantKey&& k) {
+                visitor(std::move(k));
+                return false; // keep applying the visitor no matter what
+            };
+            do_iterate_type_until_match(key_type, predicate_visitor, prefix);
+            return;
+        }
+        query_stats::ContextTagScope tag(library_name_, {}, query_stats::StorageOp::List, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::List, key_type, library_name_, {});
+        guard.enable_iteration_tracking();
+        const IterateTypePredicate predicate_visitor = [&](VariantKey&& k) {
+            guard.inc_items();
+            try {
+                detail::VisitorTimeGuard vguard(guard.subtract_ns_ref());
+                visitor(std::move(k));
+            } catch (...) {
+                guard.finish_tracked(query_stats::StorageOutcome::Ok);
+                throw;
+            }
             return false; // keep applying the visitor no matter what
         };
-        do_iterate_type_until_match(key_type, predicate_visitor, prefix);
+        detail::run_classified_storage_op(guard, [&]() {
+            do_iterate_type_until_match(key_type, predicate_visitor, prefix);
+        });
+        guard.finish_tracked(query_stats::StorageOutcome::Ok);
     }
 
     [[nodiscard]] virtual bool supports_object_size_calculation() const {
@@ -168,11 +457,49 @@ class Storage {
                 "object size calculation",
                 name()
         );
-        do_visit_object_sizes(key_type, prefix, visitor);
+        if (!query_stats::is_active()) {
+            do_visit_object_sizes(key_type, prefix, visitor);
+            return;
+        }
+        query_stats::ContextTagScope tag(library_name_, {}, query_stats::StorageOp::VisitSizes, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::VisitSizes, key_type, library_name_, {});
+        guard.enable_iteration_tracking();
+        const ObjectSizesVisitor wrapped_visitor = [&](const VariantKey& k, CompressedSize sz) {
+            guard.inc_items();
+            try {
+                detail::VisitorTimeGuard vguard(guard.subtract_ns_ref());
+                visitor(k, sz);
+            } catch (...) {
+                guard.finish_tracked(query_stats::StorageOutcome::Ok);
+                throw;
+            }
+        };
+        detail::run_classified_storage_op(guard, [&]() { do_visit_object_sizes(key_type, prefix, wrapped_visitor); });
+        guard.finish_tracked(query_stats::StorageOutcome::Ok);
     }
 
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
-        return do_iterate_type_until_match(key_type, predicate, std::string());
+        if (!query_stats::is_active()) {
+            return do_iterate_type_until_match(key_type, predicate, std::string());
+        }
+        query_stats::ContextTagScope tag(library_name_, {}, query_stats::StorageOp::Scan, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Scan, key_type, library_name_, {});
+        guard.enable_iteration_tracking();
+        const IterateTypePredicate wrapped_predicate = [&](VariantKey&& k) {
+            guard.inc_items();
+            try {
+                detail::VisitorTimeGuard vguard(guard.subtract_ns_ref());
+                return predicate(std::move(k));
+            } catch (...) {
+                guard.finish_tracked(query_stats::StorageOutcome::Ok);
+                throw;
+            }
+        };
+        const bool found = detail::run_classified_storage_op(guard, [&]() {
+            return do_iterate_type_until_match(key_type, wrapped_predicate, std::string());
+        });
+        guard.finish_tracked(query_stats::StorageOutcome::Ok);
+        return found;
     }
 
     [[nodiscard]] std::string key_path(const VariantKey& key) const { return do_key_path(key); }
@@ -288,6 +615,7 @@ class Storage {
     [[nodiscard]] virtual std::optional<char> do_verify_library_suffix(std::string_view) const { return std::nullopt; }
 
     LibraryPath lib_path_;
+    std::string library_name_;
     OpenMode mode_;
     std::optional<bool> supports_atomic_writes_;
 };

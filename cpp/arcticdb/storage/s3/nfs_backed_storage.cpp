@@ -206,7 +206,9 @@ KeySegmentPair NfsBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts o
 void NfsBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     auto enc = encode_object_id(variant_key);
     std::array<VariantKey, 1> arr{std::move(enc)};
-    s3::detail::do_remove_impl(std::span(arr), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_remove_impl(
+            std::span(arr), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, backend_type()
+    );
 }
 
 void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
@@ -215,7 +217,9 @@ void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts)
     std::transform(std::begin(variant_keys), std::end(variant_keys), std::back_inserter(enc), [](auto&& key) {
         return encode_object_id(key);
     });
-    s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_remove_impl(
+            std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, backend_type()
+    );
 }
 
 std::optional<size_t> NfsBackedStorage::max_delete_batch_size() const {
@@ -241,7 +245,9 @@ bool NfsBackedStorage::do_iterate_type_until_match(
         return s3::detail::visit_if_prefix_matches(visitor, prefix, unencode_object_id(key));
     };
     s3::detail::Visitor<IterateTypePredicate> final_visitor{visitor_with_prefix_filtering};
-    return s3::detail::do_iterate_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
+    return s3::detail::do_iterate_type_impl(
+            key_type, bucket_name_, *s3_client_, path_info, final_visitor, backend_type()
+    );
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
@@ -267,7 +273,9 @@ void NfsBackedStorage::do_visit_object_sizes(
     };
     s3::detail::Visitor<ObjectSizesVisitor> final_visitor{visitor_with_prefix_filtering};
 
-    s3::detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
+    s3::detail::do_visit_object_sizes_for_type_impl(
+            key_type, bucket_name_, *s3_client_, path_info, final_visitor, backend_type()
+    );
 }
 
 } // namespace arcticdb::storage::nfs_backed
