@@ -528,8 +528,19 @@ class VersionMapImpl {
         std::swap(*entry, *new_entry);
     }
 
+    /**
+     * Overwrites the version chain for `stream_id` with `index_keys` and updates the VERSION_REF key.
+     *
+     * When `deferred_keys_to_remove` is non-null, superseded VERSION keys from the previous chain are
+     * appended to `*deferred_keys_to_remove` instead of being deleted synchronously (allowing callers to
+     * batch deletions across symbols). If a new head was written (`!index_keys.empty()`), any key equal
+     * to the newly written live head is excluded so the live chain is never scheduled for deletion. When
+     * `index_keys.empty()`, no new head is written and all VERSION keys from the old chain are appended
+     * for deferred deletion (mirroring the synchronous deletion path).
+     */
     void overwrite_symbol_tree(
-            std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKeyPacked>& index_keys
+            std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKeyPacked>& index_keys,
+            std::vector<VariantKey>* deferred_keys_to_remove = nullptr
     ) {
         auto entry = std::make_shared<VersionMapEntry>(stream_id);
         try {
@@ -558,14 +569,28 @@ class VersionMapImpl {
             if (validate_)
                 entry->validate();
         }
-        try {
-            remove_entry_version_keys(store, old_entry, stream_id);
-        } catch (const storage::KeyNotFoundException& e) {
-            log::version().debug(
-                    "Failed to remove version keys for symbol {} in overwrite_symbol_tree, exception: {}",
-                    stream_id,
-                    e.what()
-            );
+        if (deferred_keys_to_remove != nullptr) {
+            const auto start_idx = deferred_keys_to_remove->size();
+            collect_entry_version_keys(old_entry, stream_id, *deferred_keys_to_remove);
+            if (!index_keys.empty() && entry->head_.has_value()) {
+                const VariantKey live_head{*entry->head_};
+                const auto first_new = deferred_keys_to_remove->begin() +
+                                       static_cast<std::vector<VariantKey>::difference_type>(start_idx);
+                deferred_keys_to_remove->erase(
+                        std::remove(first_new, deferred_keys_to_remove->end(), live_head),
+                        deferred_keys_to_remove->end()
+                );
+            }
+        } else {
+            try {
+                remove_entry_version_keys(store, old_entry, stream_id);
+            } catch (const storage::KeyNotFoundException& e) {
+                log::version().debug(
+                        "Failed to remove version keys for symbol {} in overwrite_symbol_tree, exception: {}",
+                        stream_id,
+                        e.what()
+                );
+            }
         }
     }
 
@@ -714,6 +739,25 @@ class VersionMapImpl {
         maybe_invalidate_cached_undeleted(*entry);
 
         return tombstones;
+    }
+
+    void collect_entry_version_keys(
+            const VersionMapEntry& entry, const StreamId& stream_id, std::vector<VariantKey>& out
+    ) const {
+        if (entry.head_) {
+            util::check(
+                    entry.head_->id() == stream_id,
+                    "Id mismatch for entry {} vs symbol {}",
+                    entry.head_->id(),
+                    stream_id
+            );
+            out.emplace_back(*entry.head_);
+        }
+        for (const auto& key : entry.keys_) {
+            if (key.type() == KeyType::VERSION) {
+                out.emplace_back(key.to_atom_key(entry.stream_id_));
+            }
+        }
     }
 
     void remove_entry_version_keys(
