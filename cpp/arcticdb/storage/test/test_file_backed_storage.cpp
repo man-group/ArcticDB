@@ -78,11 +78,16 @@ TEST(FileStorageInit, FileExistsWhereLibraryWouldGo) {
 
 TEST(FileStorageInit, NoPermissionToCreateLibrary) {
     TempDir temp_dir(*::testing::UnitTest::GetInstance()->current_test_info());
-    // TODO: Try with chmod that lets you read at least. That would cause mkdir to fail. Right now exists() fails.
-    ::chmod(temp_dir.get().c_str(), 0);
+    // Make sure the temp directory deletion succeeds.
     BOOST_SCOPE_EXIT(&temp_dir) { ::chmod(temp_dir.get().c_str(), 07777); }
     BOOST_SCOPE_EXIT_END
 
+    // Can't even check if the directory exists.
+    ::chmod(temp_dir.get().c_str(), 0);
+    ASSERT_THROW(get_storage(temp_dir.get()), PermissionException);
+
+    // Existence check succeeds, but then can't create the library directory.
+    ::chmod(temp_dir.get().c_str(), 0500);
     ASSERT_THROW(get_storage(temp_dir.get()), PermissionException);
 }
 
@@ -101,8 +106,6 @@ class FileBackedStorageFixture : public ::testing::Test {
 
     void TearDown() override {
         ASSERT_EQ(storage().get_num_temporary_files(), 0) << "Temporary files were not cleaned up.";
-
-        // TODO: This is really difficult to ensure.
         ASSERT_EQ(faulty_posix_->num_open_file_descriptors(), 0);
     }
 
