@@ -541,16 +541,29 @@ void FileBackedStorage::do_visit_object_sizes(
 [[nodiscard]] std::string FileBackedStorage::do_key_path(const VariantKey& key) const { return get_key_subpath(key); }
 
 [[nodiscard]] const std::set<char>& FileBackedStorage::do_unsupported_symbol_chars() const {
-    // TODO: Revisit this, it's wrong. Compare with LMDB, think carefully about Windows.
-    return GLOBALLY_UNSUPPORTED_CHARS;
+    static const std::set<char> unsupported_characters = []() {
+        std::set<char> result = GLOBALLY_UNSUPPORTED_CHARS;
+        // Forward slash intentionally omitted and should be escaped. Far too useful to users.
+        for (char x : {'?', '!', '*', '\\', ':', '"', '|'})
+            result.insert(x);
+
+        return result;
+    }();
+    return unsupported_characters;
 }
 
 [[nodiscard]] const std::set<char>& FileBackedStorage::do_unsupported_library_chars() const {
-    // TODO: Revisit this, it's wrong. Compare with LMDB, think carefully about Windows.
-    return GLOBALLY_UNSUPPORTED_CHARS;
+    const std::set<char>& unsupported_symbol_characters = do_unsupported_symbol_chars();
+    static const std::set<char> unsupported_characters = [&unsupported_symbol_characters]() {
+        std::set<char> result = unsupported_symbol_characters;
+        result.insert('/');
+        return result;
+    }();
+    return unsupported_characters;
 }
 
-[[nodiscard]] std::optional<char> FileBackedStorage::do_verify_library_suffix(std::string_view) const {
+[[nodiscard]] std::optional<char> FileBackedStorage::do_verify_library_suffix([[maybe_unused]] std::string_view path
+) const {
     // Shamelessly lifted off LMDB backend. The concept is the same.
 #ifdef _WIN32
     // Windows directory names cannot end in '.' or whitespace.

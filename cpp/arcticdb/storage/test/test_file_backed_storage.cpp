@@ -140,8 +140,20 @@ TEST_F(FileStorageApi, WritesAreVisibleAndReadable) {
     ASSERT_TRUE(segments_are_identical(segment, result.segment()));
 }
 
+TEST_F(FileStorageApi, ForwardSlashAllowedInSymbol) {
+    const std::string symbol("market/price");
+    Segment segment{storage::get_test_segment()};
+    auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
+    storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
+    ASSERT_TRUE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
+
+    auto result = storage().read(entity::VariantKey{key}, {});
+    ASSERT_EQ(std::get<StringId>(result.atom_key().id()), STREAM_ID);
+    ASSERT_TRUE(segments_are_identical(segment, result.segment()));
+}
+
 TEST_F(FileStorageApi, KeyNotFoundException) {
-    auto key = storage::get_test_key("symbol", entity::KeyType::VERSION);
+    auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
     ASSERT_THROW(storage().read(entity::VariantKey{key}, {}), storage::KeyNotFoundException);
 }
 
