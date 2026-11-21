@@ -257,7 +257,21 @@ bool do_iterate_type_impl(
     auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
 
     try {
-        for (auto page = azure_client.list_blobs(key_prefix); page.HasPage(); page.MoveToNextPage()) {
+        auto page_start = std::chrono::steady_clock::now();
+        for (auto page = azure_client.list_blobs(key_prefix); page.HasPage();) {
+            if (query_stats::is_active()) {
+                const auto page_ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                   std::chrono::steady_clock::now() - page_start
+                )
+                                                                   .count());
+                query_stats::record_storage_page(
+                        query_stats::StorageBackend::Azure,
+                        query_stats::StorageOp::List,
+                        key_type,
+                        page_ns,
+                        page.Blobs.size()
+                );
+            }
             for (const auto& blob : page.Blobs) {
                 auto key = blob.Name.substr(path_to_key_size);
                 ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", blob.Name, key);
@@ -269,6 +283,8 @@ bool do_iterate_type_impl(
                 }
                 ARCTICDB_SUBSAMPLE(AzureStorageCursorNext, 0)
             }
+            page_start = std::chrono::steady_clock::now();
+            page.MoveToNextPage();
         }
     } catch (const Azure::Core::RequestFailedException& e) {
         raise_if_unexpected_error(e, key_prefix);

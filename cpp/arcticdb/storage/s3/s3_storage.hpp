@@ -35,6 +35,12 @@ class S3Storage : public Storage, AsyncStorage {
 
     std::string name() const final;
 
+    query_stats::StorageBackend backend_type() const noexcept override { return query_stats::StorageBackend::S3; }
+
+    query_stats::StorageBackend async_backend_type() const noexcept override { return backend_type(); }
+
+    std::string_view async_library_name() const noexcept override { return library_name(); }
+
     bool has_async_api() const final { return ConfigsMap::instance()->get_int("S3.Async", 0) == 1; }
 
     AsyncStorage* async_api() override { return this; }
@@ -75,6 +81,11 @@ class S3Storage : public Storage, AsyncStorage {
     void do_visit_object_metadata(KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor)
             final;
 
+    void visit_object_metadata_impl(
+            KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor,
+            query_stats::StorageOp stats_op
+    );
+
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
             final;
 
@@ -110,6 +121,8 @@ class S3Storage : public Storage, AsyncStorage {
 class GCPXMLStorage : public S3Storage {
   public:
     GCPXMLStorage(const LibraryPath& lib, OpenMode mode, const GCPXMLSettings& conf);
+
+    query_stats::StorageBackend backend_type() const noexcept final { return query_stats::StorageBackend::GcpXml; }
 
     std::optional<size_t> max_delete_batch_size() const override { return std::nullopt; }
 
@@ -323,6 +336,8 @@ auto get_s3_config_and_set_env_var(const ConfigType& conf) {
             client_configuration.configFactories.retryStrategyCreateFn(),
             ConfigsMap::instance()->get_int("S3Storage.ChecksumMismatchMaxRetries", 1)
     );
+
+    client_configuration.executor = Aws::MakeShared<ContextPropagatingAwsExecutor>("ArcticAwsExecutor");
 
     return client_configuration;
 }

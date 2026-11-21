@@ -94,6 +94,12 @@ The CPU count respects cgroup CPU limits (v1 and v2) for containerized environme
 
 ## Performance Considerations
 
+### Query Statistics Instrumentation
+
+- `TaskScheduler` (`task_scheduler.hpp`): `SchedulerWrapper::add`, `submit_cpu_task`, and `submit_io_task` propagate `query_stats::CapturedContext` (`folly::RequestContext`) and record CPU/IO queue-wait and run latencies when `query_stats::is_active()`. `QueryStatsTaskObserver` records expired tasks.
+- `AsyncStore` (`async_store.hpp`, `async_store.cpp`): `write_maybe_blocking` times semaphore backpressure waits; `lookup_match_in_dedup_map` records dedup hits, misses, and compressed bytes saved.
+- Codec tasks (`tasks.hpp`, `tasks.cpp`): `EncodeAtomTask`/`EncodeSegmentTask`/`EncodeRefTask` and `DecodeSegmentTask`/`DecodeSliceTask` record encode/decode latencies and compressed vs uncompressed byte counts.
+
 ### Thread Pool Sizing
 
 - CPU pool: Match physical cores for compute tasks

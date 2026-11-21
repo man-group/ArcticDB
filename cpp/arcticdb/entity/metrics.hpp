@@ -142,6 +142,9 @@ class PrometheusInstance {
 
     void configure(const MetricsConfig& config);
 
+    void registerCollectable(const std::weak_ptr<prometheus::Collectable>& collectable);
+    void unregisterCollectable(const std::weak_ptr<prometheus::Collectable>& collectable);
+
     // Intended for testing.
     std::vector<prometheus::MetricFamily> get_metrics();
 
@@ -186,6 +189,7 @@ class PrometheusInstance {
 
     std::shared_ptr<prometheus::Registry> registry_;
     std::shared_ptr<prometheus::Exposer> exposer_;
+    std::vector<std::weak_ptr<prometheus::Collectable>> extra_collectables_;
 
     MetricFamilyMap<prometheus::Counter> map_counter_;
     MetricMap<prometheus::Counter> all_counters_;

@@ -10,11 +10,14 @@
 
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/stream_source.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <folly/ExceptionWrapper.h>
 #include <folly/futures/Future.h>
 #include <folly/futures/Promise.h>
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <exception>
 #include <deque>
 #include <functional>
@@ -79,18 +82,39 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
     const std::vector<std::vector<size_t>>& processing_units() const { return processing_units_; }
 
     void admit_initial_processing_units() {
-        for (size_t u = 0; u < std::min(max_processing_units_in_flight_, processing_units_.size()); ++u) {
-            enqueue_processing_unit(u);
+        const bool track = query_stats::is_active();
+        if (track) {
+            admit_start_ = std::chrono::steady_clock::now();
         }
-        fill_read_window();
+        const size_t initial = std::min(max_processing_units_in_flight_, processing_units_.size());
+        for (size_t u = 0; u < initial; ++u) {
+            enqueue_processing_unit(u);
+            if (track) {
+                query_stats::record_admission_unit(/*waited=*/false, 0);
+            }
+        }
+        fill_read_window(/*from_read_complete=*/false);
     }
 
     void on_processing_unit_complete() {
         const auto u = next_unit_.fetch_add(1);
         if (u < processing_units_.size()) {
+            if (query_stats::is_active()) {
+                uint64_t wait_ns = 0;
+                if (admit_start_ != query_stats::TimePoint{}) {
+                    wait_ns = static_cast<uint64_t>(std::max<int64_t>(
+                            0,
+                            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                    std::chrono::steady_clock::now() - admit_start_
+                            )
+                                    .count()
+                    ));
+                }
+                query_stats::record_admission_unit(/*waited=*/true, wait_ns);
+            }
             enqueue_processing_unit(u);
         }
-        fill_read_window();
+        fill_read_window(/*from_read_complete=*/false);
     }
 
   private:
@@ -98,33 +122,60 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
     // it is enqueued at most once. Segments are enqueued unit-contiguously so folly::collect on a unit is not left
     // waiting on segments submitted far apart.
     void enqueue_processing_unit(const size_t u) {
+        const bool track = query_stats::is_active();
+        const auto now = track ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
         std::lock_guard lock{window_mutex_};
+        if (track && segment_enqueued_at_.empty()) {
+            segment_enqueued_at_.resize(ranges_and_keys_->size());
+        }
         for (const auto i : processing_units_.at(u)) {
             if (!i_th_segment_enqueued_.at(i)) {
                 i_th_segment_enqueued_.at(i) = true;
                 segments_queued_for_read_.push_back(i);
+                if (track) {
+                    segment_enqueued_at_[i] = now;
+                }
             }
         }
     }
 
     // Launch eligible reads until the read window is full. Called whenever a read completes or a new processing unit
     // is admitted.
-    void fill_read_window() {
+    void fill_read_window(bool from_read_complete) {
         while (true) {
-            std::vector<size_t> to_launch;
+            const bool track = query_stats::is_active();
+            std::vector<std::pair<size_t, query_stats::TimePoint>> to_launch;
             {
                 std::lock_guard lock{window_mutex_};
                 while (active_reads_ < read_window_ && !segments_queued_for_read_.empty()) {
-                    to_launch.push_back(segments_queued_for_read_.front());
+                    const size_t seg_idx = segments_queued_for_read_.front();
                     segments_queued_for_read_.pop_front();
+                    query_stats::TimePoint enq_at{};
+                    if (track && from_read_complete && seg_idx < segment_enqueued_at_.size()) {
+                        enq_at = segment_enqueued_at_[seg_idx];
+                    }
+                    to_launch.emplace_back(seg_idx, enq_at);
                     ++active_reads_;
                 }
             }
             if (to_launch.empty()) {
                 return;
             }
+            if (track) {
+                const auto now = from_read_complete ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
+                for (const auto& [_, enq_at] : to_launch) {
+                    if (from_read_complete && enq_at != query_stats::TimePoint{}) {
+                        const auto wait_ns = static_cast<uint64_t>(std::max<int64_t>(
+                                0, std::chrono::duration_cast<std::chrono::nanoseconds>(now - enq_at).count()
+                        ));
+                        query_stats::record_admission_segment(/*waited=*/true, wait_ns);
+                    } else {
+                        query_stats::record_admission_segment(/*waited=*/false, 0);
+                    }
+                }
+            }
             bool any_read_dispatch_failed = false;
-            for (const auto i : to_launch) {
+            for (const auto& [i, _] : to_launch) {
                 // A reader that throws instead of returning a failed future would otherwise leave the window slot used
                 // and the promise unfulfilled, hanging every consumer of this segment. Catch everything, since losing a
                 // promise here cannot be recovered from.
@@ -160,7 +211,7 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
             std::lock_guard lock{window_mutex_};
             --active_reads_;
         }
-        fill_read_window();
+        fill_read_window(/*from_read_complete=*/true);
     }
 
     stream::SegmentReader reader_;
@@ -174,9 +225,10 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
     // We do this so that when the processing unit budget is much higher than the window size, we still
     // get sensible queuing behaviour on the IO pools. Benchmarking on PR #3191 showed a major performance
     // penalty without this windowing, due to the round-robin scheduling on the IO thread pools.
-    std::mutex window_mutex_; // protects the 3 fields below
+    std::mutex window_mutex_; // protects the fields below
     std::vector<bool> i_th_segment_enqueued_;
     std::deque<size_t> segments_queued_for_read_;
+    std::vector<query_stats::TimePoint> segment_enqueued_at_;
     size_t active_reads_{0};
     size_t read_window_;
 
@@ -184,6 +236,7 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
     std::vector<std::vector<size_t>> processing_units_;
     size_t max_processing_units_in_flight_;
     std::atomic<size_t> next_unit_;
+    query_stats::TimePoint admit_start_{};
 };
 
 size_t max_resident_processing_units(const std::vector<std::vector<size_t>>& processing_unit_indexes);

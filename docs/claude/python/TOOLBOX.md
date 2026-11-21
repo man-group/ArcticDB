@@ -292,8 +292,29 @@ segment sizes (`AsyncStore::visit_object_sizes`), which is why LMDB and in-memor
 |------|---------|
 | `toolbox/library_tool.py` | LibraryTool class |
 | `toolbox/storage_lock.py` | StorageLock wrapper with normalized metadata |
+| `toolbox/query_stats.py` | Scoped `collect()`, `QueryStatsReport`, Prometheus sink & legacy global API |
 | `toolbox/__init__.py` | Module exports |
 | `version_store/admin_tools.py` | AdminTools, KeyType, Size |
+
+## Query Statistics (`query_stats`)
+
+- **Core collector** (`cpp/arcticdb/toolbox/query_stats.hpp`, `query_stats.cpp`): Zero-cost fast path via single relaxed atomic `is_active()`. Uses `folly::ThreadLocal` per-thread buckets (retired threads flush into `retired_stats_` under strict lock ordering) and `folly::RequestContext` propagation across `TaskScheduler` CPU/IO pools, `folly::Future` chains, and `ContextPropagatingAwsExecutor`.
+- **Histograms & attribution**: Compact 114-bucket binary-octave log-linear `LatencyHistogram` (ns precision). Attributes by `library` (default on) and opt-in `symbol` (`max_symbols` cap spilling to `"__other__"` with a fixed 256-byte `DroppedSymbolFilter`). `LocalVersionedEngine` pushes `ContextTagScope` so indirect keys (`SYMBOL_LIST`, `LOCK`, HTTP) inherit the active symbol.
+- **Unified storage NVI** (`storage/storage.hpp`, `storage/async_storage.hpp`): Instruments all 8 backends (`S3`, `GcpXml`, `NfsBacked`, `Azure`, `Lmdb`, `Mongo`, `Memory`, `MappedFile`) with 5-way outcomes (`Ok`, `NotFound`, `Conflict`, `Unsupported`, `Error`), visitor callback time exclusion, paginated list page counts, and partial batch-delete retries.
+- **Transport monitors**: AWS SDK `MonitoringInterface` + `ArcticCurlHttpClient` (`CURLOPT_SOCKOPTFUNCTION` for `new_connections`) + `ChecksumMismatchRetryStrategy` (`storage/s3/s3_api.cpp`, `s3_retry_strategy.cpp`); Azure `QueryStatsAzurePerOperationPolicy` / `QueryStatsAzurePerRetryPolicy` (`storage/azure/azure_client_impl.cpp`).
+- **Subsystem instrumentation**:
+  - Library API (RED): `ApiOpScope` at `PythonVersionStore` public API entrypoints (`version/version_store_api.cpp`) tracks op counts, errors, and end-to-end duration (with thread-local nesting protection and inline disabled fast path).
+  - Thread pools & backpressure: `TaskScheduler` (`async/task_scheduler.hpp`) wait/run latency + `QueryStatsTaskObserver` expired counts; `AsyncStore::write_maybe_blocking` semaphore wait (`async/async_store.hpp`).
+  - Caches: `VersionMapImpl` hits/misses/reloads/chain_hops/ref_retries (`version/version_map.hpp`), `DeDupMap` hits/misses/bytes_saved (`async/async_store.cpp`), `ConfigCache` hits/misses (`storage/config_cache.hpp`).
+  - Codec: `EncodeAtomTask`/`EncodeSegmentTask`/`EncodeRefTask` and `DecodeSegmentTask`/`DecodeSliceTask` (`async/tasks.hpp`, `async/tasks.cpp`).
+  - Query pruning: `read_indexed_keys_to_pipeline` (`version/version_core.cpp`) tracks index vs column-stats pruned segments, projected columns, and selected rows.
+  - Locks: `StorageLock` (`util/storage_lock.hpp`) and `ReliableStorageLock` (`util/reliable_storage_lock-inl.hpp`).
+  - Python/Arrow boundary & GIL wait: `_try_normalize` / `_adapt_frame_data` (`version_store/_store.py`), `py_input_item_to_frame` (`python/python_to_tensor_frame.cpp`), `create_python_read_result` (`pipeline/pipeline_utils.cpp`), and `TimedGilAcquire`/`TimedGilRelease`/`ScopedGILLock` (`python/gil_lock.hpp`).
+  - QueryBuilder clauses & admission backpressure: `MemSegmentProcessingTask` (`async/tasks.hpp`) + `ComponentManager::count_rows` (`processing/component_manager.cpp`) track per-clause latency & rows in/out; `ProcessingUnitAdmissionHandler` (`version/admission_handler.hpp`) tracks residency-budget and read-window waits.
+  - Write / append pathologies (`stream`): `EncodeAtomTask::encode` (`async/tasks.hpp`) tracks written data/staged segments, small-segment fragmentation (`< 1000` rows), and a 14-bucket `RowCountHistogram`; `incompletes.cpp` tracks incomplete append chain hops/iteration loads; `version_core.cpp` and `symbol_list.cpp` track `incomplete`/`sort_merge`/`defragment`/`symbol_list` compactions; `version_map.hpp` and `symbol_list.hpp`/`.cpp` track non-increasing version conflicts, concurrent symbol-list compaction skips, and symbol-list load retries.
+  - Live resource gauges & LMDB (`resources`): Scrape-time pull gauges (`TaskScheduler` CPU/IO pending tasks & threads via `set_pool_gauge_provider`, `LmdbStorage` live `mdb_env_info`/`mdb_env_stat` via RAII `LmdbGaugeHandle`, relaxed-atomic counters for `VersionMap`/`ConfigCache` live entry counts and `AsyncStore::write_maybe_blocking` semaphore in-flight vs limit) plus LMDB `MDB_MAP_FULL` error counting (`storage/lmdb/lmdb_error_handling.cpp`).
+- **Prometheus sink**: Opt-in `PrometheusStatsSink` (`enable_prometheus_sink` / `disable_prometheus_sink`) aggregates storage, HTTP, thread-pool, cache, codec, query-pruning, and lock counters/histograms in per-thread `folly::ThreadLocal` buckets (zero cross-thread lock contention or heap allocations on the hot path) and exposes them on scrape/`push()` via a `prometheus::Collectable` registered on `PrometheusInstance` (`registerCollectable` / `unregisterCollectable`) with strictly bounded labels (never `symbol`).
+- **Python API** (`python/arcticdb/toolbox/query_stats.py`, bindings in `cpp/arcticdb/toolbox/python_bindings.cpp`): `qs.collect()` returning `QueryStatsReport` (`.storage`, `.http`, `.api`, `.boundary`, `.processing`, `.stream`, `.resources`, `.by_library`, `.by_symbol`, `.thread_pools`, `.caches`, `.codec`, `.query`, `.locks`, `.snapshot()`, `.diff()`, `.top_symbols()`, `.to_dataframe()`, `.summary()`), alongside backward-compatible `qs.query_stats()` / `qs.get_query_stats()`.
 
 ## Cautions
 

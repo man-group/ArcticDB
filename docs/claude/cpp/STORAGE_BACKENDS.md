@@ -270,7 +270,13 @@ URI parsing is handled by Python storage adapters in `python/arcticdb/adapters/`
 
 ### Required Methods
 
-New backends must implement: `do_write()`, `do_read()`, `do_remove()`, `do_key_exists()`, and `do_iterate_type()`. See `cpp/arcticdb/storage/storage.hpp` for the interface.
+New backends must implement: `do_write()`, `do_read()`, `do_remove()`, `do_key_exists()`, and `do_iterate_type()`. See `cpp/arcticdb/storage/storage.hpp` for the interface. Override `backend_type()` (and `async_backend_type()` if inheriting `AsyncStorage`) so `Storage`/`AsyncStorage` NVI automatically attributes operations to the backend in `query_stats`.
+
+### Query Statistics Instrumentation
+
+- **Storage NVI** (`storage/storage.hpp`, `storage/async_storage.hpp`): Automatically times and classifies outcomes (`Ok`, `NotFound`, `Conflict`, `Unsupported`, `Error`) across all backends, excluding visitor callback duration from `list`/`scan`/`visit_sizes`.
+- **S3 / GCP XML / NFS-backed** (`storage/s3/s3_api.cpp`, `s3_retry_strategy.cpp`, `detail-inl.hpp`): `QueryStatsAwsMonitor` (`Aws::Monitoring::MonitoringInterface`), `ArcticCurlHttpClient` (`CURLOPT_SOCKOPTFUNCTION` for `new_connections`), `ContextPropagatingAwsExecutor`, `ChecksumMismatchRetryStrategy`, per-page list counters, and partial batch-delete retries.
+- **Azure** (`storage/azure/azure_client_impl.cpp`): `QueryStatsAzurePerOperationPolicy` and `QueryStatsAzurePerRetryPolicy` record HTTP attempts, retries, status classes, backoff, and request/attempt latencies.
 
 ## Backend-Specific Considerations
 

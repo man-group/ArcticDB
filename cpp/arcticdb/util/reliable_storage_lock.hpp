@@ -68,6 +68,7 @@ class ReliableStorageLock {
     void force_clear_locks() const;
 
   private:
+    ReliableLockResult try_take_lock_impl() const;
     ReliableLockResult try_take_id(
             const std::vector<AcquiredLockId>& existing_locks, AcquiredLockId lock_id,
             std::optional<timestamp> timeout_override = std::nullopt

@@ -7,7 +7,9 @@
  */
 
 #include <arcticdb/storage/s3/s3_retry_strategy.hpp>
+#include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/log/log.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb::storage::s3 {
@@ -31,6 +33,10 @@ bool ChecksumMismatchRetryStrategy::ShouldRetry(
     auto retryable = error;
     retryable.SetRetryableType(Aws::Client::RetryableType::RETRYABLE);
     const bool will_retry = attempted_retries < max_retries_ && inner_->ShouldRetry(retryable, attempted_retries);
+    if (will_retry && query_stats::is_active()) {
+        const auto op = current_aws_operation();
+        query_stats::record_checksum_mismatch_retry("s3", op.empty() ? std::string_view("GetObject") : op);
+    }
     log::storage().warn(
             "S3 response checksum mismatch from {} (attempt {}), {}",
             error.GetRemoteHostIpAddress(),

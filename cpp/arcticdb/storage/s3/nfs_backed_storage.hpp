@@ -23,6 +23,8 @@ class NfsBackedStorage final : public Storage {
 
     std::string name() const final;
 
+    query_stats::StorageBackend backend_type() const noexcept final { return query_stats::StorageBackend::NfsBacked; }
+
     bool supports_object_size_calculation() const final override;
 
     bool supports_object_metadata_listing() const final override;
@@ -57,6 +59,11 @@ class NfsBackedStorage final : public Storage {
 
     void do_visit_object_metadata(KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor)
             final;
+
+    void visit_object_metadata_impl(
+            KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor,
+            query_stats::StorageOp stats_op
+    );
 
     bool do_key_exists(const VariantKey& key) final;
 

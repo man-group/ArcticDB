@@ -24,6 +24,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 
 namespace arcticdb::async {
@@ -31,6 +32,29 @@ namespace arcticdb::async {
 using KeyType = entity::KeyType;
 using AtomKey = entity::AtomKey;
 using IndexValue = entity::IndexValue;
+
+inline uint64_t segment_in_memory_uncompressed_bytes(const SegmentInMemory& seg) noexcept {
+    return static_cast<uint64_t>(seg.num_bytes()) +
+           (seg.has_string_pool() ? static_cast<uint64_t>(seg.string_pool_size()) : 0ULL);
+}
+
+inline Segment encode_dispatch_with_stats(
+        SegmentInMemory&& segment, const arcticdb::proto::encoding::VariantCodec& codec_meta,
+        EncodingVersion encoding_version
+) {
+    if (!query_stats::is_active()) {
+        return ::arcticdb::encode_dispatch(std::move(segment), codec_meta, encoding_version);
+    }
+    const uint64_t uncompressed_bytes = segment_in_memory_uncompressed_bytes(segment);
+    const auto start = std::chrono::steady_clock::now();
+    auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment), codec_meta, encoding_version);
+    const auto duration_ns = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count()
+    );
+    const uint64_t compressed_bytes = static_cast<uint64_t>(enc_seg.calculate_size());
+    query_stats::record_codec_encode(duration_ns, uncompressed_bytes, compressed_bytes);
+    return enc_seg;
+}
 
 struct EncodeAtomTask : BaseTask {
     using PartialKey = stream::PartialKey;
@@ -75,7 +99,13 @@ struct EncodeAtomTask : BaseTask {
     storage::KeySegmentPair encode() {
         ARCTICDB_DEBUG(log::codec(), "Encoding object with partial key {}", partial_key_);
         ARCTICDB_DEBUG_THROW(5)
-        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        if (query_stats::is_active() &&
+            (partial_key_.key_type == KeyType::TABLE_DATA || partial_key_.key_type == KeyType::APPEND_DATA)) {
+            query_stats::record_segment_written(
+                    static_cast<uint64_t>(segment_.row_count()), partial_key_.key_type == KeyType::APPEND_DATA
+            );
+        }
+        auto enc_seg = encode_dispatch_with_stats(std::move(segment_), *codec_meta_, encoding_version_);
         auto content_hash = get_segment_hash(enc_seg);
 
         AtomKey k = partial_key_.build_key(creation_ts_, content_hash);
@@ -106,7 +136,7 @@ struct EncodeSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeSegmentTask)
 
     storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        auto enc_seg = encode_dispatch_with_stats(std::move(segment_), *codec_meta_, encoding_version_);
         return {std::move(key_), std::move(enc_seg)};
     }
 
@@ -137,7 +167,7 @@ struct EncodeRefTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeRefTask)
 
     [[nodiscard]] storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        auto enc_seg = encode_dispatch_with_stats(std::move(segment_), *codec_meta_, encoding_version_);
         auto k = RefKey{id_, key_type_};
         return {std::move(k), std::move(enc_seg)};
     }
@@ -446,7 +476,21 @@ struct DecodeSegmentTask : BaseTask {
         );
 
         try {
-            auto decoded_segment = decode_segment(*key_segment.segment_ptr());
+            if (!query_stats::is_active()) {
+                auto decoded_segment = decode_segment(*key_segment.segment_ptr());
+                return {std::move(key_segment).variant_key(), std::move(decoded_segment)};
+            }
+            auto& seg_ref = *key_segment.segment_ptr();
+            const uint64_t compressed_bytes = static_cast<uint64_t>(seg_ref.calculate_size());
+            const auto start = std::chrono::steady_clock::now();
+            auto decoded_segment = decode_segment(seg_ref);
+            const auto duration_ns = static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start)
+                            .count()
+            );
+            query_stats::record_codec_decode(
+                    duration_ns, compressed_bytes, segment_in_memory_uncompressed_bytes(decoded_segment)
+            );
             return {std::move(key_segment).variant_key(), std::move(decoded_segment)};
         } catch (const std::exception& e) {
             codec::raise<ErrorCode::E_DECODE_ERROR>(
@@ -494,13 +538,16 @@ struct SegmentFunctionTask : BaseTask {
 struct MemSegmentProcessingTask : BaseTask {
     std::vector<std::shared_ptr<Clause>> clauses_;
     std::vector<EntityId> entity_ids_;
+    std::shared_ptr<ComponentManager> component_manager_;
     timestamp creation_time_;
 
     explicit MemSegmentProcessingTask(
-            std::vector<std::shared_ptr<Clause>> clauses, std::vector<EntityId>&& entity_ids
+            std::vector<std::shared_ptr<Clause>> clauses, std::vector<EntityId>&& entity_ids,
+            std::shared_ptr<ComponentManager> component_manager = nullptr
     ) :
         clauses_(std::move(clauses)),
         entity_ids_(std::move(entity_ids)),
+        component_manager_(std::move(component_manager)),
         creation_time_(util::SysClock::coarse_nanos_since_epoch()) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
@@ -511,7 +558,22 @@ struct MemSegmentProcessingTask : BaseTask {
         const auto time_in_queue = double(nanos_start - creation_time_) / BILLION;
         ARCTICDB_RUNTIME_DEBUG(log::inmem(), "Segment processing task running after {}s queue time", time_in_queue);
         for (auto it = clauses_.cbegin(); it != clauses_.cend(); ++it) {
-            entity_ids_ = (*it)->process(std::move(entity_ids_));
+            if (query_stats::is_active()) {
+                const uint64_t rows_in = component_manager_ ? component_manager_->count_rows(entity_ids_) : 0;
+                const auto qs_start = std::chrono::steady_clock::now();
+                entity_ids_ = (*it)->process(std::move(entity_ids_));
+                const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                        0,
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now() - qs_start
+                        )
+                                .count()
+                ));
+                const uint64_t rows_out = component_manager_ ? component_manager_->count_rows(entity_ids_) : 0;
+                query_stats::record_clause_exec((*it)->clause_info().clause_kind_, dur_ns, rows_in, rows_out);
+            } else {
+                entity_ids_ = (*it)->process(std::move(entity_ids_));
+            }
 
             auto next_it = std::next(it);
             if (next_it != clauses_.cend() &&

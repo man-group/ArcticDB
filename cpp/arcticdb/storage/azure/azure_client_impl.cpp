@@ -52,13 +52,190 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/error_code.hpp>
+
+#include <chrono>
 
 namespace arcticdb::storage {
 using namespace object_store_utils;
 namespace azure {
 using namespace Azure::Storage;
 using namespace Azure::Storage::Blobs;
+
+namespace {
+
+std::string infer_azure_blob_operation(const Azure::Core::Http::Request& request) {
+    const std::string method = request.GetMethod().ToString();
+    const auto& query = request.GetUrl().GetQueryParameters();
+    const auto comp_it = query.find("comp");
+    const std::string_view comp = comp_it != query.end() ? std::string_view(comp_it->second) : std::string_view{};
+
+    if (method == "GET") {
+        if (comp == "list") {
+            return "ListBlobs";
+        }
+        return "GetBlob";
+    }
+    if (method == "PUT") {
+        if (comp == "block") {
+            return "PutBlock";
+        }
+        if (comp == "blocklist") {
+            return "PutBlockList";
+        }
+        return "PutBlob";
+    }
+    if (method == "HEAD") {
+        return "GetBlobProperties";
+    }
+    if (method == "POST") {
+        if (comp == "batch") {
+            return "SubmitBatch";
+        }
+        return "POST";
+    }
+    if (method == "DELETE") {
+        return "DeleteBlob";
+    }
+    return method;
+}
+
+query_stats::HttpStatusClass classify_azure_status(Azure::Core::Http::HttpStatusCode code_enum) noexcept {
+    const int code = static_cast<int>(code_enum);
+    if (code >= 200 && code < 300) {
+        return query_stats::HttpStatusClass::Status2xx;
+    }
+    if (code >= 300 && code < 400) {
+        return query_stats::HttpStatusClass::Status3xx;
+    }
+    if (code >= 400 && code < 500) {
+        return query_stats::HttpStatusClass::Status4xx;
+    }
+    if (code >= 500 && code < 600) {
+        return query_stats::HttpStatusClass::Status5xx;
+    }
+    return query_stats::HttpStatusClass::NetworkError;
+}
+
+struct AzureRequestTracker {
+    std::string operation;
+    query_stats::TimePoint last_attempt_end{};
+    uint64_t attempts{0};
+    bool has_prev_attempt_end{false};
+    AzureRequestTracker* prev{nullptr};
+};
+
+thread_local AzureRequestTracker* tl_azure_req = nullptr;
+
+class QueryStatsAzurePerOperationPolicy final : public Azure::Core::Http::Policies::HttpPolicy {
+  public:
+    std::unique_ptr<Azure::Core::Http::RawResponse> Send(
+            Azure::Core::Http::Request& request, Azure::Core::Http::Policies::NextHttpPolicy nextPolicy,
+            Azure::Core::Context const& context
+    ) const override {
+        if (!query_stats::is_active()) {
+            return nextPolicy.Send(request, context);
+        }
+
+        const auto start = std::chrono::steady_clock::now();
+        AzureRequestTracker tracker;
+        tracker.operation = infer_azure_blob_operation(request);
+        tracker.prev = tl_azure_req;
+        tl_azure_req = &tracker;
+
+        struct FinishGuard {
+            AzureRequestTracker& tracker;
+            query_stats::TimePoint start;
+            ~FinishGuard() noexcept {
+                tl_azure_req = tracker.prev;
+                const auto total_ns = static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start)
+                                .count()
+                );
+                query_stats::record_http_request_finish("azure_blob", tracker.operation, total_ns);
+            }
+        } finish_guard{tracker, start};
+
+        return nextPolicy.Send(request, context);
+    }
+
+    std::unique_ptr<Azure::Core::Http::Policies::HttpPolicy> Clone() const override {
+        return std::make_unique<QueryStatsAzurePerOperationPolicy>(*this);
+    }
+};
+
+class QueryStatsAzurePerRetryPolicy final : public Azure::Core::Http::Policies::HttpPolicy {
+  public:
+    std::unique_ptr<Azure::Core::Http::RawResponse> Send(
+            Azure::Core::Http::Request& request, Azure::Core::Http::Policies::NextHttpPolicy nextPolicy,
+            Azure::Core::Context const& context
+    ) const override {
+        if (!query_stats::is_active()) {
+            return nextPolicy.Send(request, context);
+        }
+
+        const auto attempt_start = std::chrono::steady_clock::now();
+        auto* tracker = tl_azure_req;
+        const std::string fallback_op = tracker != nullptr ? std::string{} : infer_azure_blob_operation(request);
+        const std::string_view op = tracker != nullptr ? std::string_view(tracker->operation) : fallback_op;
+
+        uint64_t backoff_ns = 0;
+        if (tracker != nullptr && tracker->attempts > 0) {
+            if (tracker->has_prev_attempt_end && attempt_start > tracker->last_attempt_end) {
+                backoff_ns = static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(attempt_start - tracker->last_attempt_end)
+                                .count()
+                );
+            }
+            query_stats::record_http_retry("azure_blob", op, backoff_ns);
+        }
+
+        try {
+            auto response = nextPolicy.Send(request, context);
+            const auto attempt_end = std::chrono::steady_clock::now();
+            const auto attempt_ns = static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(attempt_end - attempt_start).count()
+            );
+            const int status_code = response ? static_cast<int>(response->GetStatusCode()) : 0;
+            const auto status_cls = response ? classify_azure_status(response->GetStatusCode())
+                                             : query_stats::HttpStatusClass::NetworkError;
+            const bool throttled = (status_code == 429 || status_code == 503);
+            if (tracker != nullptr) {
+                ++tracker->attempts;
+                tracker->last_attempt_end = attempt_end;
+                tracker->has_prev_attempt_end = true;
+            }
+            query_stats::record_http_attempt("azure_blob", op, status_cls, attempt_ns, 0, 0, throttled);
+            return response;
+        } catch (const Azure::Core::Http::TransportException&) {
+            const auto attempt_end = std::chrono::steady_clock::now();
+            const auto attempt_ns = static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(attempt_end - attempt_start).count()
+            );
+            if (tracker != nullptr) {
+                ++tracker->attempts;
+                tracker->last_attempt_end = attempt_end;
+                tracker->has_prev_attempt_end = true;
+            }
+            query_stats::record_http_attempt(
+                    "azure_blob", op, query_stats::HttpStatusClass::NetworkError, attempt_ns, 0, 0
+            );
+            throw;
+        }
+    }
+
+    std::unique_ptr<Azure::Core::Http::Policies::HttpPolicy> Clone() const override {
+        return std::make_unique<QueryStatsAzurePerRetryPolicy>(*this);
+    }
+};
+
+} // namespace
+
+void install_query_stats_azure_policies(Azure::Storage::Blobs::BlobClientOptions& options) {
+    options.PerOperationPolicies.push_back(std::make_unique<QueryStatsAzurePerOperationPolicy>());
+    options.PerRetryPolicies.push_back(std::make_unique<QueryStatsAzurePerRetryPolicy>());
+}
 
 Azure::Core::Context get_context(unsigned int request_timeout) {
     Azure::Core::Context requestContext; // TODO: Maybe can be static but need to be careful with its shared_ptr and
@@ -124,6 +301,7 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
     client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
 #endif
 
+    install_query_stats_azure_policies(client_options);
     return client_options;
 }
 

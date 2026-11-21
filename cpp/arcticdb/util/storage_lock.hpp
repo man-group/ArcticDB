@@ -16,6 +16,7 @@
 #include <arcticdb/storage/failure_simulation.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/pb_util.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <fmt/std.h>
 #include <mutex>
@@ -132,19 +133,37 @@ class StorageLock {
 
     bool try_lock(const std::shared_ptr<Store>& store, std::optional<google::protobuf::Any> metadata = std::nullopt) {
         ARCTICDB_DEBUG(log::lock(), "Storage lock: try lock");
+        const bool track = query_stats::is_active();
+        const auto start = track ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
         if (!mutex_.try_lock()) {
             ARCTICDB_DEBUG(log::lock(), "Storage lock: failed local lock");
+            if (track) {
+                const auto elapsed_ns = static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start)
+                                .count()
+                );
+                query_stats::record_lock_event(query_stats::LockKind::StorageLock, false, 1, 0, false, elapsed_ns);
+            }
             return false;
         }
 
         OnExit x{[that = this]() { that->mutex_.unlock(); }};
 
-        const bool try_lock = try_acquire_lock(store, metadata);
-        if (try_lock) {
+        const bool acquired = try_acquire_lock(store, metadata);
+        if (acquired) {
             x.release();
         }
+        if (track) {
+            const auto elapsed_ns = static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start)
+                            .count()
+            );
+            query_stats::record_lock_event(
+                    query_stats::LockKind::StorageLock, acquired, acquired ? 0 : 1, 0, false, elapsed_ns
+            );
+        }
 
-        return try_lock;
+        return acquired;
     }
 
     // Returns the current lock's user-defined metadata, or nullopt if there is no lock or it carries no metadata.
@@ -167,6 +186,11 @@ class StorageLock {
             const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms,
             std::optional<google::protobuf::Any> metadata
     ) {
+        const bool track = query_stats::is_active();
+        const auto start = track ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
+        uint64_t conflicts = 0;
+        uint64_t retries = 0;
+
         mutex_.lock();
         size_t wait_ms = ConfigsMap::instance()->get_int("StorageLock.InitialWaitMs", DEFAULT_INITIAL_WAIT_MS);
         thread_local std::uniform_int_distribution<size_t> dist;
@@ -174,17 +198,37 @@ class StorageLock {
         size_t total_wait = 0;
 
         while (!try_acquire_lock(store, metadata)) {
+            ++conflicts;
             if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
                 mutex_.unlock();
+                if (track) {
+                    const auto elapsed_ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                          std::chrono::steady_clock::now() - start
+                    )
+                                                                          .count());
+                    query_stats::record_lock_event(
+                            query_stats::LockKind::StorageLock, false, conflicts, retries, true, elapsed_ns
+                    );
+                }
                 throw StorageLockTimeout{fmt::format("Storage lock {} timeout out after {} ms.", name_, total_wait)};
             }
+            ++retries;
             wait_ms += dist(gen, decltype(dist)::param_type{0, wait_ms / 2});
             log::lock().info("Didn't get lock, waiting {}", wait_ms);
             sleep_ms(wait_ms);
             total_wait += wait_ms;
             wait_ms *= 2;
+        }
+        if (track) {
+            const auto elapsed_ns = static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start)
+                            .count()
+            );
+            query_stats::record_lock_event(
+                    query_stats::LockKind::StorageLock, true, conflicts, retries, false, elapsed_ns
+            );
         }
     }
 
