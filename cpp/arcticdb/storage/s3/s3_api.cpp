@@ -283,7 +283,13 @@ class QueryStatsAwsMonitor final : public Aws::Monitoring::MonitoringInterface {
             timings.has_timings = true;
         }
         if (auto it = core_metrics.find(ssl_key); it != core_metrics.end() && it->second >= 0) {
-            timings.tls_handshake_ns = static_cast<uint64_t>(it->second) * 1'000'000ULL;
+            // Upstream aws-sdk-cpp CurlHttpClient bug (libcurl >= 7.61.0): CURLINFO_APPCONNECT_TIME_T
+            // returns microseconds, yet aws-sdk-cpp multiplies by 1000 as if it were seconds, emitting
+            // nanoseconds instead of milliseconds in SslLatency. Detect and handle both units safely.
+            const uint64_t raw = static_cast<uint64_t>(it->second);
+            const uint64_t scaled = raw * 1'000'000ULL;
+            timings.tls_handshake_ns =
+                    (attempt_ns > 0 && scaled > attempt_ns * 2ULL && raw <= attempt_ns * 2ULL) ? raw : scaled;
             timings.has_timings = true;
         }
         if (auto it = core_metrics.find(ttfb_key); it != core_metrics.end() && it->second >= 0) {

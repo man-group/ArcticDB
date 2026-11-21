@@ -540,20 +540,26 @@ class VersionMapImpl {
      */
     void overwrite_symbol_tree(
             std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKeyPacked>& index_keys,
-            std::vector<VariantKey>* deferred_keys_to_remove = nullptr
+            std::vector<VariantKey>* deferred_keys_to_remove = nullptr,
+            bool known_absent_on_storage = false
     ) {
         auto entry = std::make_shared<VersionMapEntry>(stream_id);
-        try {
-            entry = check_reload(
-                    store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
-            );
-        } catch (const storage::KeyNotFoundException& e) {
-            log::version().debug(
-                    "Failed to load version entry for symbol {} in overwrite_symbol_tree, creating new entry, "
-                    "exception: {}",
-                    stream_id,
-                    e.what()
-            );
+        if (known_absent_on_storage) {
+            entry = get_entry(stream_id);
+            entry->clear();
+        } else {
+            try {
+                entry = check_reload(
+                        store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+                );
+            } catch (const storage::KeyNotFoundException& e) {
+                log::version().debug(
+                        "Failed to load version entry for symbol {} in overwrite_symbol_tree, creating new entry, "
+                        "exception: {}",
+                        stream_id,
+                        e.what()
+                );
+            }
         }
         auto old_entry = *entry;
         if (!index_keys.empty()) {
@@ -566,6 +572,8 @@ class VersionMapImpl {
             entry->rebuild_tombstones_from_keys();
             auto new_version_id = index_keys[0].version_id();
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
+            entry->last_reload_time_ = now();
+            entry->load_progress_.is_earliest_version_loaded = true;
             if (validate_)
                 entry->validate();
         }

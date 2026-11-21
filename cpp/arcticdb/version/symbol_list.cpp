@@ -962,6 +962,86 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
     }
 }
 
+bool SymbolList::apply_mutations_and_compact(
+        const std::shared_ptr<Store>& store, const std::vector<Mutation>& mutations
+) {
+    if (mutations.empty()) {
+        return true;
+    }
+
+    auto fallback_write_journals = [&]() {
+        for (const auto& m : mutations) {
+            write_journal(store, m.symbol, m.action, m.reference_id);
+        }
+    };
+
+    if (store->open_mode() < storage::OpenMode::DELETE) {
+        fallback_write_journals();
+        return false;
+    }
+
+    try {
+        StorageLock lock{StringId{CompactionLockName}};
+        if (!lock.try_lock(store)) {
+            ARCTICDB_RUNTIME_DEBUG(
+                    log::symbol(),
+                    "apply_mutations_and_compact falling back to journal writes: compaction lock busy"
+            );
+            fallback_write_journals();
+            return false;
+        }
+        OnExit x([&lock, &store] { lock.unlock(store); });
+
+        auto version_map = data_.version_map_;
+        size_t load_attempt = 0;
+        LoadResult load_result =
+                ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store, &load_attempt]() {
+                    if (load_attempt++ > 0) {
+                        query_stats::record_write_conflict(query_stats::WriteConflictKind::SymbolListLoadRetry);
+                    }
+                    return attempt_load(version_map, store, data_, WillAttemptCompaction::YES);
+                });
+
+        if (has_recent_compaction(store, load_result.journal_.compaction_key)) {
+            query_stats::record_write_conflict(query_stats::WriteConflictKind::ConcurrentSymbolListCompaction);
+            fallback_write_journals();
+            return false;
+        }
+
+        const timestamp now_ns = util::SysClock::coarse_nanos_since_epoch();
+        JournalMapType batch_map;
+        batch_map.reserve(mutations.size());
+        for (const auto& m : mutations) {
+            batch_map[m.symbol].emplace_back(m.reference_id, now_ns, m.action);
+        }
+        sort_journal_map(batch_map);
+
+        auto merged_symbols =
+                merge_existing_with_journal_map(version_map, store, batch_map, std::move(load_result.symbols_));
+
+        const bool qs_active = query_stats::is_active();
+        const auto qs_start = qs_active ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
+        const uint64_t input_keys =
+                static_cast<uint64_t>(load_result.journal_.total_key_count + mutations.size());
+        const StreamId& type_holder = mutations.front().symbol;
+        auto written = write_symbols(store, std::move(merged_symbols), compaction_id, type_holder);
+        delete_superseded_keys(store, load_result.journal_, std::get<AtomKey>(written));
+        if (qs_active) {
+            const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                    0,
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qs_start)
+                            .count()
+            ));
+            query_stats::record_compaction(query_stats::CompactionKind::SymbolList, input_keys, 1ULL, dur_ns);
+        }
+        return true;
+    } catch (const std::exception& ex) {
+        log::symbol().warn("apply_mutations_and_compact falling back to journal writes: {}", ex.what());
+        fallback_write_journals();
+        return false;
+    }
+}
+
 } // namespace arcticdb
 
 namespace std {
