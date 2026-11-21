@@ -8,6 +8,7 @@
 
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/arrow/arrow_schema_utils.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <sparrow/record_batch.hpp>
 
@@ -19,6 +20,7 @@ ReadResult create_python_read_result(
         std::optional<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>&& user_meta,
         std::vector<version_store::ReadVersionOutput>&& node_outputs
 ) {
+    query_stats::BoundaryOpScope boundary_scope(query_stats::BoundaryPhase::CppOutput);
     auto result = std::move(fd);
 
     // If version is a vector then this was a multi-symbol join, so the user_meta vector should have a value

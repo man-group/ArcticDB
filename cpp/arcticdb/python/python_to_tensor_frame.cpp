@@ -13,6 +13,7 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <pybind11/numpy.h>
 #include <sparrow/record_batch.hpp>
@@ -424,6 +425,7 @@ std::shared_ptr<InputFrame> py_input_item_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
         bool empty_types, pipelines::SortednessScan sortedness_scan
 ) {
+    query_stats::BoundaryOpScope boundary_scope(query_stats::BoundaryPhase::CppInput);
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputFrame>();
     python_util::pb_from_python(norm_meta, res->norm_meta);

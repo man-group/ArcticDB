@@ -25,10 +25,19 @@
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/python/gil_lock.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <pipeline/column_stats_filter.hpp>
 
 namespace {
 using namespace arcticdb;
+
+std::string_view stream_id_for_stats(const StreamId& stream_id) noexcept {
+    if (const auto* s = std::get_if<StringId>(&stream_id)) {
+        return *s;
+    }
+    return {};
+}
 bool is_valid_merge_strategy(const arcticdb::MergeStrategy& strategy) {
     return strategy.update_only() || strategy.update_and_insert() || strategy.insert_only();
 }
@@ -84,6 +93,7 @@ LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<Store>& store, 
     symbol_list_(std::make_shared<SymbolList>(version_map_)) {}
 
 void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& library) {
+    library_name_ = library->library_path().empty() ? std::string{} : library->library_path().to_delim_path();
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(
             log::version(),
@@ -474,7 +484,8 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     const auto identifier = util::variant_match(
             version_query.content_,
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
@@ -523,7 +534,7 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, bool prune_previous_versions,
         std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
 
     std::optional<VersionedItem> source_version = get_version_to_read(source_stream, version_query);
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -749,6 +760,7 @@ VersionedItem LocalVersionedEngine::sort_index(
 VersionedItem LocalVersionedEngine::delete_range_internal(
         const StreamId& stream_id, const UpdateQuery& query, const DeleteRangeOptions& option
 ) {
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     auto versioned_item = delete_range_impl(store(), stream_id, update_info, query, option.dynamic_schema_);
     write_version_and_prune_previous(
@@ -762,7 +774,8 @@ VersionedItem LocalVersionedEngine::update_internal(
         bool dynamic_schema, bool prune_previous_versions
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     return async_update_internal(
                    stream_id, std::move(update_info), query, frame, upsert, dynamic_schema, prune_previous_versions
@@ -774,7 +787,8 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
         const StreamId& stream_id, bool prune_previous_versions,
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     return async_write_versioned_metadata_internal(
                    stream_id, std::move(update_info), std::move(user_meta), prune_previous_versions
@@ -786,7 +800,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         const std::vector<StreamId>& stream_ids, bool prune_previous_versions, bool throw_on_error,
         std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "write_metadata");
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
@@ -823,7 +837,8 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
         bool allow_sparse, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
     // We don't need to load the latest live version unless dedup is enabled. If dedup is disabled, we only care about
     // the next version ID, which can save some IO traversing the version chain
@@ -839,6 +854,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
 std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Write, library_name());
     auto res = batch_restore_version_internal({stream_id}, {version_query});
     util::check(
             res.size() == 1,
@@ -1241,7 +1257,7 @@ StageResult LocalVersionedEngine::write_parallel_frame(
         const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index, bool sort_on_index,
         const std::optional<std::vector<std::string>>& sort_columns
 ) const {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     WriteIncompleteOptions options{
             .validate_index = validate_index,
             .write_options = write_options_,
@@ -1305,7 +1321,7 @@ CompactDataInfo LocalVersionedEngine::compact_data_explain_plan_internal(
         const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data_explain_plan");
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     compact_data_checks(stream_id, update_info);
     return compact_data_explain_plan_impl(
@@ -1318,7 +1334,7 @@ VersionedItem LocalVersionedEngine::compact_data_internal(
         const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     compact_data_checks(stream_id, update_info);
     return async_compact_data_internal(
@@ -1334,7 +1350,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         bool throw_on_error
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: batch_compact_data");
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "compact_data");
     auto update_info_futs =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
@@ -1375,6 +1391,7 @@ bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::
 VersionedItem LocalVersionedEngine::defragment_symbol_data(
         const StreamId& stream_id, std::optional<size_t> segment_size, bool prune_previous_versions
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Compact, library_name());
     log::version().info("Defragmenting data for symbol {}", stream_id);
 
     // Currently defragmentation only for latest version - is there a use-case to allow compaction for older data?
@@ -1401,7 +1418,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
         std::shared_ptr<std::any> handler_data
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     if (stream_ids.empty()) {
         return {};
     }
@@ -1424,6 +1441,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options = batch_read_options.at(idx),
                                     handler_data](auto&& opt_index_key) {
+                            query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_ids[idx]));
                             auto version_info = get_version_identifier(
                                     stream_ids[idx],
                                     version_queries[idx],
@@ -1526,7 +1544,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
         std::vector<std::shared_ptr<Clause>>&& clauses, std::shared_ptr<std::any> handler_data
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     util::check(!clauses.empty(), "Cannot join with no joining clause provided");
     clauses = plan_query(std::move(clauses));
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), *stream_ids, *version_queries);
@@ -1572,7 +1590,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                 auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
                 auto modified_read_options =
                         modify_read_options_from_norm_meta(pipeline_context->output_normalization(), read_options);
-                return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
+                return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr, true, component_manager)
                         .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
                             auto proc = gather_entities<
                                     std::shared_ptr<SegmentInMemory>,
@@ -1719,6 +1737,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_write_versioned_datafra
         const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<InputFrame>& frame,
         bool prune_previous_versions, bool allow_sparse, bool validate_index
 ) {
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto de_dup_map = get_de_dup_map(stream_id, update_info, write_options_);
     ARCTICDB_DEBUG(
@@ -1753,6 +1772,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
         const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<InputFrame>& frame,
         const AppendOptions& append_options
 ) {
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     // It would be nice if upsert also sliced into more evenly sized segments at least when compact_data is true,
@@ -1813,6 +1833,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
         const StreamId& stream_id, UpdateInfo&& update_info, const UpdateQuery& query,
         const std::shared_ptr<InputFrame>& frame, bool upsert, bool dynamic_schema, bool prune_previous_versions
 ) {
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     if (update_info.previous_index_key_.has_value()) {
@@ -1856,6 +1877,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_write_versioned_metadat
         const StreamId& stream_id, UpdateInfo&& update_info,
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta, bool prune_previous_versions
 ) {
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     if (update_info.previous_index_key_.has_value()) {
@@ -1934,7 +1956,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         bool prune_previous_versions, bool validate_index, bool throw_on_error
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "write");
 
     auto update_info_futs = batch_get_next_version_id_and_optionally_latest_undeleted_version_async(
@@ -1988,6 +2010,7 @@ std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> Loca
 
     std::vector<folly::Future<version_store::TombstoneVersionResult>> futures;
     for (size_t i = 0; i < stream_ids.size(); ++i) {
+        query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_ids[i]));
         if (!version_sets[i].empty()) {
             futures.push_back(tombstone_versions_async(store(), version_map(), stream_ids[i], version_sets[i]));
         } else {
@@ -2008,6 +2031,7 @@ std::vector<std::variant<folly::Unit, DataError>> LocalVersionedEngine::batch_de
     std::vector<StreamId> stream_ids;
 
     for (const auto& [stream_id, latest_version] : symbols_to_delete) {
+        query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
         stream_ids.push_back(stream_id);
         remove_symbol_tasks.push_back(
                 async::submit_io_task(DeleteSymbolTask{store(), symbol_list_ptr(), stream_id, latest_version})
@@ -2022,7 +2046,8 @@ std::vector<std::variant<folly::Unit, DataError>> LocalVersionedEngine::batch_de
 VersionedItem LocalVersionedEngine::append_internal(
         const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, const AppendOptions& append_options
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     return async_append_internal(stream_id, std::move(update_info), frame, append_options).get();
 }
@@ -2031,7 +2056,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         const AppendOptions& append_options, bool throw_on_error
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "append");
 
     auto stream_update_info_futures =
@@ -2066,7 +2091,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<InputFrame>>&& frames,
         const std::vector<UpdateQuery>& update_queries, bool prune_previous_versions, bool upsert
 ) {
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "update");
 
     auto stream_update_info_futures =
@@ -2329,6 +2354,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
 std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_metadata_internal(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     auto version = get_version_to_read(stream_id, version_query);
     std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
     return get_metadata(std::move(key)).get();
@@ -2378,7 +2404,7 @@ VersionedItem LocalVersionedEngine::rename_columns_arrow_compat_internal(
         const bool prune_previous_versions
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: rename_columns_arrow_compat");
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             update_info.previous_index_key_.has_value(),
@@ -2570,7 +2596,7 @@ VersionedItem LocalVersionedEngine::merge_internal(
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             is_valid_merge_strategy(strategy), "Invalid merge strategy: {}", strategy
     );
-    py::gil_scoped_release release_gil;
+    TimedGilRelease release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();

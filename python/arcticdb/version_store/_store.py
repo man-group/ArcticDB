@@ -88,6 +88,7 @@ from arcticdb.options import (
     arrow_output_string_format_to_internal,
 )
 from arcticdb_ext.log import LogLevel as _LogLevel
+import arcticdb_ext.tools.query_stats as _qs_ext
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import (
     ArcticDbNotYetImplemented,
@@ -589,33 +590,39 @@ class NativeVersionStore:
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
         )
         empty_types = resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, False)
+        _track_qs = _qs_ext.is_active()
+        _t0 = time.perf_counter_ns() if _track_qs else 0
         try:
-            udm = normalize_metadata(metadata)
-            opt_custom = self._custom_normalizer.normalize(dataframe)
-            if opt_custom is not None:
-                item, custom_norm_meta = opt_custom
-                item, norm_meta = self._normalizer.normalize(item)
-                norm_meta.custom.CopyFrom(custom_norm_meta)
-            else:
-                item, norm_meta = self._normalizer.normalize(
-                    dataframe,
-                    pickle_on_failure=pickle_on_failure,
-                    dynamic_strings=dynamic_strings,
-                    coerce_columns=coerce_columns,
-                    dynamic_schema=dynamic_schema,
-                    empty_types=empty_types,
-                    index_column=index_column,
-                    disallow_pickle=recursive_normalize_msgpack_no_pickle_fallback,
-                    **kwargs,
+            try:
+                udm = normalize_metadata(metadata)
+                opt_custom = self._custom_normalizer.normalize(dataframe)
+                if opt_custom is not None:
+                    item, custom_norm_meta = opt_custom
+                    item, norm_meta = self._normalizer.normalize(item)
+                    norm_meta.custom.CopyFrom(custom_norm_meta)
+                else:
+                    item, norm_meta = self._normalizer.normalize(
+                        dataframe,
+                        pickle_on_failure=pickle_on_failure,
+                        dynamic_strings=dynamic_strings,
+                        coerce_columns=coerce_columns,
+                        dynamic_schema=dynamic_schema,
+                        empty_types=empty_types,
+                        index_column=index_column,
+                        disallow_pickle=recursive_normalize_msgpack_no_pickle_fallback,
+                        **kwargs,
+                    )
+            except ArcticDbNotYetImplemented as ex:
+                log.debug(f"ArcticDbNotYetImplemented: data: \n{dataframe}, metadata: {metadata}")
+                raise ArcticDbNotYetImplemented(
+                    f"Not supported: normalizing, symbol: {symbol}, Reason: {ex}, {norm_failure_options_msg}"
                 )
-        except ArcticDbNotYetImplemented as ex:
-            log.debug(f"ArcticDbNotYetImplemented: data: \n{dataframe}, metadata: {metadata}")
-            raise ArcticDbNotYetImplemented(
-                f"Not supported: normalizing, symbol: {symbol}, Reason: {ex}, {norm_failure_options_msg}"
-            )
-        except Exception as ex:
-            log.debug(f"ArcticNativeException: data: \n{dataframe}, metadata: {metadata}")
-            raise ArcticNativeException(f"Error while normalizing symbol={symbol}, {ex}")
+            except Exception as ex:
+                log.debug(f"ArcticNativeException: data: \n{dataframe}, metadata: {metadata}")
+                raise ArcticNativeException(f"Error while normalizing symbol={symbol}, {ex}")
+        finally:
+            if _track_qs:
+                _qs_ext.record_boundary_normalize(time.perf_counter_ns() - _t0)
 
         if norm_meta is None:
             raise ArcticNativeException(f"Cannot normalize input {symbol}")
@@ -3091,29 +3098,35 @@ class NativeVersionStore:
         return pa.Table.from_batches(record_batches)
 
     def _adapt_frame_data(self, frame_data, norm, output_format, sort_order):
-        if isinstance(frame_data, ArrowOutputFrame):
-            table = self._arrow_output_frame_to_table(frame_data)
-            data = self._normalizer.denormalize(table, norm)
-            if norm.HasField("custom"):
-                raise ArcticDbNotYetImplemented(
-                    "Denormalizing custom normalized data is not supported with Arrow output_format"
-                )
-            if self._test_convert_arrow_back_to_pandas:
-                data = convert_arrow_to_pandas_for_tests(data)
-            if (
-                output_format.lower() == OutputFormat.POLARS.lower()
-                and not norm.WhichOneof("input_type") == "msg_pack_frame"
-            ):
-                data = pl.from_arrow(data, rechunk=False)
-                if isinstance(data, pl.Series):
-                    data = data.rename(polars_series_name(norm))
-                data = self._apply_polars_sorted_flag_to_index(data, sort_order, norm)
-        else:
-            data = self._normalizer.denormalize(frame_data, norm)
-            if norm.HasField("custom"):
-                data = self._custom_normalizer.denormalize(data, norm.custom)
+        _track_qs = _qs_ext.is_active()
+        _t0 = time.perf_counter_ns() if _track_qs else 0
+        try:
+            if isinstance(frame_data, ArrowOutputFrame):
+                table = self._arrow_output_frame_to_table(frame_data)
+                data = self._normalizer.denormalize(table, norm)
+                if norm.HasField("custom"):
+                    raise ArcticDbNotYetImplemented(
+                        "Denormalizing custom normalized data is not supported with Arrow output_format"
+                    )
+                if self._test_convert_arrow_back_to_pandas:
+                    data = convert_arrow_to_pandas_for_tests(data)
+                if (
+                    output_format.lower() == OutputFormat.POLARS.lower()
+                    and not norm.WhichOneof("input_type") == "msg_pack_frame"
+                ):
+                    data = pl.from_arrow(data, rechunk=False)
+                    if isinstance(data, pl.Series):
+                        data = data.rename(polars_series_name(norm))
+                    data = self._apply_polars_sorted_flag_to_index(data, sort_order, norm)
+            else:
+                data = self._normalizer.denormalize(frame_data, norm)
+                if norm.HasField("custom"):
+                    data = self._custom_normalizer.denormalize(data, norm.custom)
 
-        return data
+            return data
+        finally:
+            if _track_qs:
+                _qs_ext.record_boundary_denormalize(time.perf_counter_ns() - _t0)
 
     @staticmethod
     def _apply_polars_sorted_flag_to_index(data, sort_order, norm):

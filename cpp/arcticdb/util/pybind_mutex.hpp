@@ -1,6 +1,10 @@
 #pragma once
 
+#include <arcticdb/python/gil_lock.hpp>
 #include <pybind11/pybind11.h>
+
+#include <memory>
+#include <mutex>
 
 /*
 Why this mutex is necessary?
@@ -20,11 +24,11 @@ class SingleThreadMutexHolder {
     inline static std::unique_ptr<std::mutex> single_thread_mutex = std::make_unique<std::mutex>();
 
     [[nodiscard]] static std::lock_guard<std::mutex> ensure_single_thread_cpp_pybind_entry() {
-        py::gil_scoped_release release;
+        arcticdb::TimedGilRelease release;
         single_thread_mutex->lock(); // This is a hack for the mandatory std::adopt_lock below
         return {*single_thread_mutex, std::adopt_lock
         }; // Copy list-initialization will be used if the list is incomplete.
-    };
+    }
     std::lock_guard<std::mutex> single_thread_lck = ensure_single_thread_cpp_pybind_entry();
 
   public:

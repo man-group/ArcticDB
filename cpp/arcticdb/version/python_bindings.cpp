@@ -18,6 +18,7 @@
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/version/version_constants.hpp>
 #include <arcticdb/version/python_bindings_common.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -33,6 +34,7 @@
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 namespace arcticdb::version_store {
 
@@ -113,7 +115,7 @@ std::vector<timestamp> generate_buckets(
         return {};
     }
     const timestamp rule_ns = [](std::string_view rule) {
-        py::gil_scoped_acquire acquire_gil;
+        TimedGilAcquire acquire_gil;
         return python_util::pd_to_offset(rule);
     }(rule);
     const auto [start_with_offset, end_with_offset] =
@@ -963,10 +965,15 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::scan_object_sizes_for_stream,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Scan the compressed sizes of the given symbol.")
-            .def("find_version",
-                 &PythonVersionStore::get_version_to_read,
-                 py::call_guard<SingleThreadMutexHolder>(),
-                 "Check if a specific stream has been written to previously")
+            .def(
+                    "find_version",
+                    [](PythonVersionStore& v, const StreamId& stream_id, const VersionQuery& version_query) {
+                        query_stats::ApiOpScope api_scope(query_stats::ApiOp::HasSymbol, v.library_name());
+                        return v.get_version_to_read(stream_id, version_query);
+                    },
+                    py::call_guard<SingleThreadMutexHolder>(),
+                    "Check if a specific stream has been written to previously"
+            )
             .def("list_streams",
                  &PythonVersionStore::list_streams,
                  py::call_guard<SingleThreadMutexHolder>(),

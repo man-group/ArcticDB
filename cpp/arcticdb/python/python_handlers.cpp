@@ -13,6 +13,7 @@
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_strings.hpp>
 #include <arcticdb/python/python_utils.hpp>
 
@@ -298,7 +299,7 @@ void PythonArrayHandler::convert_type(
     auto* ptr_dest =
             dest_column.ptr_cast<PyObject*>(mapping.offset_bytes_ / type_size(), mapping.num_rows_ * type_size());
     ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
-    py::gil_scoped_acquire acquire_gil;
+    TimedGilAcquire acquire_gil;
     const auto& sparse_map = source_column.opt_sparse_map();
     const auto strides = static_cast<stride_t>(get_type_size(mapping.source_type_desc_.data_type()));
     py::dtype py_dtype = generate_python_dtype(mapping.source_type_desc_, strides);

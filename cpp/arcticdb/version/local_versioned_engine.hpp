@@ -421,6 +421,7 @@ class LocalVersionedEngine : public VersionedEngine {
     }
 
     const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
+    [[nodiscard]] std::string_view library_name() const noexcept { return library_name_; }
 
     VersionedItem merge_internal(
             const StreamId& stream_id, std::shared_ptr<InputFrame> source, bool prune_previous_versions,
@@ -511,6 +512,7 @@ class LocalVersionedEngine : public VersionedEngine {
     );
 
     std::shared_ptr<Store> store_;
+    std::string library_name_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;
     WriteOptions write_options_;
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();

@@ -23,7 +23,11 @@
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/storage/file/file_store.hpp>
+#include <arcticdb/python/gil_lock.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/version/version_functions.hpp>
+
+#include <algorithm>
 
 namespace arcticdb::version_store {
 
@@ -35,6 +39,13 @@ namespace {
 // validate_index requires a sorted index, so for Arrow input we must determine its sort order.
 pipelines::SortednessScan sortedness_scan_for(bool validate_index) {
     return validate_index ? pipelines::SortednessScan::SCAN_IF_UNKNOWN : pipelines::SortednessScan::SKIP;
+}
+
+template<typename T>
+bool has_data_error(const std::vector<std::variant<T, DataError>>& results) noexcept {
+    return std::any_of(results.begin(), results.end(), [](const auto& item) {
+        return std::holds_alternative<DataError>(item);
+    });
 }
 } // namespace
 
@@ -49,6 +60,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
         const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
         const py::object& user_meta, VersionId version_id
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Write, library_name());
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
 
     ARCTICDB_DEBUG(
@@ -91,6 +103,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas, bool prune_previous_versions,
         bool validate_index, bool throw_on_error
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::WriteBatch, library_name());
 
     auto frames = create_input_tensor_frames(
             stream_ids,
@@ -100,9 +113,13 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
             cfg().write_options().empty_types(),
             sortedness_scan_for(validate_index)
     );
-    return batch_write_versioned_dataframe_internal(
+    auto res = batch_write_versioned_dataframe_internal(
             stream_ids, std::move(frames), prune_previous_versions, validate_index, throw_on_error
     );
+    if (has_data_error(res)) {
+        api_scope.mark_error();
+    }
+    return res;
 }
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_append(
@@ -110,6 +127,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas, bool prune_previous_versions,
         bool validate_index, bool upsert, bool throw_on_error, bool compact_data
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::AppendBatch, library_name());
     AppendOptions append_options{
             .upsert = upsert,
             .prune_previous_versions = prune_previous_versions,
@@ -124,7 +142,11 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
             cfg().write_options().empty_types(),
             sortedness_scan_for(validate_index)
     );
-    return batch_append_internal(stream_ids, std::move(frames), append_options, throw_on_error);
+    auto res = batch_append_internal(stream_ids, std::move(frames), append_options, throw_on_error);
+    if (has_data_error(res)) {
+        api_scope.mark_error();
+    }
+    return res;
 }
 
 void PythonVersionStore::_clear_symbol_list_keys() { symbol_list().clear(store()); }
@@ -362,6 +384,7 @@ VersionResultVector PythonVersionStore::list_versions(
         const std::optional<StreamId>& stream_id, const std::optional<SnapshotId>& snap_name, bool latest_only,
         bool skip_snapshots
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::ListVersions, library_name());
     ARCTICDB_SAMPLE(ListVersions, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_versions");
 
@@ -444,6 +467,7 @@ std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snaps
 } // namespace
 
 std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshots(std::optional<bool> load_metadata) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Snapshot, library_name());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_snapshots");
     auto snap_ids = std::vector<std::pair<SnapshotId, py::object>>();
     auto fetch_metadata = opt_false(load_metadata);
@@ -460,6 +484,7 @@ void PythonVersionStore::add_to_snapshot(
         const SnapshotId& snap_name, const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Snapshot, library_name());
     util::check(
             version_queries.empty() || stream_ids.size() == version_queries.size(),
             "List length mismatch in add_to_snapshot: {} != {}",
@@ -522,6 +547,7 @@ void PythonVersionStore::add_to_snapshot(
 void PythonVersionStore::remove_from_snapshot(
         const SnapshotId& snap_name, const std::vector<StreamId>& stream_ids, const std::vector<VersionId>& version_ids
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Snapshot, library_name());
     util::check(
             stream_ids.size() == version_ids.size(),
             "List length mismatch in remove_from_snapshot: {} != {}",
@@ -584,6 +610,7 @@ void PythonVersionStore::snapshot(
         const SnapshotId& snap_name, const py::object& user_meta, const std::vector<StreamId>& skip_symbols,
         std::map<StreamId, VersionId>& versions, bool allow_partial_snapshot
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Snapshot, library_name());
     ARCTICDB_SAMPLE(CreateSnapshot, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: snapshot");
 
@@ -662,6 +689,7 @@ std::set<StreamId> PythonVersionStore::list_streams(
         const std::optional<bool>& opt_all_symbols
 
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::ListSymbols, library_name());
     auto res = list_streams_unordered_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
     return {std::make_move_iterator(res.begin()), std::make_move_iterator(res.end())};
 }
@@ -672,15 +700,20 @@ std::unordered_set<StreamId> PythonVersionStore::list_streams_unordered(
         const std::optional<bool>& opt_all_symbols
 
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::ListSymbols, library_name());
     return list_streams_unordered_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 
-size_t PythonVersionStore::compact_symbol_list() { return compact_symbol_list_internal(); }
+size_t PythonVersionStore::compact_symbol_list() {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Compact, library_name());
+    return compact_symbol_list_internal();
+}
 
 VersionedItem PythonVersionStore::write_partitioned_dataframe(
         const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm_meta,
         const std::vector<std::string>& partition_value
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Write, library_name());
     ARCTICDB_SAMPLE(WritePartitionedDataFrame, 0)
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
@@ -733,6 +766,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
         const std::vector<convert::InputItem>& items, const std::vector<py::object>& norm_metas,
         const py::object& user_meta, bool prune_previous_versions
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Write, library_name());
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
 
@@ -772,7 +806,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
             pipelines::SortednessScan::SKIP
     );
     // Need to hold the GIL up to this point as we will call pb_from_python
-    auto release_gil = std::make_unique<py::gil_scoped_release>();
+    std::optional<TimedGilRelease> release_gil{std::in_place};
     auto index_keys =
             batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)
                     .get();
@@ -793,6 +827,7 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
         const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
         bool prune_previous_versions, bool sparsify_floats, bool validate_index
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Write, library_name());
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
     auto frame = convert::py_input_item_to_frame(
             stream_id, item, norm, user_meta, cfg().write_options().empty_types(), sortedness_scan_for(validate_index)
@@ -818,6 +853,7 @@ VersionedItem PythonVersionStore::append(
         const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
         bool upsert, bool prune_previous_versions, bool validate_index, bool compact_data
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Append, library_name());
     AppendOptions append_options{
             .upsert = upsert,
             .prune_previous_versions = prune_previous_versions,
@@ -842,6 +878,7 @@ VersionedItem PythonVersionStore::update(
         const StreamId& stream_id, const UpdateQuery& query, const convert::InputItem& item, const py::object& norm,
         const py::object& user_meta, bool upsert, bool dynamic_schema, bool prune_previous_versions
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Update, library_name());
     return update_internal(
             stream_id,
             query,
@@ -864,6 +901,7 @@ VersionedItem PythonVersionStore::update(
 VersionedItem PythonVersionStore::delete_range(
         const StreamId& stream_id, const UpdateQuery& query, bool dynamic_schema, bool prune_previous_versions
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Delete, library_name());
     return delete_range_internal(stream_id, query, DeleteRangeOptions{dynamic_schema, prune_previous_versions});
 }
 
@@ -871,6 +909,7 @@ void PythonVersionStore::append_incomplete(
         const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
         bool validate_index
 ) const {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Append, library_name());
 
     using namespace arcticdb::entity;
     using namespace arcticdb::stream;
@@ -886,6 +925,7 @@ void PythonVersionStore::append_incomplete(
 VersionedItem PythonVersionStore::write_metadata(
         const StreamId& stream_id, const py::object& user_meta, bool prune_previous_versions
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Metadata, library_name());
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
     python_util::pb_from_python(user_meta, user_meta_proto);
     return write_versioned_metadata_internal(stream_id, prune_previous_versions, std::move(user_meta_proto));
@@ -946,6 +986,7 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incompl
         bool validate_index, bool delete_staged_data_on_failure,
         const std::optional<std::vector<StageResult>>& stage_results
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Compact, library_name());
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
@@ -965,13 +1006,18 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incompl
             .stage_results = stage_results
     };
 
-    return compact_incomplete_dynamic(stream_id, meta, params);
+    auto res = compact_incomplete_dynamic(stream_id, meta, params);
+    if (std::holds_alternative<CompactionError>(res)) {
+        api_scope.mark_error();
+    }
+    return res;
 }
 
 std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
         const StreamId& stream_id, const py::object& user_meta, bool append, bool prune_previous_versions,
         bool delete_staged_data_on_failure, const std::optional<std::vector<StageResult>>& stage_results
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Compact, library_name());
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
@@ -990,13 +1036,18 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
             .stage_results = stage_results
     };
 
-    return sort_merge_internal(stream_id, meta, params);
+    auto res = sort_merge_internal(stream_id, meta, params);
+    if (std::holds_alternative<CompactionError>(res)) {
+        api_scope.mark_error();
+    }
+    return res;
 }
 
 StageResult PythonVersionStore::write_parallel(
         const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, bool validate_index,
         bool sort_on_index, std::optional<std::vector<std::string>> sort_columns
 ) const {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Stage, library_name());
     // When the data will be sorted for us (sort_on_index or sort_columns) the input order is irrelevant, so only
     // determine the Arrow index sort order when the unsorted input itself must be validated.
     const bool verify = validate_index && !sort_on_index && (!sort_columns || sort_columns->empty());
@@ -1015,6 +1066,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
         std::shared_ptr<std::any> handler_data
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::ReadBatch, library_name());
 
     auto read_versions_or_errors =
             batch_read_internal(stream_ids, version_queries, read_queries, batch_read_options, handler_data);
@@ -1031,7 +1083,10 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
                             std::move(read_version.nodes_)
                     ));
                 },
-                [&res](DataError& data_error) { res.emplace_back(std::move(data_error)); }
+                [&res, &api_scope](DataError& data_error) {
+                    api_scope.mark_error();
+                    res.emplace_back(std::move(data_error));
+                }
         );
     }
     return res;
@@ -1042,6 +1097,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_up
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas,
         const std::vector<UpdateQuery>& update_qeries, bool prune_previous_versions, bool upsert
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::UpdateBatch, library_name());
     // Like single update, batch update always requires a sorted index, so determine the Arrow index sort order.
     auto frames = create_input_tensor_frames(
             stream_ids,
@@ -1051,7 +1107,11 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_up
             cfg().write_options().empty_types(),
             pipelines::SortednessScan::SCAN_IF_UNKNOWN
     );
-    return batch_update_internal(stream_ids, std::move(frames), update_qeries, prune_previous_versions, upsert);
+    auto res = batch_update_internal(stream_ids, std::move(frames), update_qeries, prune_previous_versions, upsert);
+    if (has_data_error(res)) {
+        api_scope.mark_error();
+    }
+    return res;
 }
 
 ReadResult PythonVersionStore::batch_read_and_join(
@@ -1059,6 +1119,7 @@ ReadResult PythonVersionStore::batch_read_and_join(
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
         std::vector<std::shared_ptr<Clause>>&& clauses, std::shared_ptr<std::any> handler_data
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::ReadBatch, library_name());
     auto versions_and_frame = batch_read_and_join_internal(
             std::move(stream_ids),
             std::move(version_queries),
@@ -1076,6 +1137,7 @@ ReadResult PythonVersionStore::batch_read_and_join(
 }
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Snapshot, library_name());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_snapshot");
     auto opt_snapshot = get_snapshot(store(), snap_name);
     if (!opt_snapshot) {
@@ -1117,6 +1179,7 @@ ReadResult PythonVersionStore::read_dataframe_version(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Read, library_name());
 
     auto opt_version_and_frame =
             read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
@@ -1134,6 +1197,7 @@ VersionedItem PythonVersionStore::read_modify_write(
         const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, const bool prune_previous_versions
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Write, library_name());
     return read_modify_write_internal(
             source_stream,
             target_stream,
@@ -1193,11 +1257,13 @@ std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones(
 
 // Kept for backwards compatibility
 void PythonVersionStore::delete_version(const StreamId& stream_id, VersionId version_id) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Delete, library_name());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_version");
     delete_versions(stream_id, {version_id});
 }
 
 void PythonVersionStore::delete_versions(const StreamId& stream_id, const std::vector<VersionId>& version_ids) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Delete, library_name());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_versions");
     if (version_ids.empty()) {
         log::version().info("No version ids passed for delete_versions for stream {}, skipping", stream_id);
@@ -1218,6 +1284,7 @@ void PythonVersionStore::delete_versions(const StreamId& stream_id, const std::v
 std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
         const std::vector<StreamId>& stream_ids, const std::vector<std::vector<VersionId>>& version_ids
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::DeleteBatch, library_name());
     // This error can only be triggered when the function is called from batch_delete_versions
     // The other code paths make checks that prevents us getting to this point
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -1257,6 +1324,7 @@ std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
                     }
                 },
                 [&](const DataError& data_error) {
+                    api_scope.mark_error();
                     return_results.emplace_back(std::make_optional(std::move(data_error)));
                 }
         );
@@ -1272,6 +1340,7 @@ std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
     for (size_t i = 0; i < symbols_to_delete.size(); ++i) {
         const auto& result = sym_delete_results[i];
         if (std::holds_alternative<DataError>(result)) {
+            api_scope.mark_error();
             return_results[i] = std::make_optional(std::get<DataError>(result));
         }
     }
@@ -1302,6 +1371,7 @@ void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) 
 }
 
 void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::PrunePreviousVersions, library_name());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: prune_previous_versions stream_id={}", stream_id);
     const std::shared_ptr<VersionMapEntry>& entry = version_map()->check_reload(
             store(), stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
@@ -1321,6 +1391,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
 }
 
 void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Delete, library_name());
     ARCTICDB_SAMPLE(DeleteAllVersions, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
@@ -1350,8 +1421,10 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
 
         ARCTICDB_DEBUG(log::version(), "Delete of Symbol {} successful", stream_id);
     } catch (const StorageException& ex) {
+        api_scope.mark_error();
         log::version().error("Got storage exception in delete - possible parallel deletion?: {}", ex.what());
     } catch (const CodecException& ex) {
+        api_scope.mark_error();
         log::version().error("Got codec exception in delete - possible parallel deletion?: {}", ex.what());
     }
 }
@@ -1389,6 +1462,7 @@ py::object metadata_protobuf_to_pyobject(const std::optional<google::protobuf::A
 std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Metadata, library_name());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_metadata");
     ARCTICDB_SAMPLE(ReadMetadata, 0)
 
@@ -1406,6 +1480,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
         const std::vector<StreamId>& stream_ids, const std::vector<py::object>& user_meta, bool prune_previous_versions,
         bool throw_on_error
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Metadata, library_name());
     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_protos;
     user_meta_protos.reserve(user_meta.size());
     for (const auto& user_meta_item : user_meta) {
@@ -1413,14 +1488,19 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
         python_util::pb_from_python(user_meta_item, user_meta_proto);
         user_meta_protos.emplace_back(std::move(user_meta_proto));
     }
-    return batch_write_versioned_metadata_internal(
+    auto res = batch_write_versioned_metadata_internal(
             stream_ids, prune_previous_versions, throw_on_error, std::move(user_meta_protos)
     );
+    if (has_data_error(res)) {
+        api_scope.mark_error();
+    }
+    return res;
 }
 
 std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::batch_restore_version(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::WriteBatch, library_name());
     return batch_restore_version_internal(stream_ids, version_queries);
 }
 
@@ -1428,6 +1508,7 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
         const BatchReadOptions& batch_read_options
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Metadata, library_name());
     ARCTICDB_SAMPLE(BatchReadMetadata, 0)
     auto metadatas_or_errors = batch_read_metadata_internal(stream_ids, version_queries, batch_read_options);
 
@@ -1443,6 +1524,7 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
                 results.emplace_back(std::pair{std::move(version), py::none()});
             }
         } else {
+            api_scope.mark_error();
             results.emplace_back(std::get<DataError>(std::move(metadata_or_error)));
         }
     }
@@ -1452,6 +1534,7 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
 DescriptorItem PythonVersionStore::read_descriptor(
         const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Metadata, library_name());
     return read_descriptor_internal(stream_id, version_query, include_index_segment);
 }
 
@@ -1459,13 +1542,18 @@ std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_r
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
         const BatchReadOptions& batch_read_options
 ) {
-
-    return batch_read_descriptor_internal(stream_ids, version_queries, batch_read_options);
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Metadata, library_name());
+    auto res = batch_read_descriptor_internal(stream_ids, version_queries, batch_read_options);
+    if (has_data_error(res)) {
+        api_scope.mark_error();
+    }
+    return res;
 }
 
 ReadResult PythonVersionStore::read_index(
         const StreamId& stream_id, const VersionQuery& version_query, OutputFormat output_format, std::any& handler_data
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Read, library_name());
     ARCTICDB_SAMPLE(ReadIndex, 0)
 
     auto version = get_version_to_read(stream_id, version_query);
@@ -1483,6 +1571,7 @@ std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& str
 void PythonVersionStore::_compact_version_map(const StreamId& id) { version_map()->compact(store(), id); }
 
 void PythonVersionStore::compact_library(size_t batch_size) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Compact, library_name());
     version_map()->compact_if_necessary_stand_alone(store(), batch_size);
 }
 
@@ -1539,8 +1628,7 @@ ReadResult read_dataframe_from_file(
         const StreamId& stream_id, const std::string& path, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
-
-    auto release_gil = std::make_unique<py::gil_scoped_release>();
+    TimedGilRelease release_gil;
     auto opt_version_and_frame = read_dataframe_from_file_internal(
             stream_id, path, read_query, read_options, codec::default_lz4_codec(), handler_data
     );
@@ -1563,6 +1651,7 @@ VersionedItem PythonVersionStore::merge(
         const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
         const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Merge, library_name());
     const MergeStrategy strategy{
             .matched = py_strategy[0].cast<MergeAction>(),
             .not_matched_by_target = py_strategy[1].cast<MergeAction>(),
@@ -1595,6 +1684,7 @@ CompactDataInfo PythonVersionStore::compact_data_explain_plan(
 VersionedItem PythonVersionStore::compact_data(
         const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Compact, library_name());
     return compact_data_internal(stream_id, rows_per_segment, prune_previous_versions);
 }
 
@@ -1602,13 +1692,19 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_co
         const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions,
         bool throw_on_error
 ) {
-    return batch_compact_data_internal(stream_ids, rows_per_segment, prune_previous_versions, throw_on_error);
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Compact, library_name());
+    auto res = batch_compact_data_internal(stream_ids, rows_per_segment, prune_previous_versions, throw_on_error);
+    if (has_data_error(res)) {
+        api_scope.mark_error();
+    }
+    return res;
 }
 
 VersionedItem PythonVersionStore::rename_columns_arrow_compat(
         const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
         const bool prune_previous_versions
 ) {
+    query_stats::ApiOpScope api_scope(query_stats::ApiOp::Update, library_name());
     return rename_columns_arrow_compat_internal(stream_id, index_columns, prune_previous_versions);
 }
 

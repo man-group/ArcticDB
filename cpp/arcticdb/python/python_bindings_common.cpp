@@ -21,7 +21,10 @@ void register_metrics(py::module&& m, arcticdb::BindingScope scope) {
     auto prometheus = m.def_submodule("prometheus");
     py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(
             prometheus, "Instance", py::module_local(local_bindings)
-    );
+    )
+            .def_static("instance", &arcticdb::PrometheusInstance::instance)
+            .def("configure", &arcticdb::PrometheusInstance::configure, py::call_guard<py::gil_scoped_release>())
+            .def("push", &arcticdb::PrometheusInstance::push, py::call_guard<py::gil_scoped_release>());
 
     py::class_<arcticdb::MetricsConfig, std::shared_ptr<arcticdb::MetricsConfig>>(
             prometheus, "MetricsConfig", py::module_local(local_bindings)
