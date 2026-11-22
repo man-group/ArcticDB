@@ -251,7 +251,7 @@ void add_journal_entry(JournalMapType& update_map, const AtomKey& key) {
 
 void sort_journal_map(JournalMapType& update_map) {
     for (auto& [symbol, keys] : update_map) {
-        std::sort(keys.begin(), keys.end(), [](const JournalEntryData& a, const JournalEntryData& b) {
+        std::stable_sort(keys.begin(), keys.end(), [](const JournalEntryData& a, const JournalEntryData& b) {
             auto a_ver = a.is_new_style ? a.key_version_id : VersionId{0};
             auto b_ver = b.is_new_style ? b.key_version_id : VersionId{0};
             return std::tie(a_ver, a.creation_ts) < std::tie(b_ver, b.creation_ts);
@@ -969,8 +969,20 @@ bool SymbolList::apply_mutations_and_compact(
         return true;
     }
 
+    // Coalesce multiple mutations for the same symbol in arrival order so the final causal
+    // mutation wins deterministically (even when ADD and DELETE share the same reference_id).
+    ankerl::unordered_dense::map<StreamId, size_t> last_idx_by_symbol;
+    last_idx_by_symbol.reserve(mutations.size());
+    for (size_t idx = 0; idx < mutations.size(); ++idx) {
+        last_idx_by_symbol[mutations[idx].symbol] = idx;
+    }
+
     auto fallback_write_journals = [&]() {
-        for (const auto& m : mutations) {
+        for (size_t idx = 0; idx < mutations.size(); ++idx) {
+            const auto& m = mutations[idx];
+            if (last_idx_by_symbol.at(m.symbol) != idx) {
+                continue;
+            }
             write_journal(store, m.symbol, m.action, m.reference_id);
         }
     };
@@ -1008,11 +1020,18 @@ bool SymbolList::apply_mutations_and_compact(
             return false;
         }
 
-        const timestamp now_ns = util::SysClock::coarse_nanos_since_epoch();
+        // Use store->current_timestamp() to match write_journal()'s clock domain and assign
+        // strictly monotonic timestamps per mutation.
+        const timestamp base_ts = store->current_timestamp();
         JournalMapType batch_map;
-        batch_map.reserve(mutations.size());
-        for (const auto& m : mutations) {
-            batch_map[m.symbol].emplace_back(m.reference_id, now_ns, m.action);
+        batch_map.reserve(last_idx_by_symbol.size());
+        for (size_t idx = 0; idx < mutations.size(); ++idx) {
+            const auto& m = mutations[idx];
+            if (last_idx_by_symbol.at(m.symbol) != idx) {
+                continue;
+            }
+            const timestamp ts = base_ts + static_cast<timestamp>(idx);
+            batch_map[m.symbol].emplace_back(m.reference_id, ts, m.action);
         }
         sort_journal_map(batch_map);
 

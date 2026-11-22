@@ -304,7 +304,10 @@ class VersionMapImpl {
                     store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
             );
         }
-        auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
+        std::optional<AtomKey> tombstone_key;
+        auto output = tombstone_from_key_or_all_internal(
+                store, stream_id, first_key_to_tombstone, entry, /*should_write_to_storage=*/true, &tombstone_key
+        );
 
         if (validate_)
             entry->validate();
@@ -313,6 +316,10 @@ class VersionMapImpl {
             write_symbol_ref(
                     store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), std::nullopt, entry->head_.value()
             );
+
+        if (log_changes_ && tombstone_key.has_value()) {
+            log_tombstone_all(store, stream_id, tombstone_key->version_id());
+        }
 
         return output;
     }
@@ -330,6 +337,7 @@ class VersionMapImpl {
         ARCTICDB_DEBUG(log::version(), "Version map pruning previous versions for stream {}", key.id());
         auto entry =
                 check_reload(store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__);
+        const bool was_empty = entry->empty();
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
 
         std::vector<AtomKey> keys_to_write;
@@ -358,7 +366,7 @@ class VersionMapImpl {
                         store,
                         key,
                         previous_index,
-                        key.type() == KeyType::TABLE_INDEX && !previous_index.has_value()
+                        key.type() == KeyType::TABLE_INDEX && was_empty && !previous_key.has_value()
                 );
             }
         } else {
@@ -1279,7 +1287,8 @@ class VersionMapImpl {
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(
             std::shared_ptr<Store> store, const StreamId& stream_id,
             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
-            std::shared_ptr<VersionMapEntry> entry = nullptr, bool should_write_to_storage = true
+            std::shared_ptr<VersionMapEntry> entry = nullptr, bool should_write_to_storage = true,
+            std::optional<AtomKey>* written_tombstone_key = nullptr
     ) {
         if (!entry) {
             entry = check_reload(
@@ -1303,8 +1312,8 @@ class VersionMapImpl {
 
         if (!output.empty() && should_write_to_storage) {
             auto tombstone_key = write_tombstone_all_key_internal(store, first_key_to_tombstone.value(), entry);
-            if (log_changes_) {
-                log_tombstone_all(store, stream_id, tombstone_key.version_id());
+            if (written_tombstone_key) {
+                *written_tombstone_key = std::move(tombstone_key);
             }
         }
 

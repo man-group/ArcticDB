@@ -8,6 +8,10 @@
 
 #include <gtest/gtest.h>
 
+#include <functional>
+#include <mutex>
+#include <stdexcept>
+
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
@@ -75,6 +79,68 @@ uint64_t memory_storage_op_count(
     }
     return kit->second.total_count();
 }
+
+class RecordingInMemoryStore : public InMemoryStore {
+  public:
+    using InMemoryStore::write;
+
+    struct WriteEvent {
+        KeyType key_type;
+        StreamId stream_id;
+        std::optional<VersionId> version_id;
+        std::optional<IndexValue> start_index;
+    };
+
+    folly::Future<VariantKey> write(
+            KeyType key_type, VersionId gen_id, const StreamId& stream_id, IndexValue start_index, IndexValue end_index,
+            SegmentInMemory&& segment
+    ) override {
+        if (on_before_write_) {
+            on_before_write_(key_type, stream_id, gen_id, start_index);
+        }
+        {
+            std::lock_guard lock(events_mutex_);
+            write_events_.push_back(WriteEvent{key_type, stream_id, gen_id, start_index});
+        }
+        return InMemoryStore::write(
+                key_type, gen_id, stream_id, std::move(start_index), std::move(end_index), std::move(segment)
+        );
+    }
+
+    folly::Future<entity::VariantKey> write(
+            stream::KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment
+    ) override {
+        if (on_before_write_) {
+            on_before_write_(key_type, stream_id, std::nullopt, std::nullopt);
+        }
+        {
+            std::lock_guard lock(events_mutex_);
+            write_events_.push_back(WriteEvent{key_type, stream_id, std::nullopt, std::nullopt});
+        }
+        return InMemoryStore::write(key_type, stream_id, std::move(segment));
+    }
+
+    void set_on_before_write(
+            std::function<void(KeyType, const StreamId&, std::optional<VersionId>, std::optional<IndexValue>)> cb
+    ) {
+        on_before_write_ = std::move(cb);
+    }
+
+    void clear_write_events() {
+        std::lock_guard lock(events_mutex_);
+        write_events_.clear();
+    }
+
+    std::vector<WriteEvent> write_events() const {
+        std::lock_guard lock(events_mutex_);
+        return write_events_;
+    }
+
+  private:
+    mutable std::mutex events_mutex_;
+    std::vector<WriteEvent> write_events_;
+    std::function<void(KeyType, const StreamId&, std::optional<VersionId>, std::optional<IndexValue>)> on_before_write_;
+};
 
 } // namespace
 
@@ -209,7 +275,7 @@ TEST(EnrichedOpLog, WriterMetadataOnlyBackwardsCompatAndZeroExtraStorageWrites) 
 
     auto collect_log_keys = [](const std::shared_ptr<Store>& store) {
         std::vector<AtomKey> logs;
-        store->iterate_type(KeyType::LOG, [&](VariantKey&& vk) { logs.push_back(to_atom(std::move(vk))); });
+        static_cast<Store&>(*store).iterate_type(KeyType::LOG, [&](VariantKey&& vk) { logs.push_back(to_atom(std::move(vk))); });
         return logs;
     };
 
@@ -313,6 +379,205 @@ TEST(EnrichedOpLog, WriterMetadataOnlyBackwardsCompatAndZeroExtraStorageWrites) 
         auto [____, v2_log_seg] = store_enr->read_sync(*v2_log_it, storage::ReadKeyOpts{});
         EXPECT_EQ(v2_log_seg.row_count(), 0u);
         EXPECT_FALSE(extract_enriched_op_log_payload(v2_log_seg).has_value());
+    }
+}
+
+TEST(EnrichedOpLog, WriteAndPrunePreviousAfterDeleteFallsBackToLegacyOpLog) {
+    ScopedConfig enriched_cfg({{kEnrichedOpLogConfigKey, 1}});
+    auto lib = make_memory_library(EncodingVersion::V2);
+    auto store = std::make_shared<async::AsyncStore<util::SysClock>>(lib, make_lz4_codec(), EncodingVersion::V2);
+    auto vm = std::make_shared<VersionMap>();
+    vm->set_log_changes(true);
+
+    auto write_frame_key = [&](const std::string& sym, VersionId vid, size_t rows) -> AtomKey {
+        auto wrapper = get_test_simple_frame(sym, rows, 0);
+        return pipelines::write_frame(
+                       pipelines::IndexPartialKey{sym, vid}, wrapper.frame_, pipelines::FixedSlicer{}, store
+               )
+                .get();
+    };
+
+    auto find_write_log = [&](const std::string& sym, VersionId vid) -> std::optional<AtomKey> {
+        std::optional<AtomKey> found;
+        static_cast<Store&>(*store).iterate_type(KeyType::LOG, [&](VariantKey&& vk) {
+            auto k = to_atom(std::move(vk));
+            if (k.id() == StreamId{WriteVersionId} && k.start_index() == IndexValue{sym} && k.version_id() == vid) {
+                found = std::move(k);
+            }
+        });
+        return found;
+    };
+
+    // 1. Brand-new symbol with prune_previous_versions still emits an enriched op-log.
+    {
+        const std::string sym = "sym_prune_brand_new";
+        auto v0_key = write_frame_key(sym, 0, 8);
+        auto pruned = vm->write_and_prune_previous(store, v0_key, std::nullopt);
+        EXPECT_TRUE(pruned.empty());
+
+        auto log_key = find_write_log(sym, 0);
+        ASSERT_TRUE(log_key.has_value());
+        auto [_, log_seg] = store->read_sync(*log_key, storage::ReadKeyOpts{});
+        auto payload = extract_enriched_op_log_payload(log_seg);
+        ASSERT_TRUE(payload.has_value());
+        EXPECT_EQ(payload->new_index_key, v0_key);
+        EXPECT_FALSE(payload->prev_index_key.has_value());
+        EXPECT_TRUE(payload->is_clean_chain_successor);
+    }
+
+    // 2. Writing with prune_previous_versions after delete_all_versions must NOT emit an enriched
+    //    is_clean_chain_successor=true payload (both with warm cache and after cold cache reload).
+    {
+        const std::string sym = "sym_prune_after_delete";
+        auto v0_key = write_frame_key(sym, 0, 8);
+        vm->write_version(store, v0_key, std::nullopt);
+        vm->delete_all_versions(store, sym);
+
+        auto v1_key = write_frame_key(sym, 1, 8);
+        auto pruned = vm->write_and_prune_previous(store, v1_key, std::nullopt);
+        EXPECT_TRUE(pruned.empty());
+
+        auto v1_log = find_write_log(sym, 1);
+        ASSERT_TRUE(v1_log.has_value());
+        auto [_, v1_log_seg] = store->read_sync(*v1_log, storage::ReadKeyOpts{});
+        EXPECT_EQ(v1_log_seg.row_count(), 0u);
+        EXPECT_FALSE(extract_enriched_op_log_payload(v1_log_seg).has_value());
+        EXPECT_FALSE(store->take_captured_version_write(sym, 1).has_value());
+
+        // Delete again and flush VersionMap cache so write_and_prune_previous reloads cold from storage.
+        vm->delete_all_versions(store, sym);
+        vm->flush();
+
+        auto v2_key = write_frame_key(sym, 2, 8);
+        auto pruned_cold = vm->write_and_prune_previous(store, v2_key, std::nullopt);
+        EXPECT_TRUE(pruned_cold.empty());
+
+        auto v2_log = find_write_log(sym, 2);
+        ASSERT_TRUE(v2_log.has_value());
+        auto [__, v2_log_seg] = store->read_sync(*v2_log, storage::ReadKeyOpts{});
+        EXPECT_EQ(v2_log_seg.row_count(), 0u);
+        EXPECT_FALSE(extract_enriched_op_log_payload(v2_log_seg).has_value());
+        EXPECT_FALSE(store->take_captured_version_write(sym, 2).has_value());
+    }
+
+    // 3. Writing with prune_previous_versions after an individual tombstone also falls back to legacy op-log.
+    {
+        const std::string sym = "sym_prune_after_tombstone";
+        auto v0_key = write_frame_key(sym, 0, 8);
+        vm->write_version(store, v0_key, std::nullopt);
+        auto entry = vm->check_reload(
+                store, sym, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+        );
+        vm->write_tombstones(store, {v0_key}, sym, entry);
+
+        auto v1_key = write_frame_key(sym, 1, 8);
+        auto pruned = vm->write_and_prune_previous(store, v1_key, std::nullopt);
+        EXPECT_TRUE(pruned.empty());
+
+        auto v1_log = find_write_log(sym, 1);
+        ASSERT_TRUE(v1_log.has_value());
+        auto [_, v1_log_seg] = store->read_sync(*v1_log, storage::ReadKeyOpts{});
+        EXPECT_EQ(v1_log_seg.row_count(), 0u);
+        EXPECT_FALSE(extract_enriched_op_log_payload(v1_log_seg).has_value());
+        EXPECT_FALSE(store->take_captured_version_write(sym, 1).has_value());
+    }
+}
+
+TEST(EnrichedOpLog, TombstoneFromKeyOrAllWritesVersionRefBeforeTombstoneAllLog) {
+    auto store = std::make_shared<RecordingInMemoryStore>();
+    auto vm = std::make_shared<VersionMap>();
+    vm->set_log_changes(true);
+    vm->set_validate(true);
+
+    auto make_index_key = [](const StreamId& sym, VersionId vid) {
+        return atom_key_builder()
+                .version_id(vid)
+                .creation_ts(static_cast<timestamp>(vid + 1) * 1000)
+                .content_hash(vid + 10)
+                .start_index(0)
+                .end_index(10)
+                .build(sym, KeyType::TABLE_INDEX);
+    };
+
+    // 1. Full tombstone_from_key_or_all must commit VERSION_REF before writing KeyType::LOG (TOMBSTONE_ALL).
+    const StreamId sym{"sym_tomb_order"};
+    auto v0 = make_index_key(sym, 0);
+    auto v1 = make_index_key(sym, 1);
+    vm->write_version(store, v0, std::nullopt);
+    vm->write_version(store, v1, v0);
+    store->clear_write_events();
+
+    bool saw_tombstone_all_log = false;
+    bool ref_already_tombstoned = false;
+    store->set_on_before_write([&](KeyType kt, const StreamId& id, std::optional<VersionId> vid,
+                                   std::optional<IndexValue>) {
+        if (kt == KeyType::LOG && id == StreamId{TombstoneAllVersionId}) {
+            saw_tombstone_all_log = true;
+            EXPECT_EQ(vid, std::optional<VersionId>{1});
+            VersionMapEntry ref_entry(sym);
+            read_symbol_ref(store, sym, ref_entry);
+            ref_already_tombstoned = !ref_entry.empty() && !ref_entry.keys_.empty() &&
+                                     ref_entry.keys_[0].type() == KeyType::TOMBSTONE_ALL &&
+                                     ref_entry.keys_[0].version_id() == 1u;
+        }
+    });
+
+    vm->tombstone_from_key_or_all(store, sym);
+    store->set_on_before_write(nullptr);
+
+    EXPECT_TRUE(saw_tombstone_all_log);
+    EXPECT_TRUE(ref_already_tombstoned);
+
+    auto events = store->write_events();
+    ASSERT_EQ(events.size(), 3u);
+    EXPECT_EQ(events[0].key_type, KeyType::VERSION);
+    EXPECT_EQ(events[1].key_type, KeyType::VERSION_REF);
+    EXPECT_EQ(events[1].stream_id, sym);
+    EXPECT_EQ(events[2].key_type, KeyType::LOG);
+    EXPECT_EQ(events[2].stream_id, StreamId{TombstoneAllVersionId});
+    EXPECT_EQ(events[2].version_id, std::optional<VersionId>{1});
+    EXPECT_EQ(events[2].start_index, std::optional<IndexValue>{IndexValue{sym}});
+
+    // 2. Repeating tombstone_from_key_or_all when no undeleted versions remain emits no TOMBSTONE_ALL log.
+    store->clear_write_events();
+    vm->tombstone_from_key_or_all(store, sym);
+    for (const auto& ev : store->write_events()) {
+        EXPECT_NE(ev.key_type, KeyType::LOG);
+    }
+
+    // 3. Partial tombstone_from_key_or_all (explicit first_key_to_tombstone) also writes VERSION_REF before LOG.
+    const StreamId sym_partial{"sym_tomb_partial"};
+    auto pv0 = make_index_key(sym_partial, 0);
+    auto pv1 = make_index_key(sym_partial, 1);
+    vm->write_version(store, pv0, std::nullopt);
+    vm->write_version(store, pv1, pv0);
+    store->clear_write_events();
+
+    vm->tombstone_from_key_or_all(store, sym_partial, pv0);
+    auto partial_events = store->write_events();
+    ASSERT_EQ(partial_events.size(), 3u);
+    EXPECT_EQ(partial_events[0].key_type, KeyType::VERSION);
+    EXPECT_EQ(partial_events[1].key_type, KeyType::VERSION_REF);
+    EXPECT_EQ(partial_events[2].key_type, KeyType::LOG);
+    EXPECT_EQ(partial_events[2].stream_id, StreamId{TombstoneAllVersionId});
+    EXPECT_EQ(partial_events[2].version_id, std::optional<VersionId>{0});
+
+    // 4. If VERSION_REF write fails, no TOMBSTONE_ALL op-log may be emitted.
+    const StreamId sym_fail{"sym_tomb_ref_fail"};
+    auto fv0 = make_index_key(sym_fail, 0);
+    vm->write_version(store, fv0, std::nullopt);
+    store->clear_write_events();
+
+    store->set_on_before_write([](KeyType kt, const StreamId&, std::optional<VersionId>, std::optional<IndexValue>) {
+        if (kt == KeyType::VERSION_REF) {
+            throw std::runtime_error("injected VERSION_REF write failure");
+        }
+    });
+    EXPECT_THROW(vm->tombstone_from_key_or_all(store, sym_fail), std::runtime_error);
+    store->set_on_before_write(nullptr);
+
+    for (const auto& ev : store->write_events()) {
+        EXPECT_NE(ev.key_type, KeyType::LOG);
     }
 }
 
