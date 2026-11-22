@@ -551,17 +551,17 @@ class InMemoryStore : public Store {
 
     void add_segment(const AtomKey& key, SegmentInMemory&& seg) {
         StorageFailureSimulator::instance()->go(FailureType::WRITE);
-        if (write_capture_cache() && is_enriched_op_log_enabled() &&
-            (key.type() == KeyType::TABLE_DATA || key.type() == KeyType::TABLE_INDEX ||
-             key.type() == KeyType::COLUMN_STATS)) {
-            Segment encoded = encode_dispatch(seg.clone(), codec_, EncodingVersion::V1);
-            (void)encoded.calculate_size();
+        if (write_capture_cache() && is_enriched_op_log_enabled()) {
             if (key.type() == KeyType::TABLE_DATA) {
-                write_capture_cache()->record_data(key, encoded);
-            } else if (key.type() == KeyType::TABLE_INDEX) {
-                write_capture_cache()->record_index(key, encoded);
-            } else {
-                write_capture_cache()->record_column_stats(key, encoded);
+                write_capture_cache()->record_data(key);
+            } else if (key.type() == KeyType::TABLE_INDEX || key.type() == KeyType::COLUMN_STATS) {
+                Segment encoded = encode_dispatch(seg.clone(), codec_, EncodingVersion::V1);
+                (void)encoded.calculate_size();
+                if (key.type() == KeyType::TABLE_INDEX) {
+                    write_capture_cache()->record_index(key, encoded);
+                } else {
+                    write_capture_cache()->record_column_stats(key, encoded);
+                }
             }
         }
         std::lock_guard lock{mutex_};

@@ -1267,9 +1267,6 @@ class VersionMapImpl {
         payload.is_clean_chain_successor = true;
         payload.compressed_index_bytes = std::move(captured->compressed_index_bytes);
         payload.newly_written_data_keys = std::move(captured->newly_written_data_keys);
-        if (!captured->inline_overflowed) {
-            payload.inline_data_segments = std::move(captured->inline_data_segments);
-        }
         if (captured->column_stats_key.has_value()) {
             payload.has_column_stats = true;
             payload.column_stats_key = std::move(captured->column_stats_key);

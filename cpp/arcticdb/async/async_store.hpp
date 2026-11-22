@@ -589,14 +589,16 @@ class AsyncStore : public Store {
         if (!cache || !is_enriched_op_log_enabled() || !std::holds_alternative<AtomKey>(ks.variant_key())) {
             return;
         }
+        const auto& ak = ks.atom_key();
+        if (ak.type() == KeyType::TABLE_DATA) {
+            cache->record_data(ak);
+            return;
+        }
         auto seg_ptr = ks.segment_ptr();
         if (!seg_ptr) {
             return;
         }
-        const auto& ak = ks.atom_key();
-        if (ak.type() == KeyType::TABLE_DATA) {
-            cache->record_data(ak, *seg_ptr);
-        } else if (ak.type() == KeyType::TABLE_INDEX) {
+        if (ak.type() == KeyType::TABLE_INDEX) {
             cache->record_index(ak, *seg_ptr);
         } else if (ak.type() == KeyType::COLUMN_STATS) {
             cache->record_column_stats(ak, *seg_ptr);

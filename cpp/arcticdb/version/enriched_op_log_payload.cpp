@@ -288,17 +288,6 @@ std::vector<uint8_t> encode_enriched_op_log_payload(const EnrichedOpLogPayload& 
         append_atom_key(out, dk);
     }
 
-    util::check(
-            payload.inline_data_segments.size() <= kMaxKeysPerPayload,
-            "Too many inline data segments in enriched op-log payload: {}",
-            payload.inline_data_segments.size()
-    );
-    append_u32(out, static_cast<uint32_t>(payload.inline_data_segments.size()));
-    for (const auto& [dk, seg_bytes] : payload.inline_data_segments) {
-        append_atom_key(out, dk);
-        append_bytes(out, seg_bytes);
-    }
-
     const bool write_col_stats = payload.has_column_stats && payload.column_stats_key.has_value();
     const bool write_inline_col_stats = write_col_stats && !payload.column_stats_bytes.empty();
     if (write_col_stats) {
@@ -398,20 +387,6 @@ std::optional<EnrichedOpLogPayload> decode_enriched_op_log_payload(std::span<con
         payload.newly_written_data_keys.push_back(std::move(dk));
     }
 
-    uint32_t num_inline = 0;
-    if (!reader.read_u32(num_inline) || num_inline > kMaxKeysPerPayload) {
-        return std::nullopt;
-    }
-    payload.inline_data_segments.reserve(num_inline);
-    for (uint32_t i = 0; i < num_inline; ++i) {
-        entity::AtomKey dk;
-        std::vector<uint8_t> seg_bytes;
-        if (!reader.read_atom_key(dk) || !reader.read_bytes(seg_bytes, kMaxBlobBytes) || seg_bytes.empty()) {
-            return std::nullopt;
-        }
-        payload.inline_data_segments.emplace_back(std::move(dk), std::move(seg_bytes));
-    }
-
     if ((flags & kFlagHasColumnStats) != 0) {
         payload.has_column_stats = true;
         entity::AtomKey cs_key;
@@ -481,29 +456,10 @@ CapturedVersionWrite& WriteCaptureCache::get_or_create_locked(const CacheKey& ke
     return entries_.emplace(key, CapturedVersionWrite{}).first->second;
 }
 
-void WriteCaptureCache::record_data(const entity::AtomKey& key, Segment& segment) {
-    const size_t max_inline = enriched_op_log_inline_data_max_bytes();
-    const size_t seg_size = segment.calculate_size();
-    std::vector<uint8_t> serialized;
-    const bool candidate_for_inline = (max_inline > 0 && seg_size <= max_inline);
-    if (candidate_for_inline) {
-        serialized = serialize_segment_to_bytes(segment);
-    }
-
+void WriteCaptureCache::record_data(const entity::AtomKey& key) {
     std::lock_guard lock(mutex_);
     auto& entry = get_or_create_locked(CacheKey{key.id(), key.version_id()});
     entry.newly_written_data_keys.push_back(key);
-
-    if (!entry.inline_overflowed) {
-        if (candidate_for_inline && entry.inline_data_bytes + serialized.size() <= max_inline) {
-            entry.inline_data_bytes += serialized.size();
-            entry.inline_data_segments.emplace_back(key, std::move(serialized));
-        } else {
-            entry.inline_overflowed = true;
-            entry.inline_data_segments.clear();
-            entry.inline_data_bytes = 0;
-        }
-    }
 }
 
 void WriteCaptureCache::record_index(const entity::AtomKey& key, Segment& segment) {
@@ -521,10 +477,10 @@ void WriteCaptureCache::record_index(const entity::AtomKey& key, Segment& segmen
 }
 
 void WriteCaptureCache::record_column_stats(const entity::AtomKey& key, Segment& segment) {
-    const size_t max_inline = enriched_op_log_inline_data_max_bytes();
+    const size_t max_meta_bytes = enriched_op_log_max_index_bytes();
     const size_t seg_size = segment.calculate_size();
     std::vector<uint8_t> serialized;
-    if (max_inline > 0 && seg_size <= max_inline) {
+    if (max_meta_bytes > 0 && seg_size <= max_meta_bytes) {
         serialized = serialize_segment_to_bytes(segment);
     }
 

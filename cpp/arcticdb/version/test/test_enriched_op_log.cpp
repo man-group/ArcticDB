@@ -81,7 +81,6 @@ uint64_t memory_storage_op_count(
 TEST(EnrichedOpLog, PayloadEncodeDecodeRoundTripV1AndV2) {
     for (EncodingVersion enc_ver : {EncodingVersion::V1, EncodingVersion::V2}) {
         auto idx_seg = make_encoded_test_segment("sym_rt", 5, enc_ver);
-        auto data_seg = make_encoded_test_segment("sym_rt", 32, enc_ver);
         auto cstats_seg = make_encoded_test_segment("sym_rt", 2, enc_ver);
 
         auto prev_key = atom_key_builder()
@@ -119,7 +118,6 @@ TEST(EnrichedOpLog, PayloadEncodeDecodeRoundTripV1AndV2) {
         in.is_clean_chain_successor = true;
         in.compressed_index_bytes = serialize_segment_to_bytes(idx_seg);
         in.newly_written_data_keys = {data_key};
-        in.inline_data_segments.emplace_back(data_key, serialize_segment_to_bytes(data_seg));
         in.has_column_stats = true;
         in.column_stats_key = cstats_key;
         in.column_stats_bytes = serialize_segment_to_bytes(cstats_seg);
@@ -134,9 +132,6 @@ TEST(EnrichedOpLog, PayloadEncodeDecodeRoundTripV1AndV2) {
         EXPECT_TRUE(out.is_clean_chain_successor);
         EXPECT_EQ(out.compressed_index_bytes, in.compressed_index_bytes);
         EXPECT_EQ(out.newly_written_data_keys, in.newly_written_data_keys);
-        ASSERT_EQ(out.inline_data_segments.size(), 1u);
-        EXPECT_EQ(out.inline_data_segments[0].first, data_key);
-        EXPECT_EQ(out.inline_data_segments[0].second, in.inline_data_segments[0].second);
         EXPECT_TRUE(out.has_column_stats);
         EXPECT_EQ(out.column_stats_key, cstats_key);
         EXPECT_EQ(out.column_stats_bytes, in.column_stats_bytes);
@@ -150,11 +145,11 @@ TEST(EnrichedOpLog, PayloadEncodeDecodeRoundTripV1AndV2) {
         auto decoded_idx = decode_segment(*restored_idx);
         EXPECT_EQ(decoded_idx.row_count(), 5u);
 
-        auto restored_data = deserialize_segment_from_bytes(out.inline_data_segments[0].second);
-        ASSERT_TRUE(restored_data.has_value());
-        auto decoded_data = decode_segment(*restored_data);
-        EXPECT_EQ(decoded_data.row_count(), 32u);
-        EXPECT_EQ(decoded_data.scalar_at<int64_t>(3, 0).value(), 22);
+        auto restored_cstats = deserialize_segment_from_bytes(out.column_stats_bytes);
+        ASSERT_TRUE(restored_cstats.has_value());
+        auto decoded_cstats = decode_segment(*restored_cstats);
+        EXPECT_EQ(decoded_cstats.row_count(), 2u);
+        EXPECT_EQ(decoded_cstats.scalar_at<int64_t>(1, 0).value(), 8);
     }
 }
 
@@ -196,7 +191,7 @@ TEST(EnrichedOpLog, CorruptTruncatedAndLegacyEmptyPayloadsReturnNullopt) {
     EXPECT_FALSE(decode_enriched_op_log_payload(trailing).has_value());
 }
 
-TEST(EnrichedOpLog, WriterInlineThresholdBackwardsCompatAndZeroExtraStorageWrites) {
+TEST(EnrichedOpLog, WriterMetadataOnlyBackwardsCompatAndZeroExtraStorageWrites) {
     auto write_symbol = [](const std::shared_ptr<Store>& store,
                            const std::shared_ptr<VersionMap>& vm,
                            const std::string& sym,
@@ -241,10 +236,8 @@ TEST(EnrichedOpLog, WriterInlineThresholdBackwardsCompatAndZeroExtraStorageWrite
         EXPECT_EQ(seg.row_count(), 0u);
         EXPECT_FALSE(extract_enriched_op_log_payload(seg).has_value());
 
-        // 2. Enriched enabled with inline threshold = 65536 (small write -> inlined, ZERO extra writes or reads!).
-        ScopedConfig enriched_cfg(
-                {{kEnrichedOpLogConfigKey, 1}, {kEnrichedOpLogInlineDataMaxBytesConfigKey, 65536}}
-        );
+        // 2. Enriched enabled (metadata + compressed TABLE_INDEX, ZERO extra storage writes or reads!).
+        ScopedConfig enriched_cfg({{kEnrichedOpLogConfigKey, 1}});
         auto lib_enr = make_memory_library(EncodingVersion::V2);
         auto store_enr =
                 std::make_shared<async::AsyncStore<util::SysClock>>(lib_enr, make_lz4_codec(), EncodingVersion::V2);
@@ -289,11 +282,8 @@ TEST(EnrichedOpLog, WriterInlineThresholdBackwardsCompatAndZeroExtraStorageWrite
         EXPECT_TRUE(payload_v0->is_clean_chain_successor);
         EXPECT_FALSE(payload_v0->compressed_index_bytes.empty());
         ASSERT_EQ(payload_v0->newly_written_data_keys.size(), 1u);
-        ASSERT_EQ(payload_v0->inline_data_segments.size(), 1u);
-        EXPECT_EQ(payload_v0->inline_data_segments[0].first, payload_v0->newly_written_data_keys[0]);
 
-        // Write v1 with InlineDataMaxBytes = 0 -> metadata-only enriched op-log (prev_index_key == v0_key, 0 inlined data).
-        ScopedConfig meta_only_cfg({{kEnrichedOpLogConfigKey, 1}, {kEnrichedOpLogInlineDataMaxBytesConfigKey, 0}});
+        // Write v1 -> carries prev_index_key == v0_key and compressed TABLE_INDEX.
         auto v1_key = write_symbol(store_enr, vm_enr, "sym_small", 1, 16, v0_key);
 
         auto logs_after_v1 = collect_log_keys(store_enr);
@@ -310,11 +300,10 @@ TEST(EnrichedOpLog, WriterInlineThresholdBackwardsCompatAndZeroExtraStorageWrite
         EXPECT_TRUE(payload_v1->is_clean_chain_successor);
         EXPECT_FALSE(payload_v1->compressed_index_bytes.empty());
         ASSERT_EQ(payload_v1->newly_written_data_keys.size(), 1u);
-        EXPECT_TRUE(payload_v1->inline_data_segments.empty());
 
-        // Write v2 with tiny inline threshold (16 bytes) -> overflows threshold, omits inline data, keeps index bytes!
-        ScopedConfig tiny_cfg({{kEnrichedOpLogConfigKey, 1}, {kEnrichedOpLogInlineDataMaxBytesConfigKey, 16}});
-        auto v2_key = write_symbol(store_enr, vm_enr, "sym_small", 2, 64, v1_key);
+        // Write v2 with tiny MaxIndexBytes (16 bytes) -> overflows index cap and falls back to legacy empty LOG!
+        ScopedConfig tiny_idx_cfg({{kEnrichedOpLogConfigKey, 1}, {kEnrichedOpLogMaxIndexBytesConfigKey, 16}});
+        (void)write_symbol(store_enr, vm_enr, "sym_small", 2, 64, v1_key);
 
         auto logs_after_v2 = collect_log_keys(store_enr);
         auto v2_log_it = std::find_if(logs_after_v2.begin(), logs_after_v2.end(), [](const AtomKey& k) {
@@ -322,14 +311,8 @@ TEST(EnrichedOpLog, WriterInlineThresholdBackwardsCompatAndZeroExtraStorageWrite
         });
         ASSERT_NE(v2_log_it, logs_after_v2.end());
         auto [____, v2_log_seg] = store_enr->read_sync(*v2_log_it, storage::ReadKeyOpts{});
-        auto payload_v2 = extract_enriched_op_log_payload(v2_log_seg);
-        ASSERT_TRUE(payload_v2.has_value());
-        EXPECT_EQ(payload_v2->new_index_key, v2_key);
-        ASSERT_TRUE(payload_v2->prev_index_key.has_value());
-        EXPECT_EQ(*payload_v2->prev_index_key, v1_key);
-        EXPECT_FALSE(payload_v2->compressed_index_bytes.empty());
-        EXPECT_EQ(payload_v2->newly_written_data_keys.size(), 1u);
-        EXPECT_TRUE(payload_v2->inline_data_segments.empty());
+        EXPECT_EQ(v2_log_seg.row_count(), 0u);
+        EXPECT_FALSE(extract_enriched_op_log_payload(v2_log_seg).has_value());
     }
 }
 
