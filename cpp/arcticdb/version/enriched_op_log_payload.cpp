@@ -446,14 +446,21 @@ std::optional<EnrichedOpLogPayload> extract_enriched_op_log_payload(const Segmen
 CapturedVersionWrite& WriteCaptureCache::get_or_create_locked(const CacheKey& key) {
     auto it = entries_.find(key);
     if (it != entries_.end()) {
-        return it->second;
+        lru_.splice(lru_.end(), lru_, it->second);
+        return it->second->second;
     }
-    while (entries_.size() >= kMaxCachedEntries && !insertion_order_.empty()) {
-        entries_.erase(insertion_order_.front());
-        insertion_order_.pop_front();
+    while (entries_.size() >= kMaxCachedEntries && !lru_.empty()) {
+        entries_.erase(lru_.front().first);
+        lru_.pop_front();
     }
-    insertion_order_.push_back(key);
-    return entries_.emplace(key, CapturedVersionWrite{}).first->second;
+    auto list_it = lru_.emplace(lru_.end(), key, CapturedVersionWrite{});
+    try {
+        entries_.emplace(key, list_it);
+    } catch (...) {
+        lru_.erase(list_it);
+        throw;
+    }
+    return list_it->second;
 }
 
 void WriteCaptureCache::record_data(const entity::AtomKey& key) {
@@ -466,6 +473,7 @@ void WriteCaptureCache::record_index(const entity::AtomKey& key, Segment& segmen
     const size_t max_index_bytes = enriched_op_log_max_index_bytes();
     const size_t seg_size = segment.calculate_size();
     if (max_index_bytes == 0 || seg_size > max_index_bytes) {
+        discard(key.id(), key.version_id());
         return;
     }
     auto serialized = serialize_segment_to_bytes(segment);
@@ -496,20 +504,35 @@ std::optional<CapturedVersionWrite> WriteCaptureCache::take(const StreamId& stre
     if (it == entries_.end()) {
         return std::nullopt;
     }
-    auto out = std::move(it->second);
+    auto out = std::move(it->second->second);
+    lru_.erase(it->second);
     entries_.erase(it);
     return out;
 }
 
 void WriteCaptureCache::discard(const StreamId& stream_id, entity::VersionId version_id) {
     std::lock_guard lock(mutex_);
-    entries_.erase(CacheKey{stream_id, version_id});
+    auto it = entries_.find(CacheKey{stream_id, version_id});
+    if (it != entries_.end()) {
+        lru_.erase(it->second);
+        entries_.erase(it);
+    }
 }
 
 void WriteCaptureCache::clear() {
     std::lock_guard lock(mutex_);
     entries_.clear();
-    insertion_order_.clear();
+    lru_.clear();
+}
+
+size_t WriteCaptureCache::size() const {
+    std::lock_guard lock(mutex_);
+    return entries_.size();
+}
+
+size_t WriteCaptureCache::order_size() const {
+    std::lock_guard lock(mutex_);
+    return lru_.size();
 }
 
 } // namespace arcticdb

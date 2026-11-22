@@ -8,8 +8,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <functional>
+#include <map>
 #include <mutex>
+#include <set>
 #include <stdexcept>
 
 #include <arcticdb/async/async_store.hpp>
@@ -24,6 +27,7 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/version/enriched_op_log_payload.hpp>
+#include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_map.hpp>
 
@@ -140,6 +144,59 @@ class RecordingInMemoryStore : public InMemoryStore {
     mutable std::mutex events_mutex_;
     std::vector<WriteEvent> write_events_;
     std::function<void(KeyType, const StreamId&, std::optional<VersionId>, std::optional<IndexValue>)> on_before_write_;
+};
+
+class FailingAsyncInMemoryStore : public InMemoryStore {
+  public:
+    using InMemoryStore::write;
+
+    folly::Future<pipelines::SliceAndKey> async_write(
+            folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
+            const std::shared_ptr<DeDupMap>&
+    ) override {
+        return std::move(input_fut).thenValue([this](auto&& input) {
+            auto [pk, seg, slice] = std::move(input);
+            const size_t call_idx = async_write_count_.fetch_add(1);
+            if (fail_on_async_write_index_.has_value() && call_idx == *fail_on_async_write_index_) {
+                throw std::runtime_error("injected async_write failure");
+            }
+            // Assign distinct content_hash per call so orphaned vs retried TABLE_DATA keys are distinguishable.
+            auto key = atom_key_builder()
+                               .gen_id(pk.version_id)
+                               .content_hash(0x1000 + call_idx)
+                               .creation_ts(PilotedClock::nanos_since_epoch())
+                               .start_index(pk.start_index)
+                               .end_index(pk.end_index)
+                               .build(pk.stream_id, pk.key_type);
+            add_segment(key, std::move(seg));
+            recorded_data_count_.fetch_add(1);
+            return pipelines::SliceAndKey{std::move(slice), std::move(key)};
+        });
+    }
+
+    folly::Future<VariantKey> write(
+            KeyType key_type, VersionId gen_id, const StreamId& stream_id, IndexValue start_index, IndexValue end_index,
+            SegmentInMemory&& segment
+    ) override {
+        if (fail_key_type_.has_value() && key_type == *fail_key_type_) {
+            throw std::runtime_error("injected sync/async key write failure");
+        }
+        return InMemoryStore::write(
+                key_type, gen_id, stream_id, std::move(start_index), std::move(end_index), std::move(segment)
+        );
+    }
+
+    void set_fail_on_async_write_index(std::optional<size_t> idx) { fail_on_async_write_index_ = idx; }
+    void set_fail_key_type(std::optional<KeyType> kt) { fail_key_type_ = kt; }
+    size_t recorded_data_count() const { return recorded_data_count_.load(); }
+    size_t captured_cache_size() const { return write_capture_cache()->size(); }
+    size_t captured_cache_order_size() const { return write_capture_cache()->order_size(); }
+
+  private:
+    std::atomic<size_t> async_write_count_{0};
+    std::atomic<size_t> recorded_data_count_{0};
+    std::optional<size_t> fail_on_async_write_index_;
+    std::optional<KeyType> fail_key_type_;
 };
 
 } // namespace
@@ -579,6 +636,314 @@ TEST(EnrichedOpLog, TombstoneFromKeyOrAllWritesVersionRefBeforeTombstoneAllLog) 
     for (const auto& ev : store->write_events()) {
         EXPECT_NE(ev.key_type, KeyType::LOG);
     }
+}
+
+TEST(EnrichedOpLog, WriteCaptureCacheEvictionFailedWriteRetryAndLargeBatchWrite) {
+    auto make_data_key = [](const std::string& sym, VersionId vid, uint64_t hash) {
+        return atom_key_builder()
+                .version_id(vid)
+                .creation_ts(static_cast<timestamp>(hash) * 100)
+                .content_hash(hash)
+                .start_index(0)
+                .end_index(10)
+                .build(sym, KeyType::TABLE_DATA);
+    };
+
+    // (a) 2,500 record_data + take cycles leave both map and LRU list empty (zero leak),
+    //     and reusing a previously taken (sym, v0) is never prematurely evicted.
+    {
+        WriteCaptureCache cache;
+        for (size_t i = 0; i < 2500; ++i) {
+            const std::string sym = "sym_cycle_" + std::to_string(i);
+            const auto dk = make_data_key(sym, 0, i + 1);
+            cache.record_data(dk);
+            auto taken = cache.take(sym, 0);
+            ASSERT_TRUE(taken.has_value());
+            ASSERT_EQ(taken->newly_written_data_keys.size(), 1u);
+            EXPECT_EQ(taken->newly_written_data_keys[0], dk);
+        }
+        EXPECT_EQ(cache.size(), 0u);
+        EXPECT_EQ(cache.order_size(), 0u);
+
+        // Verify discard() also erases from both structures in O(1).
+        for (size_t i = 0; i < 64; ++i) {
+            const std::string sym = "sym_discard_" + std::to_string(i);
+            cache.record_data(make_data_key(sym, 0, i + 10));
+            cache.discard(sym, 0);
+        }
+        EXPECT_EQ(cache.size(), 0u);
+        EXPECT_EQ(cache.order_size(), 0u);
+
+        // Verify reused (sym, v0) after take() is NOT prematurely evicted when cache reaches capacity.
+        const std::string reused_sym = "sym_reused";
+        cache.record_data(make_data_key(reused_sym, 0, 1));
+        ASSERT_TRUE(cache.take(reused_sym, 0).has_value());
+
+        for (size_t i = 0; i < WriteCaptureCache::kMaxCachedEntries - 1; ++i) {
+            cache.record_data(make_data_key("sym_fill_" + std::to_string(i), 0, 100 + i));
+        }
+        const auto fresh_dk = make_data_key(reused_sym, 0, 99999);
+        cache.record_data(fresh_dk);
+        EXPECT_EQ(cache.size(), WriteCaptureCache::kMaxCachedEntries);
+        EXPECT_EQ(cache.order_size(), WriteCaptureCache::kMaxCachedEntries);
+
+        // One more distinct symbol must evict sym_fill_0 (oldest live), NOT sym_reused (newest).
+        cache.record_data(make_data_key("sym_trigger_evict", 0, 88888));
+        EXPECT_EQ(cache.size(), WriteCaptureCache::kMaxCachedEntries);
+        EXPECT_EQ(cache.order_size(), WriteCaptureCache::kMaxCachedEntries);
+        EXPECT_FALSE(cache.take("sym_fill_0", 0).has_value());
+
+        auto reused_taken = cache.take(reused_sym, 0);
+        ASSERT_TRUE(reused_taken.has_value());
+        ASSERT_EQ(reused_taken->newly_written_data_keys.size(), 1u);
+        EXPECT_EQ(reused_taken->newly_written_data_keys[0], fresh_dk);
+        cache.clear();
+        EXPECT_EQ(cache.size(), 0u);
+        EXPECT_EQ(cache.order_size(), 0u);
+    }
+
+    // (b) Failed write leaves captured data keys -> RAII/error discard prevents contaminating retry at same (sym, v0).
+    {
+        ScopedConfig enriched_cfg({{kEnrichedOpLogConfigKey, 1}});
+        auto store = std::make_shared<FailingAsyncInMemoryStore>();
+        auto vm = std::make_shared<VersionMap>();
+        vm->set_log_changes(true);
+
+        // 1) Failure mid-write_frame (slice 0 succeeds & is captured, slice 1 throws).
+        const std::string sym = "sym_failed_write_retry";
+        auto fail_wrapper = get_test_simple_frame(sym, 20, 0);
+        store->set_fail_on_async_write_index(1);
+        EXPECT_THROW(
+                pipelines::write_frame(
+                        pipelines::IndexPartialKey{sym, 0},
+                        fail_wrapper.frame_,
+                        pipelines::FixedSlicer{127, 10},
+                        store
+                )
+                        .get(),
+                std::runtime_error
+        );
+        EXPECT_EQ(store->recorded_data_count(), 1u);
+        EXPECT_EQ(store->captured_cache_size(), 0u);
+        EXPECT_EQ(store->captured_cache_order_size(), 0u);
+
+        // Retry at the exact same (sym, v0) and commit via VersionMap.
+        store->set_fail_on_async_write_index(std::nullopt);
+        auto retry_wrapper = get_test_simple_frame(sym, 10, 0);
+        auto retry_key = pipelines::write_frame(
+                                 pipelines::IndexPartialKey{sym, 0},
+                                 retry_wrapper.frame_,
+                                 pipelines::FixedSlicer{127, 10},
+                                 store
+                         )
+                                 .get();
+        vm->write_version(store, retry_key, std::nullopt);
+
+        std::optional<AtomKey> log_key;
+        static_cast<Store&>(*store).iterate_type(KeyType::LOG, [&](VariantKey&& vk) {
+            auto k = to_atom(std::move(vk));
+            if (k.id() == StreamId{WriteVersionId} && k.start_index() == IndexValue{sym} && k.version_id() == 0u) {
+                log_key = std::move(k);
+            }
+        });
+        ASSERT_TRUE(log_key.has_value());
+        auto [_, log_seg] = store->read_sync(*log_key, storage::ReadKeyOpts{});
+        auto payload = extract_enriched_op_log_payload(log_seg);
+        ASSERT_TRUE(payload.has_value());
+        EXPECT_EQ(payload->new_index_key, retry_key);
+        ASSERT_EQ(payload->newly_written_data_keys.size(), 1u);
+        // Orphaned slice from the failed write had content_hash == 0x1000 and must NOT contaminate the retry.
+        EXPECT_NE(payload->newly_written_data_keys[0].content_hash(), 0x1000u);
+
+        auto restored_idx = deserialize_segment_from_bytes(payload->compressed_index_bytes);
+        ASSERT_TRUE(restored_idx.has_value());
+        auto decoded_idx = decode_segment(*restored_idx);
+        ASSERT_EQ(decoded_idx.row_count(), 1u);
+        EXPECT_EQ(payload->newly_written_data_keys[0], read_key_row(decoded_idx, 0));
+        EXPECT_EQ(store->captured_cache_size(), 0u);
+        EXPECT_EQ(store->captured_cache_order_size(), 0u);
+
+        // 2) Failure during LocalVersionedEngine commit (TABLE_DATA + TABLE_INDEX written, VERSION write throws).
+        auto lve_store = std::make_shared<FailingAsyncInMemoryStore>();
+        auto engine = version_store::LocalVersionedEngine::_test_init_from_store(lve_store, util::SysClock{});
+        engine._test_get_version_map()->set_log_changes(true);
+
+        const std::string lve_sym = "sym_lve_commit_fail_retry";
+        auto lve_fail_wrapper = get_test_simple_frame(lve_sym, 8, 0);
+        lve_store->set_fail_key_type(KeyType::VERSION);
+        EXPECT_THROW(
+                engine.write_versioned_dataframe_internal(lve_sym, lve_fail_wrapper.frame_, false, false, false),
+                std::runtime_error
+        );
+        EXPECT_EQ(lve_store->recorded_data_count(), 1u);
+        EXPECT_EQ(lve_store->captured_cache_size(), 0u);
+        EXPECT_EQ(lve_store->captured_cache_order_size(), 0u);
+
+        lve_store->set_fail_key_type(std::nullopt);
+        auto lve_retry_wrapper = get_test_simple_frame(lve_sym, 8, 0);
+        auto item = engine.write_versioned_dataframe_internal(lve_sym, lve_retry_wrapper.frame_, false, false, false);
+        EXPECT_EQ(item.key_.version_id(), 0u);
+        EXPECT_EQ(lve_store->captured_cache_size(), 0u);
+        EXPECT_EQ(lve_store->captured_cache_order_size(), 0u);
+
+        std::optional<AtomKey> lve_log_key;
+        static_cast<Store&>(*lve_store).iterate_type(KeyType::LOG, [&](VariantKey&& vk) {
+            auto k = to_atom(std::move(vk));
+            if (k.id() == StreamId{WriteVersionId} && k.start_index() == IndexValue{lve_sym} && k.version_id() == 0u) {
+                lve_log_key = std::move(k);
+            }
+        });
+        ASSERT_TRUE(lve_log_key.has_value());
+        auto [__, lve_log_seg] = lve_store->read_sync(*lve_log_key, storage::ReadKeyOpts{});
+        auto lve_payload = extract_enriched_op_log_payload(lve_log_seg);
+        ASSERT_TRUE(lve_payload.has_value());
+        ASSERT_EQ(lve_payload->newly_written_data_keys.size(), 1u);
+        EXPECT_NE(lve_payload->newly_written_data_keys[0].content_hash(), 0x1000u);
+    }
+
+    // (c) Large batch (> kMaxCachedEntries, e.g. 1,500 distinct symbols before take()) stays strictly bounded
+    //     at <= kMaxCachedEntries and degrades cleanly via std::nullopt fallback for evicted entries.
+    {
+        ScopedConfig enriched_cfg({{kEnrichedOpLogConfigKey, 1}});
+        WriteCaptureCache cache;
+        constexpr size_t kTotalSymbols = 1500;
+        constexpr size_t kEvictedCount = kTotalSymbols - WriteCaptureCache::kMaxCachedEntries;
+        auto idx_seg = make_encoded_test_segment("sym_batch", 2, EncodingVersion::V2);
+
+        for (size_t i = 0; i < kTotalSymbols; ++i) {
+            const std::string sym = "sym_batch_" + std::to_string(i);
+            const auto dk = make_data_key(sym, 0, 5000 + i);
+            const auto ik = atom_key_builder()
+                                    .version_id(0)
+                                    .creation_ts(static_cast<timestamp>(5000 + i) * 100)
+                                    .content_hash(9000 + i)
+                                    .start_index(0)
+                                    .end_index(10)
+                                    .build(sym, KeyType::TABLE_INDEX);
+            cache.record_data(dk);
+            cache.record_index(ik, idx_seg);
+            ASSERT_LE(cache.size(), WriteCaptureCache::kMaxCachedEntries);
+            ASSERT_LE(cache.order_size(), WriteCaptureCache::kMaxCachedEntries);
+            ASSERT_EQ(cache.size(), cache.order_size());
+        }
+        EXPECT_EQ(cache.size(), WriteCaptureCache::kMaxCachedEntries);
+        EXPECT_EQ(cache.order_size(), WriteCaptureCache::kMaxCachedEntries);
+
+        for (size_t i = 0; i < kEvictedCount; ++i) {
+            const std::string sym = "sym_batch_" + std::to_string(i);
+            EXPECT_FALSE(cache.take(sym, 0).has_value());
+        }
+        for (size_t i = kEvictedCount; i < kTotalSymbols; ++i) {
+            const std::string sym = "sym_batch_" + std::to_string(i);
+            auto taken = cache.take(sym, 0);
+            ASSERT_TRUE(taken.has_value());
+            ASSERT_TRUE(taken->index_key.has_value());
+            EXPECT_EQ(taken->index_key->id(), StreamId{sym});
+            ASSERT_EQ(taken->newly_written_data_keys.size(), 1u);
+            EXPECT_EQ(taken->newly_written_data_keys[0].content_hash(), 5000 + i);
+        }
+        EXPECT_EQ(cache.size(), 0u);
+        EXPECT_EQ(cache.order_size(), 0u);
+    }
+}
+
+TEST(EnrichedOpLog, InMemoryStoreMultiVersionEnrichedFastPathVersionIds) {
+    ScopedConfig enriched_cfg({{kEnrichedOpLogConfigKey, 1}});
+    auto store = std::make_shared<InMemoryStore>();
+    auto vm = std::make_shared<VersionMap>();
+    vm->set_log_changes(true);
+
+    const std::string sym = "sym_inmem_multiver";
+    std::vector<AtomKey> index_keys;
+    std::optional<AtomKey> prev_key;
+
+    for (VersionId vid = 0; vid < 3; ++vid) {
+        auto wrapper = get_test_simple_frame(sym, 16, static_cast<size_t>(vid) * 100);
+        auto idx_key = pipelines::write_frame(
+                               pipelines::IndexPartialKey{sym, vid}, wrapper.frame_, pipelines::FixedSlicer{}, store
+                       )
+                               .get();
+        EXPECT_EQ(idx_key.version_id(), vid);
+        vm->write_version(store, idx_key, prev_key);
+        index_keys.push_back(idx_key);
+        prev_key = idx_key;
+    }
+
+    // Verify TABLE_DATA keys in InMemoryStore carry the real version_id == 0, 1, 2 (never hardcoded 0).
+    std::set<VersionId> stored_data_versions;
+    static_cast<Store&>(*store).iterate_type(KeyType::TABLE_DATA, [&](VariantKey&& vk) {
+        auto k = to_atom(std::move(vk));
+        if (k.id() == StreamId{sym}) {
+            stored_data_versions.insert(k.version_id());
+        }
+    });
+    EXPECT_EQ(stored_data_versions, (std::set<VersionId>{0, 1, 2}));
+
+    // Verify all 3 emitted KeyType::LOG payloads are enriched, carry version_id 0/1/2, and decode cleanly.
+    std::map<VersionId, AtomKey> log_keys_by_version;
+    static_cast<Store&>(*store).iterate_type(KeyType::LOG, [&](VariantKey&& vk) {
+        auto k = to_atom(std::move(vk));
+        if (k.id() == StreamId{WriteVersionId} && k.start_index() == IndexValue{sym}) {
+            log_keys_by_version.emplace(k.version_id(), std::move(k));
+        }
+    });
+    ASSERT_EQ(log_keys_by_version.size(), 3u);
+
+    for (VersionId vid = 0; vid < 3; ++vid) {
+        ASSERT_TRUE(log_keys_by_version.contains(vid));
+        auto [_, log_seg] = store->read_sync(log_keys_by_version.at(vid), storage::ReadKeyOpts{});
+        auto payload = extract_enriched_op_log_payload(log_seg);
+        ASSERT_TRUE(payload.has_value()) << "Missing enriched payload for version " << vid;
+        EXPECT_EQ(payload->new_index_key, index_keys[vid]);
+        EXPECT_EQ(payload->new_index_key.version_id(), vid);
+        EXPECT_TRUE(payload->is_clean_chain_successor);
+        if (vid == 0) {
+            EXPECT_FALSE(payload->prev_index_key.has_value());
+        } else {
+            ASSERT_TRUE(payload->prev_index_key.has_value());
+            EXPECT_EQ(*payload->prev_index_key, index_keys[vid - 1]);
+        }
+
+        ASSERT_FALSE(payload->newly_written_data_keys.empty());
+        for (const auto& dk : payload->newly_written_data_keys) {
+            EXPECT_EQ(dk.type(), KeyType::TABLE_DATA);
+            EXPECT_EQ(dk.id(), StreamId{sym});
+            EXPECT_EQ(dk.version_id(), vid);
+        }
+
+        auto restored_idx = deserialize_segment_from_bytes(payload->compressed_index_bytes);
+        ASSERT_TRUE(restored_idx.has_value());
+        auto decoded_idx = decode_segment(*restored_idx);
+        ASSERT_GE(decoded_idx.row_count(), 1u);
+        for (size_t row = 0; row < decoded_idx.row_count(); ++row) {
+            const auto row_key = read_key_row(decoded_idx, static_cast<ssize_t>(row));
+            EXPECT_EQ(row_key.type(), KeyType::TABLE_DATA);
+            EXPECT_EQ(row_key.version_id(), vid);
+        }
+    }
+
+    // Also verify compress_and_schedule_async_write preserves pk.version_id (non-zero).
+    auto seg_desc = stream::stream_descriptor(
+            "sym_compress_async", stream::RowCountIndex(), {entity::scalar_field(entity::DataType::INT64, "val")}
+    );
+    SegmentInMemory seg{seg_desc};
+    seg.set_scalar(0, int64_t{42});
+    seg.end_row();
+    stream::PartialKey pk{
+            KeyType::TABLE_DATA,
+            7,
+            StreamId{"sym_compress_async"},
+            IndexValue{NumericIndex{0}},
+            IndexValue{NumericIndex{1}}
+    };
+    pipelines::FrameSlice slice{pipelines::ColRange{0, 1}, pipelines::RowRange{0, 1}};
+    auto sk = store->compress_and_schedule_async_write(
+                           std::make_tuple(std::move(pk), std::move(seg), std::move(slice)),
+                           std::make_shared<DeDupMap>()
+                   )
+                      .get();
+    EXPECT_EQ(sk.key().version_id(), 7u);
+    store->discard_captured_version_write("sym_compress_async", 7);
 }
 
 } // namespace arcticdb

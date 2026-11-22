@@ -22,6 +22,7 @@
 #include <arcticdb/util/format_date.hpp>
 
 #include <ankerl/unordered_dense.h>
+#include <folly/ScopeGuard.h>
 
 #include <vector>
 #include <array>
@@ -490,13 +491,28 @@ folly::Future<entity::AtomKey> write_frame(
         const std::shared_ptr<Store>& store, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
 ) {
     ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
+    const StreamId stream_id = key.id;
+    const VersionId version_id = key.version_id;
+    auto sync_guard = folly::makeGuard([&store, &stream_id, version_id]() {
+        store->discard_captured_version_write(stream_id, version_id);
+    });
     auto fut_slice_keys = slice_and_write(frame, slicing, IndexPartialKey{key}, store, de_dup_map, sparsify_floats);
     // Write the keys of the slices into an index segment
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
-    return std::move(fut_slice_keys)
-            .thenValue([frame = frame, key = std::move(key), &store](auto&& slice_keys) mutable {
-                return index::write_index(frame, std::forward<decltype(slice_keys)>(slice_keys), key, store);
-            });
+    auto out = std::move(fut_slice_keys)
+                       .thenValue([frame = frame, key = std::move(key), store](auto&& slice_keys) mutable {
+                           return index::write_index(frame, std::forward<decltype(slice_keys)>(slice_keys), key, store);
+                       })
+                       .thenError(
+                               [store, stream_id, version_id](
+                                       folly::exception_wrapper&& ew
+                               ) -> folly::Future<entity::AtomKey> {
+                                   store->discard_captured_version_write(stream_id, version_id);
+                                   return folly::makeFuture<entity::AtomKey>(std::move(ew));
+                               }
+                       );
+    sync_guard.dismiss();
+    return out;
 }
 
 folly::Future<AtomKey> append_frame(
@@ -505,25 +521,43 @@ folly::Future<AtomKey> append_frame(
         TimeseriesDescriptor&& merged_tsd
 ) {
     ARCTICDB_SAMPLE_DEFAULT(AppendFrame)
+    const StreamId stream_id = key.id;
+    const VersionId version_id = key.version_id;
+    auto sync_guard = folly::makeGuard([&store, &stream_id, version_id]() {
+        store->discard_captured_version_write(stream_id, version_id);
+    });
     auto existing_slices = unfiltered_index(index_segment_reader);
 
     auto keys_fut = slice_and_write(frame, slicing, IndexPartialKey{key}, store);
-    return std::move(keys_fut).thenValue([tsd = std::move(merged_tsd),
-                                          slices_to_write = std::move(existing_slices),
-                                          frame = frame,
-                                          index_segment_reader = std::move(index_segment_reader),
-                                          key = std::move(key),
-                                          store](auto&& slice_and_keys_to_append) mutable {
-        slices_to_write.insert(
-                std::end(slices_to_write),
-                std::make_move_iterator(std::begin(slice_and_keys_to_append)),
-                std::make_move_iterator(std::end(slice_and_keys_to_append))
-        );
-        ranges::sort(slices_to_write);
-        return index::write_index(
-                index_type_from_descriptor(tsd.as_stream_descriptor()), tsd, std::move(slices_to_write), key, store
-        );
-    });
+    auto out = std::move(keys_fut)
+                       .thenValue([tsd = std::move(merged_tsd),
+                                   slices_to_write = std::move(existing_slices),
+                                   frame = frame,
+                                   index_segment_reader = std::move(index_segment_reader),
+                                   key = std::move(key),
+                                   store](auto&& slice_and_keys_to_append) mutable {
+                           slices_to_write.insert(
+                                   std::end(slices_to_write),
+                                   std::make_move_iterator(std::begin(slice_and_keys_to_append)),
+                                   std::make_move_iterator(std::end(slice_and_keys_to_append))
+                           );
+                           ranges::sort(slices_to_write);
+                           return index::write_index(
+                                   index_type_from_descriptor(tsd.as_stream_descriptor()),
+                                   tsd,
+                                   std::move(slices_to_write),
+                                   key,
+                                   store
+                           );
+                       })
+                       .thenError(
+                               [store, stream_id, version_id](folly::exception_wrapper&& ew) -> folly::Future<AtomKey> {
+                                   store->discard_captured_version_write(stream_id, version_id);
+                                   return folly::makeFuture<AtomKey>(std::move(ew));
+                               }
+                       );
+    sync_guard.dismiss();
+    return out;
 }
 
 /// @brief Find the row range of affected rows during a partial rewrite (on update)

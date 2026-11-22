@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -107,6 +107,9 @@ class WriteCaptureCache {
     void discard(const StreamId& stream_id, entity::VersionId version_id);
     void clear();
 
+    [[nodiscard]] size_t size() const;
+    [[nodiscard]] size_t order_size() const;
+
   private:
     struct CacheKey {
         StreamId stream_id;
@@ -121,11 +124,13 @@ class WriteCaptureCache {
         }
     };
 
+    using EntryList = std::list<std::pair<CacheKey, CapturedVersionWrite>>;
+
     CapturedVersionWrite& get_or_create_locked(const CacheKey& key);
 
-    std::mutex mutex_;
-    std::unordered_map<CacheKey, CapturedVersionWrite, CacheKeyHash> entries_;
-    std::deque<CacheKey> insertion_order_;
+    mutable std::mutex mutex_;
+    EntryList lru_;
+    std::unordered_map<CacheKey, EntryList::iterator, CacheKeyHash> entries_;
 };
 
 } // namespace arcticdb

@@ -373,7 +373,7 @@ class InMemoryStore : public Store {
             override {
         return std::move(input_fut).thenValue([this](auto&& input) {
             auto [pk, seg, slice] = std::move(input);
-            auto key = get_key(pk.key_type, 0, pk.stream_id, pk.start_index, pk.end_index);
+            auto key = get_key(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index);
             add_segment(key, std::move(seg));
             return SliceAndKey{std::move(slice), std::move(key)};
         });
@@ -383,7 +383,7 @@ class InMemoryStore : public Store {
     compress_and_schedule_async_write(std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input, const std::shared_ptr<DeDupMap>&)
             override {
         auto [pk, seg, slice] = std::move(input);
-        auto key = get_key(pk.key_type, 0, pk.stream_id, pk.start_index, pk.end_index);
+        auto key = get_key(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index);
         add_segment(key, std::move(seg));
         return SliceAndKey{std::move(slice), std::move(key)};
     }
