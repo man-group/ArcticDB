@@ -53,6 +53,9 @@ void exchange_timeseries_proto(const SourceType& source, DestType& destination) 
 
     if (source.has_multi_key_meta())
         *destination.mutable_multi_key_meta() = source.multi_key_meta();
+
+    if (source.has_sequencer_state())
+        *destination.mutable_sequencer_state() = source.sequencer_state();
 }
 
 } // namespace arcticdb

@@ -20,6 +20,7 @@
 #include <mapped_file_storage.pb.h>
 #include <config.pb.h>
 #include <utils.pb.h>
+#include <sequencer.pb.h>
 
 namespace arcticdb::proto {
 
@@ -36,5 +37,6 @@ namespace azure_storage = arcticc::pb2::azure_storage_pb2;
 namespace config = arcticc::pb2::config_pb2;
 namespace nfs_backed_storage = arcticc::pb2::nfs_backed_storage_pb2;
 namespace utils = arcticc::pb2::utils_pb2;
+namespace sequencer = arcticc::pb2::sequencer_pb2;
 
 } // namespace arcticdb::proto

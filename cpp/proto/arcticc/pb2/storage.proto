@@ -89,6 +89,10 @@ message VersionStoreConfig {
        }
        bool snapshot_dedup = 17;
        bool compact_incomplete_dedup_rows = 18;
+       string sequencer_url = 60;
+       uint32 sequencer_inline_threshold_bytes = 61;
+       uint32 sequencer_conflict_policy = 62;
+       repeated string sequencer_conflict_key_columns = 63;
     }
 
     WriteOptions write_options = 1;

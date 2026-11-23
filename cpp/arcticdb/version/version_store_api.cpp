@@ -52,6 +52,11 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
 ) {
     query_stats::ApiOpScope api_scope(query_stats::ApiOp::Write, library_name());
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
+    if (has_commit_sequencer()) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "write_dataframe_specific_version is not supported on sequencer-enabled libraries"
+        );
+    }
 
     ARCTICDB_DEBUG(
             log::version(), "write_dataframe_specific_version stream_id: {} , version_id: {}", stream_id, version_id
@@ -748,6 +753,11 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     query_stats::ApiOpScope api_scope(query_stats::ApiOp::Write, library_name());
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
+    if (has_commit_sequencer()) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "write_versioned_composite_data (recursive normalizers) is not supported on sequencer-enabled libraries"
+        );
+    }
 
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(
             store(), version_map(), stream_id, cfg().write_options().de_duplication()
@@ -1236,6 +1246,11 @@ void PythonVersionStore::delete_version(const StreamId& stream_id, VersionId ver
 void PythonVersionStore::delete_versions(const StreamId& stream_id, const std::vector<VersionId>& version_ids) {
     query_stats::ApiOpScope api_scope(query_stats::ApiOp::Delete, library_name());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_versions");
+    if (has_commit_sequencer()) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "delete_version/delete_versions is not supported on sequencer-enabled libraries"
+        );
+    }
     if (version_ids.empty()) {
         log::version().info("No version ids passed for delete_versions for stream {}, skipping", stream_id);
         return;
@@ -1341,54 +1356,29 @@ void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) 
 
 void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
     query_stats::ApiOpScope api_scope(query_stats::ApiOp::PrunePreviousVersions, library_name());
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: prune_previous_versions stream_id={}", stream_id);
-    const std::shared_ptr<VersionMapEntry>& entry = version_map()->check_reload(
-            store(), stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
-    );
-    storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
-    auto [latest, deleted] = entry->get_first_index(false);
-    util::check(static_cast<bool>(latest), "Failed to find latest index");
-    auto prev_id = get_prev_version_in_entry(entry, latest->version_id());
-    if (!prev_id) {
-        ARCTICDB_DEBUG(log::version(), "No previous versions to prune for stream_id={}", stream_id);
-        return;
-    }
-
-    auto previous = ::arcticdb::get_specific_version(store(), version_map(), stream_id, *prev_id);
-    auto [_, pruned_indexes] = version_map()->tombstone_from_key_or_all(store(), stream_id, previous);
-    delete_unreferenced_pruned_indexes(std::move(pruned_indexes), *latest).get();
+    prune_previous_versions_internal(stream_id);
 }
 
 void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
     query_stats::ApiOpScope api_scope(query_stats::ApiOp::Delete, library_name());
     ARCTICDB_SAMPLE(DeleteAllVersions, 0)
-
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
+    if (has_commit_sequencer()) {
+        try {
+            delete_all_versions_internal(stream_id);
+        } catch (...) {
+            api_scope.mark_error();
+            throw;
+        }
+        return;
+    }
     try {
-        auto res = tombstone_all_async(store(), version_map(), stream_id).get();
-        auto version_id = res.latest_version_;
-        auto all_index_keys = res.keys_to_delete;
-
-        if (all_index_keys.empty()) {
-            log::version().warn("Nothing to delete for symbol '{}'", stream_id);
-            return;
-        }
-        if (cfg().symbol_list())
-            symbol_list().remove_symbol(store(), stream_id, version_id);
-
-        ARCTICDB_DEBUG(
-                log::version(),
-                "Version heads deleted for symbol {}. Proceeding with index keys total of {}",
-                stream_id,
-                all_index_keys.size()
-        );
-        if (!cfg().write_options().delayed_deletes()) {
-            delete_tree({all_index_keys.begin(), all_index_keys.end()});
-        } else {
-            ARCTICDB_DEBUG(log::version(), "Not deleting data for {}", stream_id);
-        }
-
-        ARCTICDB_DEBUG(log::version(), "Delete of Symbol {} successful", stream_id);
+        delete_all_versions_internal(stream_id);
+    } catch (const PermissionException&) {
+        api_scope.mark_error();
+        throw;
+    } catch (const QuotaExceededException&) {
+        api_scope.mark_error();
+        throw;
     } catch (const StorageException& ex) {
         api_scope.mark_error();
         log::version().error("Got storage exception in delete - possible parallel deletion?: {}", ex.what());
@@ -1396,6 +1386,38 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
         api_scope.mark_error();
         log::version().error("Got codec exception in delete - possible parallel deletion?: {}", ex.what());
     }
+}
+
+void PythonVersionStore::configure_commit_sequencer_py(
+        const std::string& endpoint, uint32_t inline_threshold_bytes, const std::string& conflict_policy,
+        const std::vector<std::string>& conflict_key_columns, uint32_t request_timeout_ms, uint32_t connect_timeout_ms,
+        uint32_t max_retries, uint32_t total_retry_budget_ms, const std::string& ca_cert_path,
+        const std::string& ca_cert_dir, const std::string& client_cert_path, const std::string& client_key_path,
+        bool verify_tls, const std::string& bearer_token, const std::string& bearer_token_file,
+        const std::string& auth_token_header, const std::vector<std::string>& allowed_redirect_hosts,
+        bool enable_http2, bool use_multiplexing
+) {
+    version::SequencerClientConfig cfg;
+    cfg.endpoint = endpoint;
+    cfg.inline_threshold_bytes = inline_threshold_bytes;
+    cfg.conflict_policy = version::conflict_policy_from_string(conflict_policy);
+    cfg.conflict_key_columns = conflict_key_columns;
+    cfg.request_timeout_ms = request_timeout_ms;
+    cfg.connect_timeout_ms = connect_timeout_ms;
+    cfg.max_retries = max_retries;
+    cfg.total_retry_budget_ms = total_retry_budget_ms;
+    cfg.ca_cert_path = ca_cert_path;
+    cfg.ca_cert_dir = ca_cert_dir;
+    cfg.client_cert_path = client_cert_path;
+    cfg.client_key_path = client_key_path;
+    cfg.verify_tls = verify_tls;
+    cfg.bearer_token = bearer_token;
+    cfg.bearer_token_file = bearer_token_file;
+    cfg.auth_token_header = auth_token_header;
+    cfg.allowed_redirect_hosts = allowed_redirect_hosts;
+    cfg.enable_http2 = enable_http2;
+    cfg.use_multiplexing = use_multiplexing;
+    LocalVersionedEngine::configure_commit_sequencer(std::move(cfg));
 }
 
 std::vector<timestamp> PythonVersionStore::get_update_times(
@@ -1598,6 +1620,11 @@ ReadResult read_dataframe_from_file(
 }
 
 void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
+    if (has_commit_sequencer()) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "force_delete_symbol is not supported on sequencer-enabled libraries"
+        );
+    }
     version_map()->delete_all_versions(store(), stream_id);
     delete_all_for_stream(store(), stream_id, true);
     version_map()->flush();

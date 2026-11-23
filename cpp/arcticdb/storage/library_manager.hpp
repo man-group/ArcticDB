@@ -23,8 +23,14 @@ enum class ModifiableLibraryOption {
     RECURSIVE_NORMALIZERS = 4,
     PRUNE_PREVIOUS_VERSIONS = 5
 };
-enum class ModifiableEnterpriseLibraryOption { REPLICATION = 1, BACKGROUND_DELETION = 2 };
-using LibraryOptionValue = std::variant<bool, int64_t>;
+enum class ModifiableEnterpriseLibraryOption {
+    REPLICATION = 1,
+    BACKGROUND_DELETION = 2,
+    SEQUENCER_URL = 3,
+    SEQUENCER_INLINE_THRESHOLD_BYTES = 4,
+    SEQUENCER_CONFLICT_POLICY = 5,
+};
+using LibraryOptionValue = std::variant<bool, int64_t, std::string>;
 
 struct UnknownLibraryOption : UserInputException {
     UnknownLibraryOption(std::string msg) : UserInputException(msg) {}
@@ -131,6 +137,12 @@ struct formatter<arcticdb::storage::ModifiableEnterpriseLibraryOption> {
             return fmt::format_to(ctx.out(), "REPLICATION");
         case arcticdb::storage::ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION:
             return fmt::format_to(ctx.out(), "BACKGROUND_DELETION");
+        case arcticdb::storage::ModifiableEnterpriseLibraryOption::SEQUENCER_URL:
+            return fmt::format_to(ctx.out(), "SEQUENCER_URL");
+        case arcticdb::storage::ModifiableEnterpriseLibraryOption::SEQUENCER_INLINE_THRESHOLD_BYTES:
+            return fmt::format_to(ctx.out(), "SEQUENCER_INLINE_THRESHOLD_BYTES");
+        case arcticdb::storage::ModifiableEnterpriseLibraryOption::SEQUENCER_CONFLICT_POLICY:
+            return fmt::format_to(ctx.out(), "SEQUENCER_CONFLICT_POLICY");
         default:
             arcticdb::util::raise_rte("Unrecognized modifiable option {}", int(o));
         }

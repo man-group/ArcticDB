@@ -36,6 +36,7 @@ endif()
 # Required to allow protobuf to use the correct version of absl:
 # https://github.com/protocolbuffers/protobuf/issues/12292#issuecomment-1529680040
 find_package(protobuf REQUIRED CONFIG)
+find_package(CURL CONFIG REQUIRED)
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 find_package(xxHash REQUIRED)
@@ -462,8 +463,10 @@ set(arcticdb_srcs
         util/type_traits.hpp
         util/variant.hpp
         version/admission_handler.hpp
+        version/commit_router.hpp
         version/de_dup_map.hpp
         version/enriched_op_log_payload.hpp
+        version/http_commit_router.hpp
         version/op_log.hpp
         version/merge_options.hpp
         version/schema_checks.hpp
@@ -637,6 +640,7 @@ set(arcticdb_srcs
         util/format_date.cpp
         version/admission_handler.cpp
         version/enriched_op_log_payload.cpp
+        version/http_commit_router.cpp
         version/key_block.hpp
         version/key_block.cpp
         version/local_versioned_engine.cpp
@@ -814,6 +818,7 @@ set (arcticdb_core_libraries
         ${standard_libraries}
         fmt::fmt
         protobuf::libprotobuf
+        CURL::libcurl
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
         ${ARCTICDB_MONGO_LIBS}
@@ -1228,6 +1233,7 @@ if(${TEST})
             version/test/test_admission_handler.cpp
             version/test/test_append.cpp
             version/test/test_enriched_op_log.cpp
+            version/test/test_sequencer_core_primitives.cpp
             version/test/test_key_block.cpp
             version/test/test_object_sizes.cpp
             version/test/test_sort_index.cpp

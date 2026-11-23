@@ -69,6 +69,7 @@
     },
     {
       "name": "curl",
+      "features": [ "http2" ],
       "version>=": "8.18.0",
       "$version reason": "Issues with libcurl==8.17.0 which need investigation"
     },

@@ -310,6 +310,20 @@ class PythonVersionStore : public LocalVersionedEngine {
             const bool prune_previous_versions
     );
 
+    void configure_commit_sequencer_py(
+            const std::string& endpoint, uint32_t inline_threshold_bytes = 65536,
+            const std::string& conflict_policy = "", const std::vector<std::string>& conflict_key_columns = {},
+            uint32_t request_timeout_ms = 30000, uint32_t connect_timeout_ms = 5000, uint32_t max_retries = 64,
+            uint32_t total_retry_budget_ms = 25000, const std::string& ca_cert_path = "",
+            const std::string& ca_cert_dir = "", const std::string& client_cert_path = "",
+            const std::string& client_key_path = "", bool verify_tls = true, const std::string& bearer_token = "",
+            const std::string& bearer_token_file = "", const std::string& auth_token_header = "Authorization",
+            const std::vector<std::string>& allowed_redirect_hosts = {}, bool enable_http2 = true,
+            bool use_multiplexing = true
+    );
+
+    [[nodiscard]] bool has_commit_sequencer() const noexcept { return commit_router() != nullptr; }
+
   private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };

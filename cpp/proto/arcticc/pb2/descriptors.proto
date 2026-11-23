@@ -351,6 +351,51 @@ message TimeSeriesDescriptor
     UserDefinedMetadata user_meta = 5;
     AtomKey next_key = 6;
     UserDefinedMetadata multi_key_meta = 7;
+    SequencerCommitState sequencer_state = 8;
+}
+
+message SequencerIdempotencyEntry
+{
+    bytes client_id = 1;
+    bytes request_id = 2;
+    uint64 committed_version = 3;
+    int64 committed_ts = 4;
+    AtomKey committed_version_key = 5;
+    AtomKey committed_index_key = 6;
+}
+
+message SequencerRangeHistoryEntry
+{
+    uint64 version_id = 1;
+    int64 min_ts = 2;
+    int64 max_ts = 3;
+    bool full_overwrite = 4;
+}
+
+message CompactVersionRecord
+{
+    uint64 version_id = 1;
+    int64 creation_ts = 2;
+    uint64 index_content_hash = 3;
+    uint64 version_content_hash = 4;
+}
+
+message CompactIdempotencyToken
+{
+    uint64 token = 1;
+    uint32 version_record_idx = 2;
+    uint32 client_id_idx = 3;
+}
+
+message SequencerCommitState
+{
+    repeated SequencerIdempotencyEntry idempotency_ring = 1;
+    uint64 sequencer_epoch = 2;
+    repeated SequencerRangeHistoryEntry recent_ranges = 3;
+    repeated CompactVersionRecord compact_versions = 4;
+    repeated CompactIdempotencyToken compact_idempotency = 5;
+    repeated string client_id_table = 6;
+    uint64 range_history_watermark_version = 7;
 }
 
 message FrameMetadata
@@ -359,6 +404,7 @@ message FrameMetadata
     UserDefinedMetadata user_meta = 2;
     AtomKey next_key = 3;
     UserDefinedMetadata multi_key_meta = 4;
+    SequencerCommitState sequencer_state = 5;
 }
 
 message SymbolListDescriptor

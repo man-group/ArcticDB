@@ -79,9 +79,16 @@ class TimedGilAcquire {
 
 class TimedGilRelease {
   public:
-    TimedGilRelease() { release_.emplace(); }
+    TimedGilRelease() {
+        if (Py_IsInitialized() && PyGILState_Check()) {
+            release_.emplace();
+        }
+    }
 
     ~TimedGilRelease() noexcept {
+        if (!release_.has_value()) {
+            return;
+        }
         if (!query_stats::is_active() || !Py_IsInitialized()) {
             release_.reset();
             return;

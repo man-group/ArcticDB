@@ -27,11 +27,75 @@
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/toolbox/query_stats.hpp>
+#include <arcticdb/version/http_commit_router.hpp>
+#include <arcticdb/version/enriched_op_log_payload.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/util/hash.hpp>
+#include <arcticdb/async/tasks.hpp>
 #include <pipeline/column_stats_filter.hpp>
 #include <folly/ScopeGuard.h>
 
+#include <limits>
+#include <random>
+
 namespace {
 using namespace arcticdb;
+
+std::string generate_sequencer_client_id() {
+    std::random_device rd;
+    std::mt19937_64 gen(
+            (static_cast<uint64_t>(rd()) << 32) ^
+            static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count())
+    );
+    return fmt::format("{:016x}{:016x}", gen(), gen());
+}
+
+uint64_t compute_idempotency_token(std::string_view client_id, std::string_view request_uuid) {
+    HashAccum h;
+    h(client_id.data(), client_id.size());
+    const char sep = '\0';
+    h(&sep, 1);
+    h(request_uuid.data(), request_uuid.size());
+    return h.digest();
+}
+
+uint64_t compute_salted_content_hash(uint64_t seg_hash, std::string_view request_uuid, uint64_t slice_idx) {
+    HashAccum h;
+    h(&seg_hash, 1);
+    h(request_uuid.data(), request_uuid.size());
+    h(&slice_idx, 1);
+    return h.digest();
+}
+
+void populate_date_range_filter(const pipelines::UpdateQuery& query, proto::sequencer::DateRangeFilter* out) {
+    if (!std::holds_alternative<IndexRange>(query.row_filter)) {
+        return;
+    }
+    const auto& ir = std::get<IndexRange>(query.row_filter);
+    if (!ir.specified_) {
+        return;
+    }
+    if (std::holds_alternative<NumericIndex>(ir.start_)) {
+        timestamp start_ns = std::get<NumericIndex>(ir.start_);
+        if (!ir.start_closed_ && start_ns < std::numeric_limits<timestamp>::max()) {
+            ++start_ns;
+        }
+        if (start_ns != std::numeric_limits<timestamp>::min()) {
+            out->set_has_start(true);
+            out->set_start_ns(start_ns);
+        }
+    }
+    if (std::holds_alternative<NumericIndex>(ir.end_)) {
+        timestamp end_ns = std::get<NumericIndex>(ir.end_);
+        if (!ir.end_closed_ && end_ns > std::numeric_limits<timestamp>::min()) {
+            --end_ns;
+        }
+        if (end_ns != std::numeric_limits<timestamp>::max()) {
+            out->set_has_end(true);
+            out->set_end_ns(end_ns);
+        }
+    }
+}
 
 std::string_view stream_id_for_stats(const StreamId& stream_id) noexcept {
     if (const auto* s = std::get_if<StringId>(&stream_id)) {
@@ -554,6 +618,11 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
         std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 ) {
     TimedGilRelease release_gil;
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "read_modify_write is not supported on sequencer-enabled libraries"
+        );
+    }
 
     std::optional<VersionedItem> source_version = get_version_to_read(source_stream, version_query);
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -738,6 +807,9 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
 VersionedItem LocalVersionedEngine::sort_index(
         const StreamId& stream_id, bool dynamic_schema, bool prune_previous_versions
 ) {
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>("sort_index is not supported on sequencer-enabled libraries");
+    }
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     util::check(update_info.previous_index_key_.has_value(), "Cannot sort_index a non-existent symbol {}", stream_id);
     auto [index_segment_reader, slice_and_keys] =
@@ -789,6 +861,16 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
         const StreamId& stream_id, const UpdateQuery& query, const DeleteRangeOptions& option
 ) {
     query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+    if (commit_router_) {
+        auto req = build_sequencer_request(stream_id, proto::sequencer::DELETE_RANGE);
+        req.set_dynamic_schema(option.dynamic_schema_);
+        req.set_prune_previous_versions(option.prune_previous_versions_);
+        if (std::holds_alternative<IndexRange>(query.row_filter) && std::get<IndexRange>(query.row_filter).specified_) {
+            populate_date_range_filter(query, req.mutable_date_range());
+        }
+        return submit_sequencer_commit(stream_id, req);
+    }
+    tls_next_base_version_id().reset();
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     auto capture_discard_guard =
             folly::makeGuard([store = store(), &stream_id, version_id = update_info.next_version_id_]() {
@@ -809,6 +891,19 @@ VersionedItem LocalVersionedEngine::update_internal(
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     TimedGilRelease release_gil;
     query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+    if (commit_router_) {
+        auto req = build_sequencer_request(stream_id, proto::sequencer::UPDATE);
+        req.set_upsert(upsert);
+        req.set_dynamic_schema(dynamic_schema || write_options_.dynamic_schema);
+        req.set_prune_previous_versions(prune_previous_versions);
+        req.set_validate_index(true);
+        if (std::holds_alternative<IndexRange>(query.row_filter) && std::get<IndexRange>(query.row_filter).specified_) {
+            populate_date_range_filter(query, req.mutable_date_range());
+        }
+        populate_sequencer_frame_payload(req, stream_id, frame, /*allow_preupload=*/true, /*allow_sparse=*/false);
+        return submit_sequencer_commit(stream_id, req);
+    }
+    tls_next_base_version_id().reset();
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     return async_update_internal(
                    stream_id, std::move(update_info), query, frame, upsert, dynamic_schema, prune_previous_versions
@@ -822,6 +917,13 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
 ) {
     TimedGilRelease release_gil;
     query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+    if (commit_router_) {
+        auto req = build_sequencer_request(stream_id, proto::sequencer::WRITE_METADATA);
+        req.set_prune_previous_versions(prune_previous_versions);
+        *req.mutable_user_metadata() = std::move(user_meta);
+        return submit_sequencer_commit(stream_id, req);
+    }
+    tls_next_base_version_id().reset();
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     return async_write_versioned_metadata_internal(
                    stream_id, std::move(update_info), std::move(user_meta), prune_previous_versions
@@ -835,6 +937,23 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "write_metadata");
+    if (commit_router_) {
+        std::vector<folly::Future<VersionedItem>> futs;
+        futs.reserve(stream_ids.size());
+        for (size_t idx = 0; idx < stream_ids.size(); ++idx) {
+            auto req = build_sequencer_request(stream_ids[idx], proto::sequencer::WRITE_METADATA);
+            req.set_prune_previous_versions(prune_previous_versions);
+            *req.mutable_user_metadata() = std::move(user_meta_protos[idx]);
+            futs.push_back(folly::via(&async::cpu_executor(), [this, stream_id = stream_ids[idx], req = std::move(req)]() {
+                query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+                return submit_sequencer_commit(stream_id, req);
+            }));
+        }
+        auto results = folly::collectAll(futs).get();
+        TransformBatchResultsFlags flags;
+        flags.throw_on_error_ = throw_on_error;
+        return transform_batch_items_or_throw(std::move(results), stream_ids, flags);
+    }
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -873,6 +992,16 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     TimedGilRelease release_gil;
     query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
+    if (commit_router_) {
+        auto req = build_sequencer_request(stream_id, proto::sequencer::WRITE);
+        req.set_prune_previous_versions(prune_previous_versions);
+        req.set_allow_sparse(allow_sparse);
+        req.set_validate_index(validate_index);
+        req.set_dynamic_schema(write_options_.dynamic_schema);
+        populate_sequencer_frame_payload(req, stream_id, frame, /*allow_preupload=*/true, allow_sparse);
+        return submit_sequencer_commit(stream_id, req);
+    }
+    tls_next_base_version_id().reset();
     // We don't need to load the latest live version unless dedup is enabled. If dedup is disabled, we only care about
     // the next version ID, which can save some IO traversing the version chain
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(
@@ -900,6 +1029,9 @@ VersionedItem LocalVersionedEngine::write_segment(
         const StreamId& stream_id, SegmentInMemory&& segment, bool prune_previous_versions, Slicing slicing
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>("write_segment is not supported on sequencer-enabled libraries");
+    }
     util::check(
             segment.descriptor().id() == stream_id,
             "Stream_id does not match the one in the SegmentInMemory. Stream_id was {}, but SegmentInMemory had {}",
@@ -1319,6 +1451,11 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incom
         const StreamId& stream_id, const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
         const CompactIncompleteParameters& parameters
 ) {
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "compact_incomplete_dynamic (finalize_staged_data) is not supported on sequencer-enabled libraries"
+        );
+    }
     log::version().debug("Compacting incomplete symbol {} with options {}", stream_id, parameters);
 
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
@@ -1377,6 +1514,9 @@ VersionedItem LocalVersionedEngine::compact_data_internal(
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
     TimedGilRelease release_gil;
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>("compact_data is not supported on sequencer-enabled libraries");
+    }
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     compact_data_checks(stream_id, update_info);
     return async_compact_data_internal(
@@ -1393,6 +1533,11 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: batch_compact_data");
     TimedGilRelease release_gil;
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "batch_compact_data is not supported on sequencer-enabled libraries"
+        );
+    }
     check_for_duplicated_symbols(stream_ids, "compact_data");
     auto update_info_futs =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
@@ -1433,6 +1578,11 @@ bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::
 VersionedItem LocalVersionedEngine::defragment_symbol_data(
         const StreamId& stream_id, std::optional<size_t> segment_size, bool prune_previous_versions
 ) {
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "defragment_symbol_data is not supported on sequencer-enabled libraries"
+        );
+    }
     log::version().info("Defragmenting data for symbol {}", stream_id);
 
     // Currently defragmentation only for latest version - is there a use-case to allow compaction for older data?
@@ -2051,6 +2201,33 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "write");
+    if (commit_router_) {
+        std::vector<folly::Future<VersionedItem>> futs;
+        futs.reserve(stream_ids.size());
+        for (size_t idx = 0; idx < stream_ids.size(); ++idx) {
+            futs.push_back(folly::via(
+                    &async::cpu_executor(),
+                    [this,
+                     stream_id = stream_ids[idx],
+                     frame = std::move(frames[idx]),
+                     prune_previous_versions,
+                     validate_index]() {
+                        query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+                        auto req = build_sequencer_request(stream_id, proto::sequencer::WRITE);
+                        req.set_prune_previous_versions(prune_previous_versions);
+                        req.set_allow_sparse(false);
+                        req.set_validate_index(validate_index);
+                        req.set_dynamic_schema(write_options_.dynamic_schema);
+                        populate_sequencer_frame_payload(req, stream_id, frame, /*allow_preupload=*/true, false);
+                        return submit_sequencer_commit(stream_id, req);
+                    }
+            ));
+        }
+        auto results = folly::collectAll(futs).get();
+        TransformBatchResultsFlags flags;
+        flags.throw_on_error_ = throw_on_error;
+        return transform_batch_items_or_throw(std::move(results), stream_ids, flags);
+    }
 
     auto update_info_futs = batch_get_next_version_id_and_optionally_latest_undeleted_version_async(
             store(), version_map(), stream_ids, write_options_.de_duplication
@@ -2093,6 +2270,32 @@ std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> Loca
 
     if (stream_ids.empty()) {
         return {};
+    }
+
+    if (commit_router_) {
+        for (const auto& vlist : version_ids) {
+            if (!vlist.empty()) {
+                internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                        "Deleting specific version_ids via batch_delete is not supported on sequencer-enabled libraries"
+                );
+            }
+        }
+        std::vector<folly::Future<version_store::TombstoneVersionResult>> futs;
+        futs.reserve(stream_ids.size());
+        for (size_t i = 0; i < stream_ids.size(); ++i) {
+            futs.push_back(folly::via(&async::cpu_executor(), [this, stream_id = stream_ids[i]]() {
+                query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+                auto req = build_sequencer_request(stream_id, proto::sequencer::DELETE_ALL_VERSIONS);
+                (void)submit_sequencer_commit(stream_id, req);
+                version_store::TombstoneVersionResult res(/*entry_already_scanned=*/true, stream_id);
+                res.no_undeleted_left = true;
+                return res;
+            }));
+        }
+        auto results = folly::collectAll(futs).get();
+        return transform_batch_items_or_throw<version_store::TombstoneVersionResult>(
+                std::move(results), stream_ids, TransformBatchResultsFlags{}
+        );
     }
 
     std::vector<std::unordered_set<VersionId>> version_sets;
@@ -2141,6 +2344,17 @@ VersionedItem LocalVersionedEngine::append_internal(
 ) {
     TimedGilRelease release_gil;
     query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+    if (commit_router_) {
+        auto req = build_sequencer_request(stream_id, proto::sequencer::APPEND);
+        req.set_upsert(append_options.upsert);
+        req.set_prune_previous_versions(append_options.prune_previous_versions);
+        req.set_validate_index(append_options.validate_index);
+        req.set_compact_data(append_options.compact_data);
+        req.set_dynamic_schema(write_options_.dynamic_schema);
+        populate_sequencer_frame_payload(req, stream_id, frame, /*allow_preupload=*/true, /*allow_sparse=*/false);
+        return submit_sequencer_commit(stream_id, req);
+    }
+    tls_next_base_version_id().reset();
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     return async_append_internal(stream_id, std::move(update_info), frame, append_options).get();
 }
@@ -2151,6 +2365,31 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "append");
+    if (commit_router_) {
+        std::vector<folly::Future<VersionedItem>> futs;
+        futs.reserve(stream_ids.size());
+        for (size_t idx = 0; idx < stream_ids.size(); ++idx) {
+            futs.push_back(folly::via(
+                    &async::cpu_executor(),
+                    [this, stream_id = stream_ids[idx], frame = std::move(frames[idx]), append_options]() {
+                        query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+                        auto req = build_sequencer_request(stream_id, proto::sequencer::APPEND);
+                        req.set_upsert(append_options.upsert);
+                        req.set_prune_previous_versions(append_options.prune_previous_versions);
+                        req.set_validate_index(append_options.validate_index);
+                        req.set_compact_data(append_options.compact_data);
+                        req.set_dynamic_schema(write_options_.dynamic_schema);
+                        populate_sequencer_frame_payload(req, stream_id, frame, /*allow_preupload=*/true, false);
+                        return submit_sequencer_commit(stream_id, req);
+                    }
+            ));
+        }
+        auto results = folly::collectAll(futs).get();
+        TransformBatchResultsFlags flags;
+        flags.throw_on_error_ = throw_on_error;
+        flags.convert_no_data_found_to_key_not_found_ = append_options.compact_data;
+        return transform_batch_items_or_throw(std::move(results), stream_ids, flags);
+    }
 
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
@@ -2186,6 +2425,36 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     TimedGilRelease release_gil;
     check_for_duplicated_symbols(stream_ids, "update");
+    if (commit_router_) {
+        std::vector<folly::Future<VersionedItem>> futs;
+        futs.reserve(stream_ids.size());
+        for (size_t idx = 0; idx < stream_ids.size(); ++idx) {
+            futs.push_back(folly::via(
+                    &async::cpu_executor(),
+                    [this,
+                     stream_id = stream_ids[idx],
+                     frame = std::move(frames[idx]),
+                     query = update_queries[idx],
+                     prune_previous_versions,
+                     upsert]() {
+                        query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+                        auto req = build_sequencer_request(stream_id, proto::sequencer::UPDATE);
+                        req.set_upsert(upsert);
+                        req.set_dynamic_schema(write_options_.dynamic_schema);
+                        req.set_prune_previous_versions(prune_previous_versions);
+                        req.set_validate_index(true);
+                        if (std::holds_alternative<IndexRange>(query.row_filter) &&
+                            std::get<IndexRange>(query.row_filter).specified_) {
+                            populate_date_range_filter(query, req.mutable_date_range());
+                        }
+                        populate_sequencer_frame_payload(req, stream_id, frame, /*allow_preupload=*/true, false);
+                        return submit_sequencer_commit(stream_id, req);
+                    }
+            ));
+        }
+        auto results = folly::collectAll(futs).get();
+        return transform_batch_items_or_throw(std::move(results), stream_ids, TransformBatchResultsFlags{});
+    }
 
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
@@ -2265,6 +2534,11 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
 std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine::batch_restore_version_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "restore_version/batch_restore_version is not supported on sequencer-enabled libraries"
+        );
+    }
     check_for_duplicated_symbols(stream_ids, "restore_version");
     auto previous = batch_get_latest_version_with_deletion_info(store(), version_map(), stream_ids, true);
     auto versions_to_restore =
@@ -2457,6 +2731,11 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::sort_merge_in
         const StreamId& stream_id, const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
         const CompactIncompleteParameters& parameters
 ) {
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "sort_merge (sort_and_finalize_staged_data) is not supported on sequencer-enabled libraries"
+        );
+    }
     log::version().debug("Sort merge for symbol {} with options {}", stream_id, parameters);
 
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
@@ -2503,6 +2782,11 @@ VersionedItem LocalVersionedEngine::rename_columns_arrow_compat_internal(
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: rename_columns_arrow_compat");
     TimedGilRelease release_gil;
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
+                "rename_columns_arrow_compat is not supported on sequencer-enabled libraries"
+        );
+    }
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             update_info.previous_index_key_.has_value(),
@@ -2542,6 +2826,367 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
             }
     );
     write_options_ = get_write_options();
+    if (!commit_router_ && library_name_ != "_arctic_cfg" && library_name_ != "arctic_cfg" &&
+        !cfg_.write_options().sequencer_url().empty()) {
+        version::SequencerClientConfig seq_cfg;
+        seq_cfg.endpoint = cfg_.write_options().sequencer_url();
+        if (cfg_.write_options().sequencer_inline_threshold_bytes() > 0) {
+            seq_cfg.inline_threshold_bytes = cfg_.write_options().sequencer_inline_threshold_bytes();
+        }
+        if (cfg_.write_options().sequencer_conflict_policy() != 0) {
+            seq_cfg.conflict_policy =
+                    static_cast<proto::sequencer::ConflictPolicy>(cfg_.write_options().sequencer_conflict_policy());
+        }
+        for (const auto& col : cfg_.write_options().sequencer_conflict_key_columns()) {
+            seq_cfg.conflict_key_columns.push_back(col);
+        }
+        configure_commit_sequencer(std::move(seq_cfg));
+    }
+}
+
+void LocalVersionedEngine::set_commit_router(
+        std::shared_ptr<version::CommitRouter> router, version::SequencerClientConfig config
+) {
+    commit_router_ = std::move(router);
+    sequencer_config_ = std::move(config);
+    if (sequencer_client_id_.empty()) {
+        sequencer_client_id_ = generate_sequencer_client_id();
+    }
+}
+
+void LocalVersionedEngine::configure_commit_sequencer(version::SequencerClientConfig config) {
+    if (config.endpoint.empty()) {
+        commit_router_.reset();
+        sequencer_config_ = {};
+        return;
+    }
+    if (commit_router_ && sequencer_config_ == config) {
+        return;
+    }
+    auto router = std::make_shared<version::HttpCommitRouter>(config);
+    set_commit_router(std::move(router), std::move(config));
+}
+
+void LocalVersionedEngine::inject_committed_version(
+        const StreamId& stream_id, const AtomKey& index_key, const AtomKey& version_key
+) {
+    version_map()->inject_latest_version(stream_id, index_key, version_key);
+}
+
+proto::sequencer::CommitRequest LocalVersionedEngine::build_sequencer_request(
+        const StreamId& stream_id, proto::sequencer::WriteOp op
+) {
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            std::holds_alternative<StringId>(stream_id), "Commit sequencer only supports string symbol IDs"
+    );
+    const std::string& client_id = sequencer_client_id_;
+
+    proto::sequencer::CommitRequest req;
+    req.set_library_name(library_name_);
+    req.set_symbol(std::get<StringId>(stream_id));
+    req.set_op(op);
+    req.set_client_id(client_id);
+    req.set_client_protocol_version(version::kSequencerProtocolVersion);
+    const uint64_t seq = ++(*sequencer_request_seq_);
+    const std::string request_uuid = fmt::format("{}-{}", client_id, seq);
+    req.set_request_uuid(request_uuid);
+    req.set_idempotency_token(compute_idempotency_token(client_id, request_uuid));
+
+    if (sequencer_config_.conflict_policy != proto::sequencer::CONFLICT_POLICY_UNSPECIFIED) {
+        req.set_conflict_policy(sequencer_config_.conflict_policy);
+    }
+    for (const auto& col : sequencer_config_.conflict_key_columns) {
+        req.add_conflict_key_columns(col);
+    }
+    auto& base_ver_slot = tls_next_base_version_id();
+    if (base_ver_slot.has_value()) {
+        req.set_has_base_version_id(true);
+        req.set_base_version_id(*base_ver_slot);
+        base_ver_slot.reset();
+    }
+    return req;
+}
+
+void LocalVersionedEngine::populate_sequencer_frame_payload(
+        proto::sequencer::CommitRequest& req, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
+        bool allow_preupload, bool allow_sparse
+) {
+    frame->desc().set_id(stream_id);
+    frame->bucketize_dynamic = write_options_.bucketize_dynamic;
+    copy_stream_descriptor_to_proto(frame->compute_desc_for_tsd(), *req.mutable_stream_descriptor());
+    *req.mutable_normalization() = frame->norm_meta;
+    *req.mutable_user_metadata() = frame->user_meta;
+    req.set_num_rows(frame->num_rows);
+    req.set_bucketize_dynamic(frame->bucketize_dynamic);
+    req.set_ignore_sort_order(write_options_.ignore_sort_order);
+    req.set_inferred_from_empty_frame(frame->empty());
+
+    if (frame->has_index() && !frame->empty() && std::holds_alternative<stream::TimeseriesIndex>(frame->index)) {
+        timestamp min_ts = frame->index_value_at(0);
+        timestamp max_ts = frame->index_value_at(frame->num_rows - 1);
+        if (frame->desc().sorted() != SortedValue::ASCENDING) {
+            min_ts = frame->index_value_at(0);
+            max_ts = min_ts;
+            for (size_t r = 1; r < frame->num_rows; ++r) {
+                const timestamp v = frame->index_value_at(r);
+                if (v < min_ts) min_ts = v;
+                if (v > max_ts) max_ts = v;
+            }
+        }
+        req.set_has_index_bounds(true);
+        req.set_first_index_ts(min_ts);
+        req.set_last_index_ts(max_ts);
+    }
+
+    if (frame->empty()) {
+        return;
+    }
+
+    const bool is_pickled = frame->norm_meta.has_msg_pack_frame();
+    const auto enc_ver = encoding_version(cfg_);
+    const auto codec = codec::default_lz4_codec();
+    const TypedStreamVersion tsv{stream_id, VersionId{0}, KeyType::TABLE_DATA};
+
+    auto slices = slice(*frame, get_slicing_policy(write_options_, *frame));
+    if (slices.empty()) {
+        return;
+    }
+
+    auto append_preuploaded_slice = [&](size_t slice_idx, PartialKey&& pk, Segment&& enc_seg, const FrameSlice& fs) {
+        const uint64_t seg_hash = get_segment_hash(enc_seg);
+        const uint64_t salted_hash = compute_salted_content_hash(seg_hash, req.request_uuid(), slice_idx);
+        const uint64_t payload_bytes = static_cast<uint64_t>(enc_seg.calculate_size());
+        AtomKey data_key = pk.build_key(store()->current_timestamp(), salted_hash);
+        store()->write_compressed_sync(storage::KeySegmentPair{data_key, std::move(enc_seg)});
+
+        auto* ps = req.mutable_preuploaded_slices()->add_slices();
+        *ps->mutable_data_key() = key_to_proto(data_key);
+        ps->set_row_start(fs.row_range.first);
+        ps->set_row_end(fs.row_range.second);
+        ps->set_col_start(fs.col_range.first);
+        ps->set_col_end(fs.col_range.second);
+        if (fs.hash_bucket().has_value()) {
+            ps->set_has_hash_bucket(true);
+            ps->set_hash_bucket(*fs.hash_bucket());
+            ps->set_num_buckets(fs.num_buckets().value_or(1));
+        }
+        ps->set_payload_bytes(payload_bytes);
+    };
+
+    constexpr uint64_t kMaxInlineBytes = 16ULL * 1024ULL * 1024ULL;
+    const uint64_t effective_inline_limit =
+            std::min<uint64_t>(sequencer_config_.inline_threshold_bytes, kMaxInlineBytes);
+
+    if (slices.size() == 1) {
+        auto [pk, seg, fs] = WriteToSegmentTask(frame, slices[0], tsv, allow_sparse)();
+        const uint64_t uncompressed_bytes = async::segment_in_memory_uncompressed_bytes(seg);
+        auto enc_seg = async::encode_dispatch_with_stats(std::move(seg), codec, enc_ver);
+        auto serialized_size = static_cast<uint64_t>(enc_seg.calculate_size());
+        const bool must_preupload_pickled = is_pickled && (serialized_size > kMaxInlineBytes || uncompressed_bytes > kMaxInlineBytes);
+        if (allow_preupload && ((!is_pickled && uncompressed_bytes > effective_inline_limit) || must_preupload_pickled)) {
+            append_preuploaded_slice(0, std::move(pk), std::move(enc_seg), fs);
+        } else {
+            auto bytes = serialize_segment_to_bytes(enc_seg);
+            auto* inline_pl = req.mutable_inline_payload();
+            inline_pl->set_serialized_segment(bytes.data(), bytes.size());
+            inline_pl->set_uncompressed_bytes(uncompressed_bytes);
+        }
+        return;
+    }
+
+    // Sequencer-only inline mode (up to 16 MiB): when tenant configures inline_threshold_bytes >= 1 MiB
+    // and the frame fits within a single column group (preserving multi-column-group layout), allow frames
+    // whose serialized payload fits under the threshold to travel inline without direct object-store PUT credentials.
+    const bool single_col_group =
+            (write_options_.column_group_size == 0) ||
+            (frame->desc().field_count() <= static_cast<size_t>(write_options_.column_group_size));
+    if (allow_preupload && !is_pickled && single_col_group &&
+        sequencer_config_.inline_threshold_bytes >= 1024U * 1024U) {
+        auto no_slices = slice(*frame, NoSlicing{});
+        auto [pk, seg, fs] = WriteToSegmentTask(frame, no_slices[0], tsv, allow_sparse)();
+        const uint64_t uncompressed_bytes = async::segment_in_memory_uncompressed_bytes(seg);
+        if (uncompressed_bytes <= effective_inline_limit) {
+            auto enc_seg = async::encode_dispatch_with_stats(std::move(seg), codec, enc_ver);
+            auto bytes = serialize_segment_to_bytes(enc_seg);
+            if (bytes.size() <= kMaxInlineBytes) {
+                auto* inline_pl = req.mutable_inline_payload();
+                inline_pl->set_serialized_segment(bytes.data(), bytes.size());
+                inline_pl->set_uncompressed_bytes(uncompressed_bytes);
+                return;
+            }
+        }
+    }
+
+    if (allow_preupload && !is_pickled) {
+        struct PreparedSlice {
+            AtomKey key;
+            FrameSlice fs;
+            uint64_t payload_bytes{0};
+        };
+        std::vector<folly::Future<PreparedSlice>> futs;
+        futs.reserve(slices.size());
+        for (size_t i = 0; i < slices.size(); ++i) {
+            auto fs_copy = slices[i];
+            futs.push_back(folly::via(
+                    &async::cpu_executor(),
+                    [this, frame, fs = std::move(fs_copy), tsv, allow_sparse, codec, enc_ver, uuid = req.request_uuid(), i]() mutable {
+                        auto task_res = WriteToSegmentTask(frame, fs, tsv, allow_sparse)();
+                        auto pk = std::move(std::get<0>(task_res));
+                        auto seg = std::move(std::get<1>(task_res));
+                        auto out_fs = std::move(std::get<2>(task_res));
+                        auto enc_seg = async::encode_dispatch_with_stats(std::move(seg), codec, enc_ver);
+                        const uint64_t seg_hash = get_segment_hash(enc_seg);
+                        const uint64_t salted_hash = compute_salted_content_hash(seg_hash, uuid, i);
+                        const uint64_t payload_bytes = static_cast<uint64_t>(enc_seg.calculate_size());
+                        AtomKey data_key = pk.build_key(store()->current_timestamp(), salted_hash);
+                        AtomKey key_for_result = data_key;
+                        return store()->write_compressed(storage::KeySegmentPair{std::move(data_key), std::move(enc_seg)})
+                                .thenValue([key_for_result = std::move(key_for_result),
+                                            out_fs = std::move(out_fs),
+                                            payload_bytes](folly::Unit) mutable {
+                                    return PreparedSlice{std::move(key_for_result), std::move(out_fs), payload_bytes};
+                                });
+                    }
+            ));
+        }
+        auto results = folly::collectAll(futs).get();
+        // Check for any partial upload failure first and best-effort clean up succeeded slices before throwing.
+        size_t first_err_idx = results.size();
+        for (size_t i = 0; i < results.size(); ++i) {
+            if (results[i].hasException()) {
+                first_err_idx = i;
+                break;
+            }
+        }
+        if (first_err_idx < results.size()) {
+            std::vector<VariantKey> uploaded_keys;
+            for (const auto& tr : results) {
+                if (tr.hasValue()) {
+                    uploaded_keys.emplace_back(tr.value().key);
+                }
+            }
+            if (!uploaded_keys.empty()) {
+                try {
+                    store()->remove_keys(std::move(uploaded_keys), storage::RemoveOpts{.ignores_missing_key_ = true})
+                            .get();
+                } catch (...) {
+                }
+            }
+            results[first_err_idx].throwUnlessValue();
+        }
+        for (auto& tr : results) {
+            auto prepared = std::move(tr).value();
+            auto* ps = req.mutable_preuploaded_slices()->add_slices();
+            *ps->mutable_data_key() = key_to_proto(prepared.key);
+            ps->set_row_start(prepared.fs.row_range.first);
+            ps->set_row_end(prepared.fs.row_range.second);
+            ps->set_col_start(prepared.fs.col_range.first);
+            ps->set_col_end(prepared.fs.col_range.second);
+            if (prepared.fs.hash_bucket().has_value()) {
+                ps->set_has_hash_bucket(true);
+                ps->set_hash_bucket(*prepared.fs.hash_bucket());
+                ps->set_num_buckets(prepared.fs.num_buckets().value_or(1));
+            }
+            ps->set_payload_bytes(prepared.payload_bytes);
+        }
+        return;
+    }
+
+    auto no_slices = slice(*frame, NoSlicing{});
+    auto [pk, seg, fs] = WriteToSegmentTask(frame, no_slices[0], tsv, allow_sparse)();
+    const uint64_t uncompressed_bytes = async::segment_in_memory_uncompressed_bytes(seg);
+    auto enc_seg = async::encode_dispatch_with_stats(std::move(seg), codec, enc_ver);
+    const uint64_t serialized_size = static_cast<uint64_t>(enc_seg.calculate_size());
+    if (allow_preupload && (serialized_size > kMaxInlineBytes || uncompressed_bytes > kMaxInlineBytes)) {
+        append_preuploaded_slice(0, std::move(pk), std::move(enc_seg), fs);
+        return;
+    }
+    auto bytes = serialize_segment_to_bytes(enc_seg);
+    auto* inline_pl = req.mutable_inline_payload();
+    inline_pl->set_serialized_segment(bytes.data(), bytes.size());
+    inline_pl->set_uncompressed_bytes(uncompressed_bytes);
+}
+
+VersionedItem LocalVersionedEngine::submit_sequencer_commit(
+        const StreamId& stream_id, const proto::sequencer::CommitRequest& req
+) {
+    auto resp = commit_router_->submit(req);
+    if (resp.status() != proto::sequencer::OK) {
+        version::throw_from_commit_response(resp);
+    }
+    if (req.op() == proto::sequencer::DELETE_ALL_VERSIONS ||
+        req.op() == proto::sequencer::PRUNE_PREVIOUS_VERSIONS) {
+        version_map()->invalidate(stream_id);
+        AtomKey index_key = resp.has_index_key() ? key_from_proto(resp.index_key()) : AtomKey{};
+        return VersionedItem{std::move(index_key)};
+    }
+    AtomKey index_key = resp.has_index_key() ? key_from_proto(resp.index_key()) : AtomKey{};
+    if (resp.has_index_key() && resp.has_version_key()) {
+        AtomKey version_key = key_from_proto(resp.version_key());
+        inject_committed_version(stream_id, index_key, version_key);
+    }
+    return VersionedItem{std::move(index_key)};
+}
+
+void LocalVersionedEngine::prune_previous_versions_internal(const StreamId& stream_id) {
+    TimedGilRelease release_gil;
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: prune_previous_versions stream_id={}", stream_id);
+    if (commit_router_) {
+        auto req = build_sequencer_request(stream_id, proto::sequencer::PRUNE_PREVIOUS_VERSIONS);
+        (void)submit_sequencer_commit(stream_id, req);
+        return;
+    }
+    const std::shared_ptr<VersionMapEntry>& entry = version_map()->check_reload(
+            store(), stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
+    );
+    storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
+    auto [latest, deleted] = entry->get_first_index(false);
+    util::check(static_cast<bool>(latest), "Failed to find latest index");
+    auto prev_id = get_prev_version_in_entry(entry, latest->version_id());
+    if (!prev_id) {
+        ARCTICDB_DEBUG(log::version(), "No previous versions to prune for stream_id={}", stream_id);
+        return;
+    }
+
+    auto previous = ::arcticdb::get_specific_version(store(), version_map(), stream_id, *prev_id);
+    auto [_, pruned_indexes] = version_map()->tombstone_from_key_or_all(store(), stream_id, previous);
+    delete_unreferenced_pruned_indexes(std::move(pruned_indexes), *latest).get();
+}
+
+void LocalVersionedEngine::delete_all_versions_internal(const StreamId& stream_id) {
+    TimedGilRelease release_gil;
+    query_stats::ContextTagScope stats_tag({}, stream_id_for_stats(stream_id));
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
+    if (commit_router_) {
+        auto req = build_sequencer_request(stream_id, proto::sequencer::DELETE_ALL_VERSIONS);
+        (void)submit_sequencer_commit(stream_id, req);
+        return;
+    }
+    auto res = tombstone_all_async(store(), version_map(), stream_id).get();
+    auto version_id = res.latest_version_;
+    auto all_index_keys = res.keys_to_delete;
+
+    if (all_index_keys.empty()) {
+        log::version().warn("Nothing to delete for symbol '{}'", stream_id);
+        return;
+    }
+    if (cfg().symbol_list())
+        symbol_list().remove_symbol(store(), stream_id, version_id);
+
+    ARCTICDB_DEBUG(
+            log::version(),
+            "Version heads deleted for symbol {}. Proceeding with index keys total of {}",
+            stream_id,
+            all_index_keys.size()
+    );
+    if (!cfg().write_options().delayed_deletes()) {
+        delete_tree({all_index_keys.begin(), all_index_keys.end()});
+    } else {
+        ARCTICDB_DEBUG(log::version(), "Not deleting data for {}", stream_id);
+    }
+
+    ARCTICDB_DEBUG(log::version(), "Delete of Symbol {} successful", stream_id);
 }
 
 timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
@@ -2682,6 +3327,9 @@ VersionedItem LocalVersionedEngine::merge_internal(
         const bool upsert, const MergeStrategy& strategy, std::vector<std::string>&& on
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: merge_update");
+    if (commit_router_) {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>("merge is not supported on sequencer-enabled libraries");
+    }
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
             index_is_not_timeseries_or_is_sorted_ascending(*source),
             "If the source data is timeseries indexed it must be sorted in ascending order."

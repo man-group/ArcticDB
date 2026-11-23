@@ -23,6 +23,9 @@
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/entity/data_error.hpp>
+#include <arcticdb/version/commit_router.hpp>
+
+#include <atomic>
 
 namespace arcticdb::version_store {
 
@@ -420,6 +423,21 @@ class LocalVersionedEngine : public VersionedEngine {
         return LocalVersionedEngine(store, clock);
     }
 
+    void set_commit_router(
+            std::shared_ptr<version::CommitRouter> router, version::SequencerClientConfig config = {}
+    );
+    void configure_commit_sequencer(version::SequencerClientConfig config);
+    [[nodiscard]] const std::shared_ptr<version::CommitRouter>& commit_router() const noexcept {
+        return commit_router_;
+    }
+    [[nodiscard]] const version::SequencerClientConfig& sequencer_config() const noexcept { return sequencer_config_; }
+    void set_next_base_version_id(std::optional<VersionId> base_version_id) noexcept {
+        tls_next_base_version_id() = base_version_id;
+    }
+    void inject_committed_version(const StreamId& stream_id, const AtomKey& index_key, const AtomKey& version_key);
+    void prune_previous_versions_internal(const StreamId& stream_id);
+    void delete_all_versions_internal(const StreamId& stream_id);
+
     const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
 
     VersionedItem merge_internal(
@@ -511,6 +529,20 @@ class LocalVersionedEngine : public VersionedEngine {
             const bool prune_previous_versions
     );
 
+    proto::sequencer::CommitRequest build_sequencer_request(
+            const StreamId& stream_id, proto::sequencer::WriteOp op
+    );
+    void populate_sequencer_frame_payload(
+            proto::sequencer::CommitRequest& req, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
+            bool allow_preupload, bool allow_sparse
+    );
+    VersionedItem submit_sequencer_commit(const StreamId& stream_id, const proto::sequencer::CommitRequest& req);
+
+    static std::optional<VersionId>& tls_next_base_version_id() noexcept {
+        thread_local std::optional<VersionId> slot;
+        return slot;
+    }
+
     std::shared_ptr<Store> store_;
     std::string library_name_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;
@@ -518,6 +550,10 @@ class LocalVersionedEngine : public VersionedEngine {
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
     std::optional<std::string> license_key_;
+    std::shared_ptr<version::CommitRouter> commit_router_;
+    version::SequencerClientConfig sequencer_config_;
+    std::string sequencer_client_id_;
+    std::shared_ptr<std::atomic<uint64_t>> sequencer_request_seq_ = std::make_shared<std::atomic<uint64_t>>(0);
 };
 
 } // namespace arcticdb::version_store

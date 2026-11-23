@@ -9,6 +9,10 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 
+#include <algorithm>
+#include <cctype>
+#include <sstream>
+
 namespace arcticdb::storage {
 
 namespace {
@@ -119,12 +123,6 @@ void LibraryManager::modify_library_option(
         const arcticdb::storage::LibraryPath& path,
         std::variant<ModifiableLibraryOption, ModifiableEnterpriseLibraryOption> option, LibraryOptionValue new_value
 ) const {
-    // We don't apply a storage override to keep modification backwards compatible.
-    // Before v3.0.0 we didn't use storage overrides and applying one when modifying options would break readers older
-    // than v3.0.0.
-    arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, std::nullopt);
-    auto mutable_write_options = config.mutable_lib_desc()->mutable_version()->mutable_write_options();
-
     auto get_bool = [&option](LibraryOptionValue value) {
         if (!std::holds_alternative<bool>(value)) {
             throw UnsupportedLibraryOptionValue(fmt::format(
@@ -141,46 +139,215 @@ void LibraryManager::modify_library_option(
         }
         return std::get<int64_t>(value);
     };
+    auto get_non_negative_int = [&option](LibraryOptionValue value, int64_t max_val) {
+        if (!std::holds_alternative<int64_t>(value) || std::get<int64_t>(value) < 0 ||
+            std::get<int64_t>(value) > max_val) {
+            throw UnsupportedLibraryOptionValue(fmt::format(
+                    "{} only supports int values in [0, {}] but received {}. Not changing library option.",
+                    option,
+                    max_val,
+                    value
+            ));
+        }
+        return std::get<int64_t>(value);
+    };
+    auto get_string = [&option](const LibraryOptionValue& value) -> const std::string& {
+        if (!std::holds_alternative<std::string>(value)) {
+            throw UnsupportedLibraryOptionValue(fmt::format(
+                    "{} only supports string values but received {}. Not changing library option.", option, value
+            ));
+        }
+        return std::get<std::string>(value);
+    };
+    auto trim = [](std::string s) {
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+            s.erase(s.begin());
+        }
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+            s.pop_back();
+        }
+        return s;
+    };
 
-    util::variant_match(
-            option,
-            [&](const ModifiableLibraryOption& option) {
-                switch (option) {
-                case ModifiableLibraryOption::DEDUP:
-                    mutable_write_options->set_de_duplication(get_bool(new_value));
-                    break;
-                case ModifiableLibraryOption::ROWS_PER_SEGMENT:
-                    mutable_write_options->set_segment_row_size(get_positive_int(new_value));
-                    break;
-                case ModifiableLibraryOption::COLUMNS_PER_SEGMENT:
-                    mutable_write_options->set_column_group_size(get_positive_int(new_value));
-                    break;
-                case ModifiableLibraryOption::RECURSIVE_NORMALIZERS:
-                    mutable_write_options->set_recursive_normalizers(get_bool(new_value));
-                    break;
-                case ModifiableLibraryOption::PRUNE_PREVIOUS_VERSIONS:
-                    mutable_write_options->set_prune_previous_version(get_bool(new_value));
-                    break;
-                default:
-                    throw UnsupportedLibraryOptionValue(fmt::format("Invalid library option: {}", option));
+    auto apply_option = [&](arcticdb::proto::storage::LibraryConfig& config) {
+        auto mutable_write_options = config.mutable_lib_desc()->mutable_version()->mutable_write_options();
+        util::variant_match(
+                option,
+                [&](const ModifiableLibraryOption& opt) {
+                    switch (opt) {
+                    case ModifiableLibraryOption::DEDUP:
+                        mutable_write_options->set_de_duplication(get_bool(new_value));
+                        break;
+                    case ModifiableLibraryOption::ROWS_PER_SEGMENT:
+                        mutable_write_options->set_segment_row_size(get_positive_int(new_value));
+                        break;
+                    case ModifiableLibraryOption::COLUMNS_PER_SEGMENT:
+                        mutable_write_options->set_column_group_size(get_positive_int(new_value));
+                        break;
+                    case ModifiableLibraryOption::RECURSIVE_NORMALIZERS:
+                        mutable_write_options->set_recursive_normalizers(get_bool(new_value));
+                        break;
+                    case ModifiableLibraryOption::PRUNE_PREVIOUS_VERSIONS:
+                        mutable_write_options->set_prune_previous_version(get_bool(new_value));
+                        break;
+                    default:
+                        throw UnsupportedLibraryOptionValue(fmt::format("Invalid library option: {}", opt));
+                    }
+                },
+                [&](const ModifiableEnterpriseLibraryOption& opt) {
+                    switch (opt) {
+                    case ModifiableEnterpriseLibraryOption::REPLICATION:
+                        mutable_write_options->mutable_sync_passive()->set_enabled(get_bool(new_value));
+                        break;
+                    case ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION:
+                        mutable_write_options->set_delayed_deletes(get_bool(new_value));
+                        break;
+                    case ModifiableEnterpriseLibraryOption::SEQUENCER_URL: {
+                        const std::string raw = trim(get_string(new_value));
+                        if (raw.empty()) {
+                            mutable_write_options->clear_sequencer_url();
+                            break;
+                        }
+                        std::stringstream ss(raw);
+                        std::string item;
+                        std::string normalized;
+                        while (std::getline(ss, item, ',')) {
+                            item = trim(std::move(item));
+                            if (item.empty()) {
+                                continue;
+                            }
+                            for (unsigned char ch : item) {
+                                if (ch <= 0x20 || ch == 0x7f) {
+                                    throw UnsupportedLibraryOptionValue(
+                                            "SEQUENCER_URL must not contain whitespace or control characters. Not changing library option."
+                                    );
+                                }
+                            }
+                            std::string lower_prefix = item.substr(0, std::min<size_t>(item.size(), 8));
+                            std::transform(lower_prefix.begin(), lower_prefix.end(), lower_prefix.begin(),
+                                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                            size_t scheme_len = 0;
+                            if (lower_prefix.starts_with("https://")) {
+                                scheme_len = 8;
+                                item.replace(0, 8, "https://");
+                            } else if (lower_prefix.starts_with("http://")) {
+                                scheme_len = 7;
+                                item.replace(0, 7, "http://");
+                            } else {
+                                throw UnsupportedLibraryOptionValue(
+                                        "SEQUENCER_URL entries must start with http:// or https://. Not changing library option."
+                                );
+                            }
+                            const std::string rest = item.substr(scheme_len);
+                            if (rest.empty() || rest.find('@') != std::string::npos ||
+                                rest.find('?') != std::string::npos || rest.find('#') != std::string::npos ||
+                                rest.find('\\') != std::string::npos) {
+                                throw UnsupportedLibraryOptionValue(
+                                        "SEQUENCER_URL entries must not contain userinfo, query strings, fragments, or backslashes. Not changing library option."
+                                );
+                            }
+                            const size_t slash_pos = rest.find('/');
+                            const std::string authority =
+                                    (slash_pos == std::string::npos) ? rest : rest.substr(0, slash_pos);
+                            if (authority.empty()) {
+                                throw UnsupportedLibraryOptionValue(
+                                        "SEQUENCER_URL entry missing host. Not changing library option."
+                                );
+                            }
+                            if (!normalized.empty()) {
+                                normalized.push_back(',');
+                            }
+                            normalized += item;
+                        }
+                        if (normalized.empty()) {
+                            throw UnsupportedLibraryOptionValue(
+                                    "SEQUENCER_URL must contain at least one valid http:// or https:// endpoint (or be empty to clear). Not changing library option."
+                            );
+                        }
+                        mutable_write_options->set_sequencer_url(normalized);
+                        break;
+                    }
+                    case ModifiableEnterpriseLibraryOption::SEQUENCER_INLINE_THRESHOLD_BYTES: {
+                        constexpr int64_t kMaxInlineBytes = 16LL * 1024LL * 1024LL;
+                        const int64_t v = get_non_negative_int(new_value, kMaxInlineBytes);
+                        mutable_write_options->set_sequencer_inline_threshold_bytes(static_cast<uint32_t>(v));
+                        break;
+                    }
+                    case ModifiableEnterpriseLibraryOption::SEQUENCER_CONFLICT_POLICY: {
+                        std::string pol = trim(get_string(new_value));
+                        std::transform(pol.begin(), pol.end(), pol.begin(), [](unsigned char c) {
+                            return static_cast<char>(std::tolower(c));
+                        });
+                        if (pol.empty() || pol == "unspecified" || pol == "conflict_policy_unspecified") {
+                            mutable_write_options->set_sequencer_conflict_policy(0);
+                        } else if (pol == "strict_append" || pol == "strict") {
+                            mutable_write_options->set_sequencer_conflict_policy(1);
+                        } else if (pol == "reject" || pol == "overlap_fail") {
+                            mutable_write_options->set_sequencer_conflict_policy(2);
+                        } else if (pol == "overwrite_lww" || pol == "lww" || pol == "overwrite") {
+                            mutable_write_options->set_sequencer_conflict_policy(3);
+                        } else if (pol == "keep_both") {
+                            mutable_write_options->set_sequencer_conflict_policy(4);
+                        } else {
+                            throw UnsupportedLibraryOptionValue(fmt::format(
+                                    "SEQUENCER_CONFLICT_POLICY must be one of '', 'strict_append', 'reject', "
+                                    "'overwrite_lww', 'keep_both' (got '{}'). Not changing library option.",
+                                    pol
+                            ));
+                        }
+                        break;
+                    }
+                    default:
+                        throw UnsupportedLibraryOptionValue(fmt::format("Invalid library option: {}", opt));
+                    }
                 }
-            },
-            [&](const ModifiableEnterpriseLibraryOption& option) {
-                switch (option) {
-                case ModifiableEnterpriseLibraryOption::REPLICATION:
-                    mutable_write_options->mutable_sync_passive()->set_enabled(get_bool(new_value));
-                    break;
-                case ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION:
-                    mutable_write_options->set_delayed_deletes(get_bool(new_value));
-                    break;
-                default:
-                    throw UnsupportedLibraryOptionValue(fmt::format("Invalid library option: {}", option));
+        );
+    };
+
+    const bool use_cas = store_->supports_cas_writes();
+    constexpr int kMaxCasRetries = 5;
+    for (int attempt = 0; attempt < (use_cas ? kMaxCasRetries : 1); ++attempt) {
+        // We don't apply a storage override to keep modification backwards compatible.
+        arcticdb::proto::storage::LibraryConfig config;
+        std::optional<std::string> etag;
+        if (use_cas) {
+            auto [key, segment_in_memory, read_etag] =
+                    store_->read_with_etag_sync(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG});
+            (void)key;
+            auto any = segment_in_memory.metadata();
+            any->UnpackTo(&config);
+            etag = std::move(read_etag);
+        } else {
+            config = get_config_internal(path, std::nullopt);
+        }
+
+        apply_option(config);
+
+        if (use_cas && etag.has_value()) {
+            SegmentInMemory segment;
+            segment.descriptor().set_index({IndexDescriptor::Type::ROWCOUNT, 0UL});
+            google::protobuf::Any output = {};
+            output.PackFrom(config);
+            segment.set_metadata(std::move(output));
+            auto library_name = path.to_delim_path();
+            verify_library_path_on_write(store_.get(), library_name);
+            try {
+                (void)store_->write_if_match_sync(
+                        entity::KeyType::LIBRARY_CONFIG, StreamId(library_name), std::move(segment), *etag
+                );
+                return;
+            } catch (const AtomicOperationFailedException&) {
+                if (attempt + 1 >= kMaxCasRetries) {
+                    throw;
                 }
+                continue;
             }
-    );
-
-    // We use validate=false because we don't want to validate old pre v3.0.0 configs
-    write_library_config_internal(config, path, false);
+        } else {
+            // We use validate=false because we don't want to validate old pre v3.0.0 configs
+            write_library_config_internal(config, path, false);
+            return;
+        }
+    }
 }
 
 py::object LibraryManager::get_library_config(const LibraryPath& path, const StorageOverride& storage_override) const {

@@ -1,0 +1,231 @@
+/*
+Copyright 2026 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+will be governed by the Apache License, version 2.0.
+*/
+syntax = "proto3";
+
+package arcticc.pb2.sequencer_pb2;
+
+option cc_enable_arenas = true;
+
+import "arcticc/pb2/descriptors.proto";
+
+enum WriteOp {
+    WRITE_OP_UNSPECIFIED = 0;
+    APPEND = 1;
+    WRITE = 2;
+    UPDATE = 3;
+    DELETE_RANGE = 4;
+    PRUNE_PREVIOUS_VERSIONS = 5;
+    WRITE_METADATA = 6;
+    DELETE_ALL_VERSIONS = 7;
+}
+
+enum ConflictPolicy {
+    CONFLICT_POLICY_UNSPECIFIED = 0;
+    STRICT_APPEND = 1;
+    REJECT = 2;
+    OVERWRITE_LWW = 3;
+    KEEP_BOTH = 4;
+}
+
+enum CommitStatus {
+    COMMIT_STATUS_UNSPECIFIED = 0;
+    OK = 1;
+    SCHEMA_MISMATCH = 2;
+    UNSORTED_INDEX = 3;
+    NO_SUCH_VERSION = 4;
+    INVALID_ARGUMENT = 5;
+    FENCED_REDIRECT = 6;
+    OVERLOADED = 7;
+    INTERNAL_ERROR = 8;
+    DATA_CONFLICT = 9;
+    SLICE_CONFLICT = 10;
+    NOT_LEADER = 11;
+    SHARD_DRAINING = 12;
+    UNAUTHENTICATED = 13;
+    PERMISSION_DENIED = 14;
+    QUOTA_EXCEEDED = 15;
+    PAYLOAD_TOO_LARGE = 16;
+}
+
+message PreUploadedSlice {
+    arcticc.pb2.descriptors_pb2.AtomKey data_key = 1;
+    uint64 row_start = 2;
+    uint64 row_end = 3;
+    uint64 col_start = 4;
+    uint64 col_end = 5;
+    bool has_hash_bucket = 6;
+    uint64 hash_bucket = 7;
+    uint64 num_buckets = 8;
+    uint64 payload_bytes = 9;
+}
+
+message PreUploadedSliceList {
+    repeated PreUploadedSlice slices = 1;
+}
+
+message InlineSegmentPayload {
+    bytes serialized_segment = 1;
+    uint64 uncompressed_bytes = 2;
+}
+
+message DateRangeFilter {
+    bool has_start = 1;
+    int64 start_ns = 2;
+    bool has_end = 3;
+    int64 end_ns = 4;
+}
+
+message CommitRequest {
+    string library_name = 1;
+    string symbol = 2;
+    WriteOp op = 3;
+    string client_id = 4;
+    string request_uuid = 5;
+    uint64 idempotency_token = 6;
+    oneof payload {
+        InlineSegmentPayload inline_payload = 7;
+        PreUploadedSliceList preuploaded_slices = 8;
+    }
+    arcticc.pb2.descriptors_pb2.StreamDescriptor stream_descriptor = 9;
+    arcticc.pb2.descriptors_pb2.NormalizationMetadata normalization = 10;
+    arcticc.pb2.descriptors_pb2.UserDefinedMetadata user_metadata = 12;
+    uint64 num_rows = 13;
+    bool bucketize_dynamic = 14;
+    bool inferred_from_empty_frame = 15;
+    bool has_index_bounds = 16;
+    int64 first_index_ts = 17;
+    int64 last_index_ts = 18;
+    bool upsert = 19;
+    bool prune_previous_versions = 20;
+    bool validate_index = 21;
+    bool dynamic_schema = 22;
+    bool compact_data = 23;
+    bool allow_sparse = 24;
+    bool ignore_sort_order = 25;
+    DateRangeFilter date_range = 26;
+    uint64 expected_epoch = 27;
+    bool has_base_version_id = 28;
+    uint64 base_version_id = 29;
+    ConflictPolicy conflict_policy = 30;
+    repeated string conflict_key_columns = 31;
+    bool allow_overlap_merge = 32;
+    uint32 client_protocol_version = 33;
+    uint64 client_topology_version = 34;
+}
+
+message CommitResponse {
+    CommitStatus status = 1;
+    uint64 version_id = 2;
+    arcticc.pb2.descriptors_pb2.AtomKey version_key = 3;
+    arcticc.pb2.descriptors_pb2.AtomKey index_key = 4;
+    int64 creation_ts = 5;
+    bool deduplicated = 6;
+    uint32 coalesced_batch_size = 7;
+    string redirect_endpoint = 8;
+    uint64 leader_epoch = 9;
+    int32 arctic_error_code = 10;
+    string error_message = 11;
+    bool has_conflict_timestamp = 12;
+    int64 conflict_timestamp_ns = 13;
+    bool has_conflicting_version_id = 14;
+    uint64 conflicting_version_id = 15;
+    string leader_hint = 16;
+    uint64 topology_version = 17;
+    uint32 shard_id = 18;
+    uint32 retry_after_ms = 19;
+    bool topology_stale = 20;
+    string error_id = 21;
+}
+
+message HealthResponse {
+    bool healthy = 1;
+    string fencing_mode = 2;
+    uint64 leader_epoch = 3;
+    uint64 lease_remaining_ms = 4;
+    uint64 commits_total = 5;
+    uint64 requests_total = 6;
+    uint64 partial_rejections_total = 7;
+    uint64 cas_retries_total = 8;
+    uint64 conflict_rejections_total = 9;
+    uint64 overlap_merges_total = 10;
+    string node_id = 11;
+    string role = 12;
+    uint64 topology_version = 13;
+    uint32 owned_shards_count = 14;
+    bool ready = 15;
+}
+
+message OrphanGcRequest {
+    string library_name = 1;
+    bool dry_run = 2;
+    uint64 grace_period_ms = 3;
+    string symbol_regex = 4;
+}
+
+message OrphanGcResponse {
+    uint64 data_keys_scanned = 1;
+    uint64 candidates_past_grace = 2;
+    uint64 protected_live_or_snapshot = 3;
+    uint64 orphans_deleted = 4;
+    uint64 index_keys_deleted = 5;
+    uint64 version_keys_deleted = 6;
+    bool aborted_fail_closed = 7;
+}
+
+enum ShardState {
+    SHARD_STATE_UNSPECIFIED = 0;
+    SHARD_ACTIVE = 1;
+    SHARD_DRAINING_STATE = 2;
+    SHARD_ACTIVATING = 3;
+    SHARD_OFFLINE = 4;
+}
+
+enum MemberState {
+    MEMBER_STATE_UNSPECIFIED = 0;
+    MEMBER_ALIVE = 1;
+    MEMBER_DRAINING = 2;
+    MEMBER_SUSPECT = 3;
+    MEMBER_DEAD = 4;
+}
+
+message ClusterMember {
+    string node_id = 1;
+    string endpoint = 2;
+    MemberState state = 3;
+    int64 lease_expires_at_ms = 4;
+    string zone = 5;
+    uint32 capacity_weight = 6;
+    uint32 protocol_version = 7;
+}
+
+message ShardAssignment {
+    uint32 shard_id = 1;
+    string owner_node_id = 2;
+    string standby_node_id = 3;
+    uint64 shard_epoch = 4;
+    ShardState state = 5;
+}
+
+message ClusterTopology {
+    uint64 topology_version = 1;
+    string ha_mode = 2;
+    uint32 num_virtual_shards = 3;
+    string hash_function = 4;
+    int64 generated_at_ms = 5;
+    repeated ClusterMember members = 6;
+    repeated ShardAssignment assignments = 7;
+    string active_leader_node_id = 8;
+    uint64 cluster_epoch = 9;
+}
+
+message TopologyResponse {
+    ClusterTopology topology = 1;
+    string responder_node_id = 2;
+    uint32 server_protocol_version = 3;
+}
