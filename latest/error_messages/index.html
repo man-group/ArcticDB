@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.3/error_messages/">
+        <link rel="canonical" href="https://docs.arcticdb.io/7.0.0/error_messages/">
       
       
         <link rel="prev" href="../runtime_config/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -2124,6 +2124,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_write_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Write Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../notebooks/ArcticDB_merge/" class="md-nav__link">
         
   
@@ -2571,24 +2599,9 @@ what they mean, and what (if anything) can be done to resolve the issue.</p>
 </thead>
 <tbody>
 <tr>
-<td>2000</td>
-<td>Attempting to update or append an existing type with an incompatible object type</td>
-<td>NumPy arrays or Pandas DataFrames can only be mutated by a matching type. Read the latest version of the symbol and update/append with the corresponding type.</td>
-</tr>
-<tr>
 <td>2001</td>
 <td>Input type cannot be converted to an ArcticDB type.</td>
 <td>Please ensure all input types match supported <a href="https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/version_store/library.py#L25">ArcticDB types</a>.</td>
-</tr>
-<tr>
-<td>2003</td>
-<td>A write of an incompatible index type has been attempted.</td>
-<td>ArcticDB only supports defined Pandas index types. Please see the documentation for more information on what types are supported.</td>
-</tr>
-<tr>
-<td>2004</td>
-<td>A NumPy append is attempting to change the shape of the previous version.</td>
-<td>When storing NumPy arrays, append operations must have the same shape as the previous version.</td>
 </tr>
 </tbody>
 </table>
@@ -2648,6 +2661,26 @@ what they mean, and what (if anything) can be done to resolve the issue.</p>
 <td>4004</td>
 <td>The requested operation is not supported with pickled data.</td>
 <td>Certain operations are not supported with pickled data e.g. <code>date_range</code> filtering. If such operations are required, you must ensure that the data is of a normalizable type, such that it can be written using the <code>write</code> method, and does not require the <code>write_pickle</code> method.</td>
+</tr>
+<tr>
+<td>4007</td>
+<td>Attempting to update or append an existing type with an incompatible object type</td>
+<td>NumPy arrays or Pandas DataFrames can only be mutated by a matching type. Read the latest version of the symbol and update/append with the corresponding type.</td>
+</tr>
+<tr>
+<td>4008</td>
+<td>An update was attempted on a NumPy array.</td>
+<td>NumPy arrays do not support <code>update</code>. Use <code>write</code> or <code>append</code> instead.</td>
+</tr>
+<tr>
+<td>4009</td>
+<td>An <code>append</code> or <code>update</code> was attempted with data whose index is incompatible with the existing version's index. For example, appending a <code>RangeIndex</code> frame to a <code>DatetimeIndex</code> symbol, mixing multi-indexed and single-indexed data, a different number of index levels, a <code>RangeIndex</code> whose step differs or whose start does not continue from the existing stop, or an <code>update</code> where either side lacks a timeseries index. <code>concat</code> and <code>finalize_staged_data</code> raise it for the same mismatches.</td>
+<td>Make the index of the new data match the existing version: the same index type and number of levels, and for a <code>RangeIndex</code> the same step and a start equal to the existing stop (a start of 0 with step 1 is also accepted). <code>update</code> requires a <code>DatetimeIndex</code> on both sides. To change the index type, <code>write</code> a new version instead.</td>
+</tr>
+<tr>
+<td>4010</td>
+<td>A NumPy append is attempting to change the shape of the previous version.</td>
+<td>When storing NumPy arrays, append operations must have the same shape as the previous version.</td>
 </tr>
 </tbody>
 </table>
@@ -3011,7 +3044,7 @@ what they mean, and what (if anything) can be done to resolve the issue.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">

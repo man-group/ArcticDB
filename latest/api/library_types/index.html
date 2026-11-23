@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.3/api/library_types/">
+        <link rel="canonical" href="https://docs.arcticdb.io/7.0.0/api/library_types/">
       
       
         <link rel="prev" href="../library/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -1857,6 +1857,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_write_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Write Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../notebooks/ArcticDB_merge/" class="md-nav__link">
         
   
@@ -2165,6 +2193,17 @@
     <span class="md-ellipsis">
       
         SymbolDescription
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arcticdb.version_store.library.InputFormat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        InputFormat
       
     </span>
   </a>
@@ -2509,7 +2548,8 @@
 
     <div class="doc doc-contents first">
 
-        <p>Types that can be normalised into Arctic's internal storage structure.</p>
+        <p>Types that can be normalised into Arctic's internal storage structure: Pandas DataFrames and Series, Numpy
+NDArrays, PyArrow Tables, RecordBatches, Arrays and ChunkedArrays, and Polars DataFrames and Series.</p>
 
 
 <details class="see-also" open>
@@ -3031,7 +3071,7 @@ field of this object can be used to determine whether the on-disk data is a time
               <p>
                   <span class="doc-attribute-annotation">
                     <b>TYPE:</b>
-                      <code><span title="typing.Tuple">Tuple</span>[<span title="typing.Union">Union</span>[<span title="pandas.Timestamp">Timestamp</span>], <span title="typing.Union">Union</span>[<span title="pandas.Timestamp">Timestamp</span>]]</code>
+                      <code><span title="typing.Tuple">Tuple</span>[<span title="typing.Union">Union</span>[Timestamp], <span title="typing.Union">Union</span>[Timestamp]]</code>
                   </span>
               </p>
             </td>
@@ -3059,8 +3099,99 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolDescription.input_format">input_format</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Format used to write the data. See <code>InputFormat</code> for the possible values and their meaning.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.InputFormat" href="#arcticdb.version_store.library.InputFormat">InputFormat</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="arcticdb.version_store.library.InputFormat" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.InputFormat</span>
+
+
+<a href="#arcticdb.version_store.library.InputFormat" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="str">str</span></code>, <code><span title="enum.Enum">Enum</span></code></p>
+
+
+
+        <p>Format used to write the data, as reported by <code>SymbolDescription.input_format</code>. As this is a <code>str</code>
+subclass, comparisons against plain strings (e.g. <code>desc.input_format == "DATAFRAME"</code>) continue to work.</p>
+<p>This records the input format at write time and does not constrain the data returned by <code>read</code>; the
+symbol may still be read as pandas or Arrow regardless of its recorded input format.</p>
+<p>DATAFRAME, SERIES:
+    Data written as the corresponding pandas type.</p>
+<p>NDARRAY:
+    Data written as a numpy <code>ndarray</code>.</p>
+<p>PICKLED:
+    Data that could not be normalized into one of the other types above. Despite the name, this does not
+    always mean Python's <code>pickle</code> module was used: msgpack can natively encode simple types (ints,
+    bools, floats, strings, and lists/dicts of these) without pickling anything; ArcticDB still reports
+    such data as <code>PICKLED</code>.</p>
+<p>TIMEFRAME:
+    The arcticdb TimeFrame type. Only writable via the V1 API, but still readable via the V2 API.</p>
+<p>ARROW_DATAFRAME, ARROW_SERIES:
+    Data written as <code>pyarrow</code> or <code>polars</code>. <code>ARROW_DATAFRAME</code> represents 2-dimensional inputs such
+    as <code>pyarrow.Table</code> or <code>pyarrow.RecordBatch</code>. <code>ARROW_SERIES</code> represents 1-dimensional inputs
+    such as <code>pyarrow.Array</code>, <code>pyarrow.ChunkedArray</code>, or <code>polars.Series</code>.</p>
+<p>RECURSIVE_NORMALIZED:
+    A nested data structure, such as <code>List[pd.DataFrame]</code> or <code>Dict[str, pd.DataFrame]</code>, written with
+    <code>recursive_normalizers=True</code>.</p>
+<p>UNKNOWN:
+    No input type was recorded, for example because the data was written by a client that predates this
+    information being recorded.</p>
 
 
 
@@ -3793,7 +3924,6 @@ is treated as the timeseries index.</p>
     <span class="n">date_range</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span>
         <span class="n"><span title="typing.Tuple">Tuple</span></span><span class="p">[</span><span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">],</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">]]</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">index_column</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
 
@@ -3833,7 +3963,8 @@ is treated as the timeseries index.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Time-indexed data to use for the update.</p>
+                <p>Time-indexed data to use for the update. The first column of PyArrow or Polars data is used as its
+timeseries index.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -3874,8 +4005,13 @@ is treated as the timeseries index.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Restricts the update to the specified range in the stored data. Leaving either bound as <code>None</code> leaves that
-side of the range open-ended.</p>
+                <p>If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+not covered by data are removed as well. date_range and data must both be timezone-aware or both
+timezone-naive; they can use different zones, since the comparison is against the underlying instants
+rather than local time.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -3885,27 +4021,6 @@ side of the range open-ended.</p>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
                       <code>None</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>index_column</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
-is treated as the timeseries index.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="bool">bool</span></code>
-                  </span>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>False</code>
                   </span>
               </p>
             </td>
@@ -4101,7 +4216,7 @@ This enables selective finalization of staged data when multiple stage operation
               <p>
                   <span class="doc-attribute-annotation">
                     <b>TYPE:</b>
-                      <code><span title="List">List</span>[<span title="arcticdb_ext.version_store.AtomKey">AtomKey</span>]</code>
+                      <code>List[<span title="arcticdb_ext.version_store.AtomKey">AtomKey</span>]</code>
                   </span>
               </p>
             </td>
@@ -4195,7 +4310,7 @@ This enables selective finalization of staged data when multiple stage operation
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">

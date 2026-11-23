@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.3/api/library/">
+        <link rel="canonical" href="https://docs.arcticdb.io/7.0.0/api/library/">
       
       
         <link rel="prev" href="../arctic_uri/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -1857,6 +1857,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_write_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Write Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../notebooks/ArcticDB_merge/" class="md-nav__link">
         
   
@@ -2380,10 +2408,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#arcticdb.version_store.library.Library.merge_experimental" class="md-nav__link">
+  <a href="#arcticdb.version_store.library.Library.merge" class="md-nav__link">
     <span class="md-ellipsis">
       
-        merge_experimental
+        merge
       
     </span>
   </a>
@@ -2472,6 +2500,17 @@
     <span class="md-ellipsis">
       
         reload_symbol_list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.version_store.library.Library.rename_columns_arrow_compat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rename_columns_arrow_compat
       
     </span>
   </a>
@@ -3069,7 +3108,7 @@ explicitly state support for single-symbol concurrent writes.</p>
               </td>
             </tr>
             <tr class="doc-section-item">
-              <td><code><a class="autorefs autorefs-internal" title="merge_experimental (arcticdb.version_store.library.Library.merge_experimental)" href="#arcticdb.version_store.library.Library.merge_experimental">merge_experimental</a></code></td>
+              <td><code><a class="autorefs autorefs-internal" title="merge (arcticdb.version_store.library.Library.merge)" href="#arcticdb.version_store.library.Library.merge">merge</a></code></td>
               <td class="doc-function-details">
                 <div class="doc-md-description">
                   <p>Merge new data into an existing symbol's DataFrame according to a specified strategy.</p>
@@ -3137,6 +3176,14 @@ explicitly state support for single-symbol concurrent writes.</p>
               <td class="doc-function-details">
                 <div class="doc-md-description">
                   <p>Forces the symbol list cache to be reloaded.</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="rename_columns_arrow_compat (arcticdb.version_store.library.Library.rename_columns_arrow_compat)" href="#arcticdb.version_store.library.Library.rename_columns_arrow_compat">rename_columns_arrow_compat</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Rename the index and column names of a symbol to be Arrow compatible.</p>
                 </div>
               </td>
             </tr>
@@ -3365,6 +3412,7 @@ configured to support dynamic schemas.</p>
 <p>If <code>append</code> is called on a symbol that does not exist, it will create it. This is convenient when setting up
 a new symbol, but be careful - it will not work for creating a new version of an existing symbol. Use <code>write</code>
 in that case.</p>
+<p><code>data</code> may be Pandas or Arrow input regardless of the format the existing data was written in.</p>
 <p>Note that <code>append</code> is not designed for multiple concurrent writers over a single symbol.</p>
 
 
@@ -3562,7 +3610,7 @@ the data will generally be faster.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UnsortedDataException">UnsortedDataException</span></code>
+                  <code>UnsortedDataException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -3929,7 +3977,7 @@ compacted, the version field will be that of the latest live version for the sym
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="StorageException">StorageException</span></code>
+                  <code>StorageException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -3953,7 +4001,7 @@ compacted, the version field will be that of the latest live version for the sym
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="SchemaException">SchemaException</span></code>
+                  <code>SchemaException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -4272,7 +4320,7 @@ it would look like after a call to compact_data.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="StorageException">StorageException</span></code>
+                  <code>StorageException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -4296,7 +4344,7 @@ it would look like after a call to compact_data.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="SchemaException">SchemaException</span></code>
+                  <code>SchemaException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -4386,7 +4434,7 @@ it would look like after a call to compact_data.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="PermissionException">PermissionException</span></code>
+                  <code>PermissionException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -4398,7 +4446,7 @@ it would look like after a call to compact_data.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="InternalException">InternalException</span></code>
+                  <code>InternalException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -4987,10 +5035,9 @@ segments named by those stage result(s). Missing keys are ignored.</p>
 
 <details class="see-also" open>
   <summary>See Also</summary>
-  <p>write
-    Documentation on the <code>staged</code> parameter explains the concept of staged data in more detail.
-stage
-    Returns the <code>StageResult</code> objects accepted by this method.</p>
+  <p>stage
+    Documentation on the <code>stage</code> method explains the concept of staged data in more detail. The <code>stage</code>
+    method returns the <code>StageResult</code> objects accepted by this method</p>
 </details>
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -5256,7 +5303,7 @@ The data member will be None.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UnsortedDataException">UnsortedDataException</span></code>
+                  <code>UnsortedDataException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -5274,7 +5321,7 @@ The data member will be None.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UserInputException">UserInputException</span></code>
+                  <code>UserInputException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -5297,7 +5344,7 @@ The data member will be None.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="SchemaException">SchemaException</span></code>
+                  <code>SchemaException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -5573,8 +5620,8 @@ any other internal exception occurs, the same DataError object is also returned.
 
 <details class="see-also" open>
   <summary>See Also</summary>
-  <p>write
-    Documentation on the <code>staged</code> parameter explains the concept of staged data in more detail.</p>
+  <p>stage
+    Documentation on the <code>stage</code> method explains the concept of staged data in more detail.</p>
 </details>
 
     </div>
@@ -6365,12 +6412,12 @@ many snapshots.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="arcticdb.version_store.library.Library.merge_experimental" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">merge_experimental</span>
+<h3 id="arcticdb.version_store.library.Library.merge" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">merge</span>
 
 
-<a href="#arcticdb.version_store.library.Library.merge_experimental" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">merge_experimental</span><span class="p">(</span>
+<a href="#arcticdb.version_store.library.Library.merge" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">merge</span><span class="p">(</span>
     <span class="n">symbol</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">,</span>
     <span class="n">source</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.NormalizableType
 
@@ -6384,6 +6431,7 @@ many snapshots.</p>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="bool">bool</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">upsert</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">match_na</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">index_column</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
 
@@ -6393,9 +6441,8 @@ many snapshots.</p>
 <p>See <a href="../../notebooks/ArcticDB_merge/">Merge Notebook</a> for usage examples.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>This API is under development and is subject to change. The API is not subject to semver and can change in
-minor or patch releases.</p>
-<p>Dynamic schema is not supported.</p>
+<p>Dynamic schema is not supported. Sparse data is not supported. Fortran styled data is not supported.
+PyArrow and Polars sources containing null values are not supported.</p>
 </div>
 
 
@@ -6434,7 +6481,7 @@ minor or patch releases.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><span title="pandas.DataFrame">DataFrame</span> or <span title="pandas.Series">Series</span></code>
+                      <code><span title="typing.Union">Union</span>[DataFrame, Series, Table, DataFrame]</code>
                   </span>
               </p>
             </td>
@@ -6584,6 +6631,27 @@ column) can match another missing value in the <code>on</code> columns. See "Not
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>index_column</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Only applicable when source is a PyArrow Table or Polars DataFrame. If True, the first column
+is treated as the timeseries index.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -6624,7 +6692,7 @@ not be populated.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="StorageException">StorageException</span></code>
+                  <code>StorageException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -6636,7 +6704,7 @@ not be populated.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UserInputException">UserInputException</span></code>
+                  <code>UserInputException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -6649,7 +6717,7 @@ update-only strategy and the symbol doesn't exist</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UnsortedDataException">UnsortedDataException</span></code>
+                  <code>UnsortedDataException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -6661,12 +6729,13 @@ update-only strategy and the symbol doesn't exist</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="SchemaException">SchemaException</span></code>
+                  <code>SchemaException</code>
               </span>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>If dynamic schema is used or if source's schema is incompatible with target's schema</p>
+                <p>If dynamic schema is used, if source's schema is incompatible with target's schema or if a PyArrow or
+Polars source contains null values</p>
               </div>
             </td>
           </tr>
@@ -6676,7 +6745,7 @@ update-only strategy and the symbol doesn't exist</p>
 
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">'a'</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">3</span><span class="p">)])))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="mi">100</span><span class="p">,</span> <span class="mi">200</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">4</span><span class="p">)])),</span> <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">))))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="mi">100</span><span class="p">,</span> <span class="mi">200</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">4</span><span class="p">)])),</span> <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">))))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 <span class="go">                               a</span>
 <span class="go">1970-01-01 00:00:00.000000001  1</span>
@@ -7515,7 +7584,7 @@ version number, metadata, etc., of the symbols that were joined together.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UserInputException">UserInputException</span></code>
+                  <code>UserInputException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -7531,7 +7600,7 @@ version number, metadata, etc., of the symbols that were joined together.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="NoSuchVersionException">NoSuchVersionException</span></code>
+                  <code>NoSuchVersionException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -7545,7 +7614,7 @@ version number, metadata, etc., of the symbols that were joined together.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="SchemaException">SchemaException</span></code>
+                  <code>SchemaException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -7811,6 +7880,232 @@ safely interrupted. If the call is interrupted somehow (exception/process killed
 <div class="doc doc-object doc-function">
 
 
+<h3 id="arcticdb.version_store.library.Library.rename_columns_arrow_compat" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">rename_columns_arrow_compat</span>
+
+
+<a href="#arcticdb.version_store.library.Library.rename_columns_arrow_compat" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">rename_columns_arrow_compat</span><span class="p">(</span>
+    <span class="n">symbol</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">,</span>
+    <span class="n">index_columns</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="bool">bool</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.VersionedItem (arcticdb.version_store._store.VersionedItem)" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Rename the index and column names of a symbol to be Arrow compatible.</p>
+<p>After calling this method, all index and column names will be unique, non-empty strings, with no overlap allowed
+between the index and column names. Note that the Arrow spec itself only requires that column names are strings.
+However, libraries such as Polars and PyArrow require uniqueness, and many downstream processing engines do not
+gracefully handle empty strings as column names.</p>
+<p>This operation creates a new version, unless the index and column names are already unique, non-empty strings,
+in which case it is a no-op.</p>
+<p>The metadata from the version being renamed is maintained with the newly created version.</p>
+<p>The renaming follows these principles:
+- Integer index/column names <code>i</code> will be renamed to <code>str(i)</code>.
+- Empty string <code>""</code> index/column names will be renamed to <code>"__empty__"</code>.
+- Unnamed (i.e. <code>None</code>) index/column names behave differently depending on where they are encountered:
+    - Single level (i.e. non-MultiIndex) timeseries index: renamed to <code>"__index__"</code>.
+    - MultiIndex: renamed to <code>"__index_level_i__"</code>, where <code>i</code> is the index level.
+    - Remaining columns: renamed to the string <code>"None"</code>.
+- If the columns were named using a <code>RangeIndex</code> (e.g. by <code>df = pd.DataFrame(np.zeros((10, 4)))</code>), then these
+  will be renamed to string representations of the integers corresponding to the column position (e.g.
+  <code>["0", "1", "2", "3"]</code> in the previous example).
+- Duplicated column names, and clashes caused by renaming to existing column names, are handled by prepending
+  and appending <code>"_"</code> characters. e.g. <code>pd.DataFrame(np.zeros((10, 2)), columns=["col", "col"])</code> would become
+  <code>pd.DataFrame(np.zeros((10, 2)), columns=["col", "_col_"])</code>.
+- If the <code>index_columns</code> argument is provided, the index column(s) will be renamed to these provided name(s).
+- Rules about column names specified above apply to the <code>name</code> field of <code>pd.Series</code>.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>symbol</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The symbol to perform the renaming on.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>index_columns</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Explicit names for the index columns. If None, uses defaults specified above. If a <code>str</code>, the existing data
+must have a single-level (non-MultiIndex) timeseries index. If <code>List[str]</code>, the length of the list must
+equal the number of indexes of the existing data.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[<span title="typing.Union">Union</span>[<span title="str">str</span>, <span title="typing.List">List</span>[<span title="str">str</span>]]]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>prune_previous_versions</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>If True, removes previous versions from the version list. If None, the value is taken from the
+library configuration.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[<span title="bool">bool</span>]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.VersionedItem (arcticdb.version_store._store.VersionedItem)" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Structure containing information including the version number of the written symbol in the store. The data
+and metadata attributes will not be populated. If no renaming occurs because the data is already
+Arrow-compatible, the version field will be that of the latest live version for the symbol.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code>NoSuchVersionException</code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>If the symbol does not exist or has been deleted.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code>UserInputException</code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>If the number of <code>index_columns</code> provided does not match the data on-disk.
+If <code>index_columns</code> is specified, but there is an existing column name that clashes with at least one of the
+specified index columns.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code>SchemaException</code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>If the existing data is recursively normalized, pickled, or a numpy array.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code>InternalException</code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>If the existing data contains multiple identical integer index/column names. This data is already corrupted
+and cannot be read, and should be deleted and re-created without duplicate integer column names.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">input_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="kc">None</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">""</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">10</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s2">"10"</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">"2026-06-06"</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">input_df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">rename_columns_arrow_compat</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">name</span>
+<span class="go">"__index__"</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output_df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+<span class="go">["None", "__empty__", "10", "_10_"]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">input_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">MultiIndex</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">([[</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">0</span><span class="p">)],</span> <span class="p">[</span><span class="s2">"AAPL"</span><span class="p">]]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">input_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">names</span><span class="p">)</span>
+<span class="go">[None, None]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">input_df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">rename_columns_arrow_compat</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">index_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"ts"</span><span class="p">,</span> <span class="s2">"ticker"</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">output_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">names</span><span class="p">)</span>
+<span class="go">["ts", "ticker"]</span>
+</code></pre></div>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="arcticdb.version_store.library.Library.snapshot" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">snapshot</span>
 
@@ -7938,7 +8233,7 @@ snapshot version 2 of symbol "a" and version 3 of symbol "b".</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="InternalException">InternalException</span></code>
+                  <code>InternalException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -7950,7 +8245,7 @@ snapshot version 2 of symbol "a" and version 3 of symbol "b".</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="MissingDataException">MissingDataException</span></code>
+                  <code>MissingDataException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -8179,7 +8474,7 @@ The data member will be None.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UnsortedDataException">UnsortedDataException</span></code>
+                  <code>UnsortedDataException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -8195,7 +8490,7 @@ The data member will be None.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UserInputException">UserInputException</span></code>
+                  <code>UserInputException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -8218,7 +8513,7 @@ The data member will be None.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="SchemaException">SchemaException</span></code>
+                  <code>SchemaException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -8240,13 +8535,13 @@ The data member will be None.</p>
 
 <details class="see-also" open>
   <summary>See Also</summary>
-  <p>write
-    Documentation on the <code>staged</code> parameter explains the concept of staged data in more detail.</p>
+  <p>stage
+    Documentation on the <code>stage</code> method explains the concept of staged data in more detail.</p>
 </details>
 
 <p><span class="doc-section-title">Examples:</span></p>
-    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)])),</span> <span class="n">staged</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)])),</span> <span class="n">staged</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)])),</span> <span class="n">validate_index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)])),</span> <span class="n">validate_index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">sort_and_finalize_staged_data</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 <span class="go">            col</span>
@@ -8692,7 +8987,6 @@ If lazy is True, a LazyDataFrame object on which further querying can be perform
         <span class="n"><span title="typing.Tuple">Tuple</span></span><span class="p">[</span><span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">],</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">]]</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="bool">bool</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">index_column</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.VersionedItem (arcticdb.version_store._store.VersionedItem)" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
@@ -8702,7 +8996,9 @@ If lazy is True, a LazyDataFrame object on which further querying can be perform
 <p>The entire range between the first and last index entry in <code>data</code> is replaced in its entirety with the
 contents of <code>data</code>, adding additional index entries if required. <code>update</code> only operates over the outermost
 index level - this means secondary index rows will be removed if not contained in <code>data</code>.</p>
-<p>Both the existing symbol version and <code>data</code> must be timeseries-indexed.</p>
+<p>Both the existing symbol version and <code>data</code> must be timeseries-indexed. <code>data</code> may be Pandas or Arrow input
+regardless of the format the existing data was written in. The first column of PyArrow or Polars <code>data</code> is
+used as its timeseries index.</p>
 <p>In the case where <code>data</code> has zero rows, nothing will be done and no new version will be created. This means that
 <code>update</code> cannot be used with <code>date_range</code> to just delete a subset of the data. We have <code>delete_data_in_range</code>
 for exactly this purpose and to make it very clear when deletion is intended.</p>
@@ -8800,10 +9096,13 @@ calls to update might lead to data fragmentation (see the example below).</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>If a range is specified, it will delete the stored value within the range and overwrite it with the data in
-<code>data</code>. This allows the user to update with data that might only be a subset of the stored value. Leaving
-any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
-modified, even if <code>data</code> covers a wider date range.</p>
+                <p>If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+not covered by data are removed as well. date_range and data must both be timezone-aware or both
+timezone-naive; they can use different zones, since the comparison is against the underlying instants
+rather than local time.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -8834,27 +9133,6 @@ library configuration (defaults to False).</p>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
                       <code>None</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>index_column</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
-is treated as the timeseries index.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="bool">bool</span></code>
-                  </span>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>False</code>
                   </span>
               </p>
             </td>
@@ -9146,7 +9424,6 @@ error_category, and exception_string properties.</p>
   " href="../library_types/#arcticdb.version_store.library.NormalizableType">NormalizableType</a></span><span class="p">,</span>
     <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="bool">bool</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">staged</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">validate_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">index_column</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">recursive_normalizers</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -9159,8 +9436,11 @@ error_category, and exception_string properties.</p>
 <p>If <code>symbol</code> already exists then a new version will be created to reference the newly written data. For more
 information on versions see the documentation for the <code>read</code> primitive.</p>
 <p><code>data</code> must be of a format that can be normalised into Arctic's internal storage structure. Pandas
-DataFrames, Pandas Series and Numpy NDArrays can all be normalised. Normalised data will be split along both the
-columns and rows into segments. By default, a segment will contain 100,000 rows and 127 columns.</p>
+DataFrames, Pandas Series, Numpy NDArrays, PyArrow Tables, RecordBatches, Arrays and ChunkedArrays, and Polars
+DataFrames and Series can all be normalised. Normalised data will be split along both the columns and rows into
+segments. By default, a segment will contain 100,000 rows and 127 columns.</p>
+<p>Data written as Pandas can be read with an Arrow <code>output_format</code> and vice versa, and a symbol written in one
+format can be appended to or updated with data in the other.</p>
 <p>If this library has <code>write_deduplication</code> enabled then segments will be deduplicated against storage prior to
 write to reduce required IO operations and storage requirements. Data will be effectively deduplicated for all
 segments up until the first differing row when compared to storage. As a result, modifying the beginning
@@ -9263,24 +9543,6 @@ library configuration (defaults to False).</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                <code>staged</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Deprecated. Use stage() instead.
-Whether to write to a staging area rather than immediately to the library.
-See documentation on <code>finalize_staged_data</code> for more information.</p>
-              </div>
-              <p>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>False</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
                 <code>validate_index</code>
             </td>
             <td class="doc-param-details">
@@ -9338,10 +9600,10 @@ Example:
     lib.write(symbol, data) # The data will be successfully written
 Please refer to <a href="https://docs.arcticdb.io/latest/notebooks/arcticdb_demo_recursive_normalizers">https://docs.arcticdb.io/latest/notebooks/arcticdb_demo_recursive_normalizers</a> for more details
 of this feature.
-Please check <a href="https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure">https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure</a> for the plan of
-introducing meta structure v2. V2 has removed the dependency on pickle for normalizing meta structure. Please consider switching to V2
-as V1 will be deprecated in future v7.0.0 release. However note that reading V2 meta structure requires ArcticDB version &gt;= 6.7.0,
-or KeyError will be raised.</p>
+Since v7.0.0 the meta structure is normalized as V2 by default, which removes the dependency on pickle.
+Reading V2 meta structure requires ArcticDB version &gt;= 6.7.0, or KeyError will be raised. To keep data readable
+by older clients, set the runtime option VersionStore.RecursiveNormalizerMetastructure to 1. Please check
+<a href="https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure">https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure</a> for more details.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -9406,7 +9668,7 @@ or KeyError will be raised.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><span title="UnsortedDataException">UnsortedDataException</span></code>
+                  <code>UnsortedDataException</code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -9430,7 +9692,7 @@ or KeyError will be raised.</p>
 </code></pre></div>
     <p>WritePayload objects can be unpacked and used as parameters:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">w</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">WritePayload</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">'the'</span><span class="p">:</span> <span class="s1">'metadata'</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="o">*</span><span class="n">w</span><span class="p">,</span> <span class="n">staged</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="o">*</span><span class="n">w</span><span class="p">)</span>
 </code></pre></div>
 
 
@@ -9895,7 +10157,6 @@ error_code, error_category, and exception_string properties.</p>
     <span class="n">data</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">,</span>
     <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="bool">bool</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">staged</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">recursive_normalizers</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.VersionedItem (arcticdb.version_store._store.VersionedItem)" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
@@ -9987,22 +10248,6 @@ error_code, error_category, and exception_string properties.</p>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
                       <code>None</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>staged</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>See documentation on <code>write</code>.</p>
-              </div>
-              <p>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>False</code>
                   </span>
               </p>
             </td>
@@ -10270,7 +10515,7 @@ write_pickle: For information on the implications of providing data that needs t
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">

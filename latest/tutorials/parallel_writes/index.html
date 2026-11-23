@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.3/tutorials/parallel_writes/">
+        <link rel="canonical" href="https://docs.arcticdb.io/7.0.0/tutorials/parallel_writes/">
       
       
         <link rel="prev" href="../fundamentals/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -1888,6 +1888,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_write_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Write Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../notebooks/ArcticDB_merge/" class="md-nav__link">
         
   
@@ -2340,7 +2368,7 @@ as a result <strong>staged data must be timeseries indexed</strong>. The below c
     <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">()</span>
 
     <span class="c1"># When staged, the written data is not available to read until finalized.</span>
-    <span class="n">library</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">staged</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">library</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 
 <span class="n">symbol</span> <span class="o">=</span> <span class="s2">"my_data"</span>
 <span class="n">library</span> <span class="o">=</span> <span class="s2">"my_library"</span>
@@ -2417,7 +2445,7 @@ as a result <strong>staged data must be timeseries indexed</strong>. The below c
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">

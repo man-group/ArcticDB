@@ -8,10 +8,10 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.3/notebooks/ArcticDB_merge/">
+        <link rel="canonical" href="https://docs.arcticdb.io/7.0.0/notebooks/ArcticDB_merge/">
       
       
-        <link rel="prev" href="../ArcticDB_demo_read_as_arrow/">
+        <link rel="prev" href="../ArcticDB_demo_write_as_arrow/">
       
       
         <link rel="next" href="../../api/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -1859,6 +1859,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_demo_write_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Write Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -2598,7 +2626,7 @@
 
 <p>
 <h1>ArcticDB_merge</h1>
-<a href="https://github.com/man-group/ArcticDB/blob/v6.28.3/docs/mkdocs/docs/notebooks/ArcticDB_merge.ipynb">
+<a href="https://github.com/man-group/ArcticDB/blob/v7.0.0/docs/mkdocs/docs/notebooks/ArcticDB_merge.ipynb">
     <span class="twemoji">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <title>github</title>
@@ -2610,7 +2638,7 @@
 </a>
 |
 <a
-    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/v6.28.3/docs/mkdocs/docs/notebooks/ArcticDB_merge.ipynb">
+    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/v7.0.0/docs/mkdocs/docs/notebooks/ArcticDB_merge.ipynb">
     <span class="twemoji">
         <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" focusable="false" width="977" height="602"
             style="height: 28px; width: 28px;">
@@ -2881,10 +2909,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 id="arcticdb-merge">ArcticDB Merge<a class="anchor-link" href="#arcticdb-merge">¶</a></h1><div role="alert" style="background-color:#FFF3CD;color:#856404;border:1px solid #FFEEBA;border-radius:10px;padding:12px 16px;font-size:14px;line-height:1.4;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;display:flex;align-items:center;gap:8px;box-shadow:0 1px 0 rgba(0,0,0,0.04);">
-  ⚠️ <span style="font-weight:600;margin-left:6px;">Warning:</span> The merge API is under development and subject to change. Additional features will be introduced in the future. The API is not subject to semver and can change in minor or patch releases. Stay tuned for updates! The API call at the moment is named merge_experimental but it will be changed to merge when the API becomes stable.
-</div>
-<h2 id="motivation">Motivation<a class="anchor-link" href="#motivation">¶</a></h2><p>The merge API offers a straightforward way for users to modify or insert specific rows in their data. Data providers often issue corrections for particular entries, and the merge functionality can efficiently apply these updates.</p>
+<h1 id="arcticdb-merge">ArcticDB Merge<a class="anchor-link" href="#arcticdb-merge">¶</a></h1><h2 id="motivation">Motivation<a class="anchor-link" href="#motivation">¶</a></h2><p>The merge API offers a straightforward way for users to modify or insert specific rows in their data. Data providers often issue corrections for particular entries, and the merge functionality can efficiently apply these updates.</p>
 <h3 id="example">Example<a class="anchor-link" href="#example">¶</a></h3><p>Let's start with a quick example before exploring the details.</p>
 <p>In this example, we have an ArcticDB library called <code>prices</code> that stores price data, and a symbol named <code>daily_prices</code> for daily prices. At some point, the data provider issued corrections for <code>2023-01-05</code>, <code>2023-01-07</code>, and <code>2023-01-19</code>. We want to apply these corrections, modifying only the affected rows.</p>
 <p>Begin by importing the necessary modules.</p>
@@ -3222,7 +3247,7 @@ daily_prices</div>
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
 <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[4]:</div>
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
-<pre>VersionedItem(symbol='daily_prices', library='prices', data=n/a, version=0, metadata=None, host='LMDB(path=/home/vasil/Documents/source/ArcticDB/docs/mkdocs/docs/notebooks/merge_example)', timestamp=1788362670789153227)</pre>
+<pre>VersionedItem(symbol='daily_prices', library='prices', data=n/a, version=0, metadata=None, host='LMDB(path=/home/vasil/Documents/source/ArcticDB/docs/mkdocs/docs/notebooks/merge_example)', timestamp=1789388649331391280)</pre>
 </div>
 </div>
 </div>
@@ -3370,13 +3395,13 @@ daily_prices_correction</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span><span class="s2">"daily_prices"</span><span class="p">,</span> <span class="n">daily_prices_correction</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">))</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="s2">"daily_prices"</span><span class="p">,</span> <span class="n">daily_prices_correction</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">))</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"Merged result"</span><span class="p">)</span>
 <span class="n">display</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"daily_prices"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"Diff between merged and original data"</span><span class="p">)</span>
 <span class="n">daily_prices</span><span class="o">.</span><span class="n">compare</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"daily_prices"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">keep_equal</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-6">lib.merge_experimental("daily_prices", daily_prices_correction, strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))
+<div class="clipboard-copy-txt" id="cell-6">lib.merge("daily_prices", daily_prices_correction, strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))
 print("Merged result")
 display(lib.read("daily_prices").data)
 print("Diff between merged and original data")
@@ -3776,7 +3801,7 @@ lib.read("prices_update_example").data</div>
 <h2 id="merge-semantics-and-behavior">Merge: Semantics and Behavior<a class="anchor-link" href="#merge-semantics-and-behavior">¶</a></h2><p>In this context, the data stored in ArcticDB is referred to as the <code>target</code>, while the input to <code>merge</code> is called the <code>source</code>.</p>
 <p>Merge works by performing a join between <code>target</code> and <code>source</code> on a subset of columns, and updating <code>target</code> based on the <code>strategy</code> parameter. If <code>target</code> is a time series, the index will <strong>always</strong> be included among the join columns. This is done to ensure that ordered date-time indexes stay ordered after performing a merge. Otherwise the following would be possible</p>
 <div class="highlight"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">3</span><span class="p">)])))</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">10</span><span class="p">)])),</span> <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">])</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="mi">10</span><span class="p">)])),</span> <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
                                <span class="n">a</span>
 <span class="mi">1970</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">01</span> <span class="mi">00</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mf">00.000000001</span>  <span class="mi">1</span>
@@ -3831,7 +3856,7 @@ lib.read("prices_update_example").data</div>
 <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"merge_update_with_duplicates"</span><span class="p">,</span> <span class="n">data_with_duplicates</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"Original data"</span><span class="p">)</span>
 <span class="n">display</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"merge_update_with_duplicates"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"merge_update_with_duplicates"</span><span class="p">,</span>
     <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
         <span class="p">{</span><span class="s2">"Bid"</span><span class="p">:</span> <span class="p">[</span><span class="mi">105</span><span class="p">,</span> <span class="mi">102</span><span class="p">],</span> <span class="s2">"Ask"</span><span class="p">:</span> <span class="p">[</span><span class="mf">105.3</span><span class="p">,</span> <span class="mi">102</span><span class="p">]},</span>
@@ -3849,7 +3874,7 @@ lib.read("prices_update_example").data</div>
 lib.write("merge_update_with_duplicates", data_with_duplicates)
 print("Original data")
 display(lib.read("merge_update_with_duplicates").data)
-lib.merge_experimental(
+lib.merge(
     "merge_update_with_duplicates",
     pd.DataFrame(
         {"Bid": [105, 102], "Ask": [105.3, 102]},
@@ -4025,7 +4050,7 @@ display(lib.read("merge_update_with_duplicates").data)</div>
 <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"merge_update_with_duplicates"</span><span class="p">,</span> <span class="n">data_with_duplicates</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"Original data"</span><span class="p">)</span>
 <span class="n">display</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"merge_update_with_duplicates"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"merge_update_with_duplicates"</span><span class="p">,</span>
     <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
         <span class="p">{</span><span class="s2">"Bid"</span><span class="p">:</span> <span class="p">[</span><span class="mi">105</span><span class="p">,</span> <span class="mi">102</span><span class="p">],</span> <span class="s2">"Ask"</span><span class="p">:</span> <span class="p">[</span><span class="mf">105.3</span><span class="p">,</span> <span class="mi">102</span><span class="p">]},</span>
@@ -4043,7 +4068,7 @@ display(lib.read("merge_update_with_duplicates").data)</div>
 lib.write("merge_update_with_duplicates", data_with_duplicates)
 print("Original data")
 display(lib.read("merge_update_with_duplicates").data)
-lib.merge_experimental(
+lib.merge(
     "merge_update_with_duplicates",
     pd.DataFrame(
         {"Bid": [105, 102], "Ask": [105.3, 102]},
@@ -4234,7 +4259,7 @@ display(lib.read("merge_update_with_duplicates").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">source_data</span><span class="p">)</span>
 
 <span class="c1"># Insert only — the matching row (2025-01-02) is ignored, new rows are inserted</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"insert_only_example"</span><span class="p">,</span>
     <span class="n">source_data</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"insert"</span><span class="p">)</span>
@@ -4260,7 +4285,7 @@ print("Source data")
 display(source_data)
 
 # Insert only — the matching row (2025-01-02) is ignored, new rows are inserted
-lib.merge_experimental(
+lib.merge(
     "insert_only_example",
     source_data,
     strategy=MergeStrategy(matched="do_nothing", not_matched_by_target="insert")
@@ -4493,7 +4518,7 @@ display(lib.read("insert_only_example").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">source_data</span><span class="p">)</span>
 
 <span class="c1"># Update and insert — the matching row is updated, the new row is inserted</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"upsert_example"</span><span class="p">,</span>
     <span class="n">source_data</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"insert"</span><span class="p">)</span>
@@ -4519,7 +4544,7 @@ print("Source data")
 display(source_data)
 
 # Update and insert — the matching row is updated, the new row is inserted
-lib.merge_experimental(
+lib.merge(
     "upsert_example",
     source_data,
     strategy=MergeStrategy(matched="update", not_matched_by_target="insert")
@@ -4757,7 +4782,7 @@ display(lib.read("upsert_example").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">correction</span><span class="p">)</span>
 
 <span class="c1"># Merge using on=["Exchange"] so only the NYSE row at 09:00 is updated</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"multi_exchange"</span><span class="p">,</span>
     <span class="n">correction</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -4795,7 +4820,7 @@ print("Correction data")
 display(correction)
 
 # Merge using on=["Exchange"] so only the NYSE row at 09:00 is updated
-lib.merge_experimental(
+lib.merge(
     "multi_exchange",
     correction,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -5058,7 +5083,7 @@ display(lib.read("multi_exchange").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">correction_nan</span><span class="p">)</span>
 
 <span class="c1"># match_na=False (the default): NaN never matches NaN, so nothing is updated</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"float_nan_example"</span><span class="p">,</span>
     <span class="n">correction_nan</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -5069,7 +5094,7 @@ display(lib.read("multi_exchange").data)</div>
 
 <span class="c1"># Reset the target, then merge again with match_na=True to demonstrate the matching mode</span>
 <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"float_nan_example"</span><span class="p">,</span> <span class="n">float_nan_data</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"float_nan_example"</span><span class="p">,</span>
     <span class="n">correction_nan</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -5108,7 +5133,7 @@ print("Correction data (NaN in Sector)")
 display(correction_nan)
 
 # match_na=False (the default): NaN never matches NaN, so nothing is updated
-lib.merge_experimental(
+lib.merge(
     "float_nan_example",
     correction_nan,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -5119,7 +5144,7 @@ display(lib.read("float_nan_example").data)
 
 # Reset the target, then merge again with match_na=True to demonstrate the matching mode
 lib.write("float_nan_example", float_nan_data)
-lib.merge_experimental(
+lib.merge(
     "float_nan_example",
     correction_nan,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -5419,7 +5444,7 @@ display(lib.read("float_nan_example").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">correction_none</span><span class="p">)</span>
 
 <span class="c1"># match_na=False (the default): None matches neither the target's NaN nor its None</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"string_none_example"</span><span class="p">,</span>
     <span class="n">correction_none</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -5430,7 +5455,7 @@ display(lib.read("float_nan_example").data)</div>
 
 <span class="c1"># Reset the target, then merge again with match_na=True to demonstrate the matching mode</span>
 <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"string_none_example"</span><span class="p">,</span> <span class="n">string_none_data</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"string_none_example"</span><span class="p">,</span>
     <span class="n">correction_none</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -5470,7 +5495,7 @@ print("Correction data (None in Exchange)")
 display(correction_none)
 
 # match_na=False (the default): None matches neither the target's NaN nor its None
-lib.merge_experimental(
+lib.merge(
     "string_none_example",
     correction_none,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -5481,7 +5506,7 @@ display(lib.read("string_none_example").data)
 
 # Reset the target, then merge again with match_na=True to demonstrate the matching mode
 lib.write("string_none_example", string_none_data)
-lib.merge_experimental(
+lib.merge(
     "string_none_example",
     correction_none,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -5786,7 +5811,7 @@ display(lib.read("string_none_example").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">correction_nat</span><span class="p">)</span>
 
 <span class="c1"># match_na=False (the default): NaT never matches NaT, so nothing is updated</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"datetime_nat_example"</span><span class="p">,</span>
     <span class="n">correction_nat</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -5797,7 +5822,7 @@ display(lib.read("string_none_example").data)</div>
 
 <span class="c1"># Reset the target, then merge again with match_na=True to demonstrate the matching mode</span>
 <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"datetime_nat_example"</span><span class="p">,</span> <span class="n">datetime_nat_data</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"datetime_nat_example"</span><span class="p">,</span>
     <span class="n">correction_nat</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -5836,7 +5861,7 @@ print("Correction data (NaT in SettlementDate)")
 display(correction_nat)
 
 # match_na=False (the default): NaT never matches NaT, so nothing is updated
-lib.merge_experimental(
+lib.merge(
     "datetime_nat_example",
     correction_nat,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -5847,7 +5872,7 @@ display(lib.read("datetime_nat_example").data)
 
 # Reset the target, then merge again with match_na=True to demonstrate the matching mode
 lib.write("datetime_nat_example", datetime_nat_data)
-lib.merge_experimental(
+lib.merge(
     "datetime_nat_example",
     correction_nat,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -6156,7 +6181,7 @@ display(lib.read("datetime_nat_example").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">source_correction</span><span class="p">)</span>
 
 <span class="c1"># Merge: matches on datetime (first level), updates the Exchange level and Price</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"multi_datetime"</span><span class="p">,</span>
     <span class="n">source_correction</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">)</span>
@@ -6188,7 +6213,7 @@ print("Correction data")
 display(source_correction)
 
 # Merge: matches on datetime (first level), updates the Exchange level and Price
-lib.merge_experimental(
+lib.merge(
     "multi_datetime",
     source_correction,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing")
@@ -6439,7 +6464,7 @@ display(lib.read("multi_datetime").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">source_nyse_only</span><span class="p">)</span>
 
 <span class="c1"># Merge with on=["Exchange"] — matches on datetime AND Exchange</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"multi_datetime_on"</span><span class="p">,</span>
     <span class="n">source_nyse_only</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -6461,7 +6486,7 @@ print("Correction data (NYSE only)")
 display(source_nyse_only)
 
 # Merge with on=["Exchange"] — matches on datetime AND Exchange
-lib.merge_experimental(
+lib.merge(
     "multi_datetime_on",
     source_nyse_only,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -6721,7 +6746,7 @@ display(lib.read("multi_datetime_on").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">source_update</span><span class="p">)</span>
 
 <span class="c1"># Merge with on=["Name"] — matches on the Name column</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"catalog"</span><span class="p">,</span>
     <span class="n">source_update</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -6751,7 +6776,7 @@ print("Correction data")
 display(source_update)
 
 # Merge with on=["Name"] — matches on the Name column
-lib.merge_experimental(
+lib.merge(
     "catalog",
     source_update,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -7029,7 +7054,7 @@ display(lib.read("catalog").data)</div>
 <span class="n">display</span><span class="p">(</span><span class="n">new_stock</span><span class="p">)</span>
 
 <span class="c1"># Insert only — matching SKU B2 is left unchanged, new SKUs are appended in source order</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"inventory_insert"</span><span class="p">,</span>
     <span class="n">new_stock</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"insert"</span><span class="p">),</span>
@@ -7056,7 +7081,7 @@ print("Source data")
 display(new_stock)
 
 # Insert only — matching SKU B2 is left unchanged, new SKUs are appended in source order
-lib.merge_experimental(
+lib.merge(
     "inventory_insert",
     new_stock,
     strategy=MergeStrategy(matched="do_nothing", not_matched_by_target="insert"),
@@ -7283,7 +7308,7 @@ display(lib.read("inventory_insert").data)</div>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"Source data"</span><span class="p">)</span>
 <span class="n">display</span><span class="p">(</span><span class="n">new_stock</span><span class="p">)</span>
 
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"inventory_upsert"</span><span class="p">,</span>
     <span class="n">new_stock</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"insert"</span><span class="p">),</span>
@@ -7299,7 +7324,7 @@ display(lib.read("inventory_upsert").data)
 print("Source data")
 display(new_stock)
 
-lib.merge_experimental(
+lib.merge(
     "inventory_upsert",
     new_stock,
     strategy=MergeStrategy(matched="update", not_matched_by_target="insert"),
@@ -7526,7 +7551,7 @@ display(lib.read("inventory_upsert").data)</div>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"Source data"</span><span class="p">)</span>
 <span class="n">display</span><span class="p">(</span><span class="n">new_stock</span><span class="p">)</span>
 
-<span class="n">lib</span><span class="o">.</span><span class="n">merge_experimental</span><span class="p">(</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
     <span class="s2">"inventory_update_only"</span><span class="p">,</span>
     <span class="n">new_stock</span><span class="p">,</span>
     <span class="n">strategy</span><span class="o">=</span><span class="n">MergeStrategy</span><span class="p">(</span><span class="n">matched</span><span class="o">=</span><span class="s2">"update"</span><span class="p">,</span> <span class="n">not_matched_by_target</span><span class="o">=</span><span class="s2">"do_nothing"</span><span class="p">),</span>
@@ -7542,7 +7567,7 @@ display(lib.read("inventory_update_only").data)
 print("Source data")
 display(new_stock)
 
-lib.merge_experimental(
+lib.merge(
     "inventory_update_only",
     new_stock,
     strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -7836,7 +7861,7 @@ display(lib.read("inventory_update_only").data)</div>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">

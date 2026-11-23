@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.3/runtime_config/">
+        <link rel="canonical" href="https://docs.arcticdb.io/7.0.0/runtime_config/">
       
       
         <link rel="prev" href="../lib_config/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -1644,17 +1644,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#versionstoreversionstorerecursivenormalizermetastructurev1deprecationwarning" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        VersionStore.VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#compactlogprogresspercentage" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2229,6 +2218,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_write_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Write Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../notebooks/ArcticDB_merge/" class="md-nav__link">
         
   
@@ -2778,7 +2795,10 @@ Please note that this message is logged as a warning. Therefore, setting the log
 * 0: Disable
 * 1: Enable (Default)</p>
 <h3 id="versionstorerecursivenormalizermetastructure">VersionStore.RecursiveNormalizerMetastructure<a class="headerlink" href="#versionstorerecursivenormalizermetastructure" title="Permanent link">&para;</a></h3>
-<p>Controls whether the recursive normalizer will use meta structure V2</p>
+<p>Controls whether the recursive normalizer will use meta structure V2.</p>
+<p><strong>The default changed to V2 in v7.0.0.</strong> V2 removes the dependency on pickle for normalizing the
+meta structure, but can only be read by ArcticDB v6.7.0 and later. To keep data readable by
+clients older than v6.7.0, set this option explicitly to <code>1</code>.</p>
 <p><strong>Read Compatibility:</strong></p>
 <table>
 <thead>
@@ -2798,6 +2818,7 @@ Please note that this message is logged as a warning. Therefore, setting the log
 </tr>
 </tbody>
 </table>
+<p>Please note that if meta structure V2 is read by &lt; v6.7.0, exception KeyError will be raised.</p>
 <p><strong>V1 meta structure phase-out plan:</strong></p>
 <table>
 <thead>
@@ -2813,17 +2834,13 @@ Please note that this message is logged as a warning. Therefore, setting the log
 </tr>
 <tr>
 <td>&gt;= v7.0.0</td>
-<td>V2 meta structure will be enabled by default</td>
+<td>V2 meta structure is enabled by default; V1 must be opted into explicitly</td>
 </tr>
 </tbody>
 </table>
-<p>Values: * 1: V1 (Default) * 2: V2  </p>
-<h3 id="versionstoreversionstorerecursivenormalizermetastructurev1deprecationwarning">VersionStore.VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning<a class="headerlink" href="#versionstoreversionstorerecursivenormalizermetastructurev1deprecationwarning" title="Permanent link">&para;</a></h3>
-<p>Control whether deprecation warning will be given if meta structure V1 for recursive normalizer is still in use</p>
 <p>Values:
-* 0: Disable
-* 1: Enable (Default)</p>
-<p>Please note that if meta structure V2 is read by &lt; v6.7.0, exception KeyError will be raised</p>
+* 1: V1
+* 2: V2 (Default since v7.0.0)</p>
 <h3 id="compactlogprogresspercentage">Compact.LogProgressPercentage<a class="headerlink" href="#compactlogprogresspercentage" title="Permanent link">&para;</a></h3>
 <p>Controls how frequently progress is logged during <code>finalize_staged_data</code> operations. A log line is emitted each time this percentage of segments has been processed.</p>
 <p>For example, with the default value of <code>10</code>, logs appear at 10%, 20%, 30%, ... 100% completion:
@@ -2930,7 +2947,7 @@ set_log_level(console_output=True, file_output_path=None)
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">

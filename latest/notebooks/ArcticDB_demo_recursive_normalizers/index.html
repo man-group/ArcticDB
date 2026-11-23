@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.3/notebooks/ArcticDB_demo_recursive_normalizers/">
+        <link rel="canonical" href="https://docs.arcticdb.io/7.0.0/notebooks/ArcticDB_demo_recursive_normalizers/">
       
       
         <link rel="prev" href="../ArcticDB_staged_data_with_tokens/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -2131,6 +2131,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../ArcticDB_demo_write_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Write Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../ArcticDB_merge/" class="md-nav__link">
         
   
@@ -2514,7 +2542,7 @@
 
 <p>
 <h1>ArcticDB_demo_recursive_normalizers</h1>
-<a href="https://github.com/man-group/ArcticDB/blob/v6.28.3/docs/mkdocs/docs/notebooks/ArcticDB_demo_recursive_normalizers.ipynb">
+<a href="https://github.com/man-group/ArcticDB/blob/v7.0.0/docs/mkdocs/docs/notebooks/ArcticDB_demo_recursive_normalizers.ipynb">
     <span class="twemoji">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <title>github</title>
@@ -2526,7 +2554,7 @@
 </a>
 |
 <a
-    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/v6.28.3/docs/mkdocs/docs/notebooks/ArcticDB_demo_recursive_normalizers.ipynb">
+    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/v7.0.0/docs/mkdocs/docs/notebooks/ArcticDB_demo_recursive_normalizers.ipynb">
     <span class="twemoji">
         <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" focusable="false" width="977" height="602"
             style="height: 28px; width: 28px;">
@@ -2825,7 +2853,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="meta-structure-v2">Meta structure V2<a class="anchor-link" href="#meta-structure-v2">¶</a></h3><p>Meta structure V2 for recursive normalizer is introduced in v6.7.0. It has removed the dependency on pickle for normalizing the meta structure.
-Please consider enabling V2 as V1 will be deprecated in future v7.0.0 release. To enabld it, you need to set environment variable <strong>ARCTICDB_VersionStore_RecursiveNormalizerMetastructure_int</strong> to <strong>2</strong>.</p>
+V2 is the default since v7.0.0. To opt back in to V1, you need to set environment variable <strong>ARCTICDB_VersionStore_RecursiveNormalizerMetastructure_int</strong> to <strong>1</strong>.</p>
 <p>Reader of the data is needed to be &gt;= v6.7.0 or <strong>KeyError</strong> will be raised while reading V2 meta structure</p>
 </div>
 </div>
@@ -3961,7 +3989,7 @@ Caught SchemaException again
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">
