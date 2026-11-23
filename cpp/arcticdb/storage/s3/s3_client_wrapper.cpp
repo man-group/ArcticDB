@@ -108,6 +108,15 @@ S3Result<std::monostate> S3ClientTestWrapper::head_object(
     return actual_client_->head_object(s3_object_name, bucket_name);
 }
 
+S3Result<ObjectMetadata> S3ClientTestWrapper::head_object_metadata(
+        const std::string& s3_object_name, const std::string& bucket_name
+) const {
+    if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::EXISTS)) {
+        return {*maybe_error};
+    }
+    return actual_client_->head_object_metadata(s3_object_name, bucket_name);
+}
+
 S3Result<Segment> S3ClientTestWrapper::get_object(const std::string& s3_object_name, const std::string& bucket_name)
         const {
     if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::READ)) {
@@ -115,6 +124,16 @@ S3Result<Segment> S3ClientTestWrapper::get_object(const std::string& s3_object_n
     }
 
     return actual_client_->get_object(s3_object_name, bucket_name);
+}
+
+S3Result<GetObjectWithEtagOutput> S3ClientTestWrapper::get_object_with_etag(
+        const std::string& s3_object_name, const std::string& bucket_name
+) const {
+    if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::READ)) {
+        return {*maybe_error};
+    }
+
+    return actual_client_->get_object_with_etag(s3_object_name, bucket_name);
 }
 
 folly::Future<S3Result<Segment>> S3ClientTestWrapper::get_object_async(
@@ -134,7 +153,7 @@ S3Result<std::monostate> S3ClientTestWrapper::put_object(
         return {*maybe_bucket_error};
     }
     if (auto maybe_object_error = has_object_failure_trigger(s3_object_name, StorageOperation::WRITE)) {
-        if (header == PutHeader::IF_NONE_MATCH) {
+        if (header == PutHeader::IF_NONE_MATCH || header == PutHeader::IF_MATCH) {
             return {not_implemented_error};
         }
         return {*maybe_object_error};
@@ -147,6 +166,23 @@ S3Result<std::monostate> S3ClientTestWrapper::put_object(
     }
 
     return actual_client_->put_object(s3_object_name, segment, bucket_name, header);
+}
+
+S3Result<PutObjectOutput> S3ClientTestWrapper::put_object_with_etag(
+        const std::string& s3_object_name, Segment& segment, const std::string& bucket_name, PutHeader header,
+        const std::optional<std::string>& if_match_etag
+) {
+    if (auto maybe_bucket_error = has_bucket_failure_trigger(bucket_name)) {
+        return {*maybe_bucket_error};
+    }
+    if (auto maybe_object_error = has_object_failure_trigger(s3_object_name, StorageOperation::WRITE)) {
+        if (header == PutHeader::IF_NONE_MATCH || header == PutHeader::IF_MATCH) {
+            return {not_implemented_error};
+        }
+        return {*maybe_object_error};
+    }
+    // Forward IF_NONE_MATCH and IF_MATCH atomically to actual_client_ (never emulate IF_MATCH via head_object).
+    return actual_client_->put_object_with_etag(s3_object_name, segment, bucket_name, header, if_match_etag);
 }
 
 S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(

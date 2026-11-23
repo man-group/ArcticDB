@@ -60,11 +60,17 @@ class S3Storage : public Storage, AsyncStorage {
 
     void do_write_if_none(KeySegmentPair& kv) final;
 
+    std::string do_write_if_none_with_etag(KeySegmentPair& kv) final;
+
+    std::string do_write_if_match(KeySegmentPair& kv, const std::string& expected_etag) final;
+
     void do_update(KeySegmentPair& key_seg, UpdateOpts opts) final;
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
     KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+
+    std::pair<KeySegmentPair, std::string> do_read_with_etag(VariantKey&& variant_key, ReadKeyOpts opts) final;
 
     folly::Future<folly::Unit> do_async_read(
             entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts
@@ -90,6 +96,8 @@ class S3Storage : public Storage, AsyncStorage {
             final;
 
     bool do_key_exists(const VariantKey& key) final;
+
+    std::optional<ObjectMetadata> do_get_object_metadata(const VariantKey& key) final;
 
     bool do_supports_prefix_matching() const final { return true; }
 

@@ -78,13 +78,15 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
         raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: {}", error_message_suffix));
     }
 
+    // Map HTTP 412 PreconditionFailed and HTTP 409 Conflict (AWS S3 ConditionalRequestConflict)
+    // directly before the UNKNOWN error-type guard so SDK enum changes cannot mask CAS failures.
+    if (err.GetResponseCode() == Aws::Http::HttpResponseCode::PRECONDITION_FAILED ||
+        err.GetResponseCode() == Aws::Http::HttpResponseCode::CONFLICT) {
+        raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>(fmt::format("Atomic operation failed: {}", error_message_suffix));
+    }
+
     if (type == Aws::S3::S3Errors::UNKNOWN) {
         // Unknown is a catchall which can contain several different important exception types which we want to identify
-        if (err.GetResponseCode() == Aws::Http::HttpResponseCode::PRECONDITION_FAILED) {
-            raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>(fmt::format("Atomic operation failed: {}", error_message_suffix)
-            );
-        }
-
         if (err.GetExceptionName().find("NotImplemented") != std::string::npos) {
             raise<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>(
                     fmt::format("Operation is not implemented for storage: {}", error_message_suffix)
@@ -445,6 +447,84 @@ void do_write_if_none_impl(
 }
 
 template<class KeyBucketizer>
+std::string do_write_if_none_with_etag_impl(
+        KeySegmentPair& kv, const std::string& root_folder, const std::string& bucket_name,
+        S3ClientInterface& s3_client, KeyBucketizer&& bucketizer
+) {
+    auto key_type = kv.key_type();
+    auto key_type_dir = key_type_folder(root_folder, key_type);
+    auto& k = kv.variant_key();
+    auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+    auto& seg = *kv.segment_ptr();
+
+    auto put_object_result = s3_client.put_object_with_etag(
+            s3_object_name, seg, bucket_name, PutHeader::IF_NONE_MATCH, std::nullopt
+    );
+
+    if (!put_object_result.is_success()) {
+        auto& error = put_object_result.get_error();
+        raise_s3_exception(error, s3_object_name);
+    }
+    return std::move(put_object_result.get_output().etag);
+}
+
+template<class KeyBucketizer>
+std::string do_write_if_match_impl(
+        KeySegmentPair& kv, const std::string& expected_etag, const std::string& root_folder,
+        const std::string& bucket_name, S3ClientInterface& s3_client, KeyBucketizer&& bucketizer
+) {
+    auto key_type = kv.key_type();
+    auto key_type_dir = key_type_folder(root_folder, key_type);
+    auto& k = kv.variant_key();
+    auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+    auto& seg = *kv.segment_ptr();
+
+    auto put_object_result = s3_client.put_object_with_etag(
+            s3_object_name, seg, bucket_name, PutHeader::IF_MATCH, expected_etag
+    );
+
+    if (!put_object_result.is_success()) {
+        auto& error = put_object_result.get_error();
+        if (is_not_found_error(error.GetErrorType()) ||
+            error.GetResponseCode() == Aws::Http::HttpResponseCode::NOT_FOUND) {
+            storage::raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>(
+                    fmt::format("If-Match PutObject failed: object '{}' not found (HTTP 404)", s3_object_name)
+            );
+        }
+        raise_s3_exception(error, s3_object_name);
+    }
+    return std::move(put_object_result.get_output().etag);
+}
+
+template<class KeyBucketizer, class KeyDecoder>
+std::pair<KeySegmentPair, std::string> do_read_with_etag_impl(
+        VariantKey&& variant_key, const std::string& root_folder, const std::string& bucket_name,
+        const S3ClientInterface& s3_client, KeyBucketizer&& bucketizer, KeyDecoder&& key_decoder, ReadKeyOpts opts
+) {
+    auto key_type = variant_key_type(variant_key);
+    auto key_type_dir = key_type_folder(root_folder, key_type);
+    auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
+    auto get_object_result = s3_client.get_object_with_etag(s3_object_name, bucket_name);
+    auto unencoded_key = key_decoder(std::move(variant_key));
+
+    if (get_object_result.is_success()) {
+        auto& out = get_object_result.get_output();
+        return {KeySegmentPair{VariantKey{unencoded_key}, std::move(out.segment)}, std::move(out.etag)};
+    }
+    auto& error = get_object_result.get_error();
+    raise_if_unexpected_error(error, s3_object_name);
+
+    log::storage().log(
+            opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+            "Failed to find segment for key '{}' {}: {}",
+            variant_key_view(unencoded_key),
+            error.GetExceptionName().c_str(),
+            error.GetMessage().c_str()
+    );
+    throw KeyNotFoundException(unencoded_key);
+}
+
+template<class KeyBucketizer>
 void do_update_impl(
         Composite<KeySegmentPair>&& kvs, const std::string& root_folder, const std::string& bucket_name,
         S3ClientInterface& s3_client, KeyBucketizer&& bucketizer
@@ -711,6 +791,27 @@ bool do_key_exists_impl(
     }
 
     return head_object_result.is_success();
+}
+
+template<class KeyBucketizer>
+std::optional<ObjectMetadata> do_get_object_metadata_impl(
+        const VariantKey& key, const std::string& root_folder, const std::string& bucket_name,
+        const S3ClientInterface& s3_client, KeyBucketizer&& b
+) {
+    auto key_type = variant_key_type(key);
+    auto key_type_dir = key_type_folder(root_folder, key_type);
+    auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
+
+    auto res = s3_client.head_object_metadata(s3_object_name, bucket_name);
+    if (!res.is_success()) {
+        const auto& err = res.get_error();
+        if (err.GetExceptionName() == "NotImplemented") {
+            return std::nullopt;
+        }
+        raise_if_unexpected_error(err, s3_object_name);
+        throw KeyNotFoundException(key);
+    }
+    return res.get_output();
 }
 
 } // namespace detail

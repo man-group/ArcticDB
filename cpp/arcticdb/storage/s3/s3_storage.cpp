@@ -50,6 +50,14 @@ void S3Storage::do_write_if_none(KeySegmentPair& kv) {
     detail::do_write_if_none_impl(kv, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
+std::string S3Storage::do_write_if_none_with_etag(KeySegmentPair& kv) {
+    return detail::do_write_if_none_with_etag_impl(kv, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+}
+
+std::string S3Storage::do_write_if_match(KeySegmentPair& kv, const std::string& expected_etag) {
+    return detail::do_write_if_match_impl(kv, expected_etag, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+}
+
 void S3Storage::do_update(KeySegmentPair& key_seg, UpdateOpts) {
     detail::do_update_impl(key_seg, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
@@ -71,6 +79,13 @@ void S3Storage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, Re
 KeySegmentPair S3Storage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
     auto identity = [](auto&& k) { return k; };
     return detail::do_read_impl(
+            std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{}, std::move(identity), opts
+    );
+}
+
+std::pair<KeySegmentPair, std::string> S3Storage::do_read_with_etag(VariantKey&& variant_key, ReadKeyOpts opts) {
+    auto identity = [](auto&& k) { return k; };
+    return detail::do_read_with_etag_impl(
             std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{}, std::move(identity), opts
     );
 }
@@ -202,6 +217,10 @@ void S3Storage::visit_object_metadata_impl(
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
     return detail::do_key_exists_impl(key, root_folder_, bucket_name_, client(), FlatBucketizer{});
+}
+
+std::optional<ObjectMetadata> S3Storage::do_get_object_metadata(const VariantKey& key) {
+    return detail::do_get_object_metadata_impl(key, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
 } // namespace s3

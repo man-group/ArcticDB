@@ -266,6 +266,36 @@ class Storage {
     }
 
     template<typename T>
+    std::string write_if_none_with_etag(T&& kv) {
+        if (!query_stats::is_active()) {
+            return do_write_if_none_with_etag(kv);
+        }
+        const auto key_type = kv.key_type();
+        const auto sym = detail::extract_symbol_from_variant_key(kv.variant_key());
+        const uint64_t bytes = kv.segment_ptr() ? kv.segment_ptr()->calculate_size() : 0;
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::WriteIfNone, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::WriteIfNone, key_type, library_name_, sym);
+        auto etag = detail::run_classified_storage_op(guard, [&]() { return do_write_if_none_with_etag(kv); });
+        guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
+        return etag;
+    }
+
+    template<typename T>
+    std::string write_if_match(T&& kv, const std::string& expected_etag) {
+        if (!query_stats::is_active()) {
+            return do_write_if_match(kv, expected_etag);
+        }
+        const auto key_type = kv.key_type();
+        const auto sym = detail::extract_symbol_from_variant_key(kv.variant_key());
+        const uint64_t bytes = kv.segment_ptr() ? kv.segment_ptr()->calculate_size() : 0;
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::WriteIfMatch, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::WriteIfMatch, key_type, library_name_, sym);
+        auto etag = detail::run_classified_storage_op(guard, [&]() { return do_write_if_match(kv, expected_etag); });
+        guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
+        return etag;
+    }
+
+    template<typename T>
     void update(T&& key_seg, UpdateOpts opts) {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
         if (!query_stats::is_active()) {
@@ -307,6 +337,22 @@ class Storage {
         detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Read, key_type, library_name_, sym);
         auto res = detail::run_classified_storage_op(guard, [&]() { return do_read(std::move(variant_key), opts); });
         const uint64_t bytes = res.segment_ptr() ? res.segment_ptr()->calculate_size() : 0;
+        guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
+        return res;
+    }
+
+    std::pair<KeySegmentPair, std::string> read_with_etag(VariantKey&& variant_key, ReadKeyOpts opts) {
+        if (!query_stats::is_active()) {
+            return do_read_with_etag(std::move(variant_key), opts);
+        }
+        const auto key_type = variant_key_type(variant_key);
+        const std::string sym(detail::extract_symbol_from_variant_key(variant_key));
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::Read, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Read, key_type, library_name_, sym);
+        auto res = detail::run_classified_storage_op(guard, [&]() {
+            return do_read_with_etag(std::move(variant_key), opts);
+        });
+        const uint64_t bytes = res.first.segment_ptr() ? res.first.segment_ptr()->calculate_size() : 0;
         guard.finish(query_stats::StorageOutcome::Ok, bytes, 1);
         return res;
     }
@@ -368,6 +414,20 @@ class Storage {
         return supports_atomic_writes_.value();
     }
 
+    // 4-step dual startup probe verifying both If-None-Match:* and If-Match:<etag> CAS semantics fail-closed.
+    [[nodiscard]] bool supports_cas_writes() {
+        std::lock_guard<std::mutex> lk(*cas_probe_mutex_);
+        if (supports_cas_writes_.has_value()) {
+            return supports_cas_writes_.value();
+        }
+        auto probed = test_cas_write_support_checked();
+        if (probed.has_value()) {
+            supports_cas_writes_ = *probed;
+            return *probed;
+        }
+        return false;
+    }
+
     bool fast_delete() {
         if (!query_stats::is_active()) {
             return do_fast_delete();
@@ -398,6 +458,19 @@ class Storage {
         const bool exists = detail::run_classified_storage_op(guard, [&]() { return do_key_exists(key); });
         guard.finish(exists ? query_stats::StorageOutcome::Ok : query_stats::StorageOutcome::NotFound, 0, 1);
         return exists;
+    }
+
+    inline std::optional<ObjectMetadata> get_object_metadata(const VariantKey& key) {
+        if (!query_stats::is_active()) {
+            return do_get_object_metadata(key);
+        }
+        const auto key_type = variant_key_type(key);
+        const auto sym = detail::extract_symbol_from_variant_key(key);
+        query_stats::ContextTagScope tag(library_name_, sym, query_stats::StorageOp::Exists, key_type);
+        detail::StorageOpGuard guard(backend_type(), query_stats::StorageOp::Exists, key_type, library_name_, sym);
+        auto res = detail::run_classified_storage_op(guard, [&]() { return do_get_object_metadata(key); });
+        guard.finish(res.has_value() ? query_stats::StorageOutcome::Ok : query_stats::StorageOutcome::NotFound, 0, 1);
+        return res;
     }
 
     void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix = std::string()) {
@@ -617,9 +690,141 @@ class Storage {
         return atomic_write_works_as_expected;
     }
 
+    // 4-step dual CAS startup probe (detects VAST silent If-None-Match/If-Match overwrite and Pure NotImplemented).
+    // Returns std::nullopt on transient retryable transport failure so caller does not permanently poison the cache.
+    [[nodiscard]] std::optional<bool> test_cas_write_support_checked() {
+        std::random_device rd;
+        std::mt19937_64 e2(rd());
+        std::uniform_int_distribution<uint64_t> dist;
+        auto dummy_key_suffix = ConfigsMap::instance()->get_string("Storage.AtomicSupportTestSuffix", "");
+        auto dummy_key =
+                RefKey(fmt::format("CAS_TEST_{}_{}{}", dist(e2), dist(e2), dummy_key_suffix), KeyType::ATOMIC_LOCK);
+        auto desc1 = stream_descriptor("cas_probe_v1", stream::RowCountIndex(), {});
+        auto desc2 = stream_descriptor("cas_probe_v2", stream::RowCountIndex(), {});
+        auto buf1 = std::make_shared<Buffer>(4);
+        buf1->ensure(4);
+        std::memcpy(buf1->data(), "v1__", 4);
+        auto buf2 = std::make_shared<Buffer>(4);
+        buf2->ensure(4);
+        std::memcpy(buf2->data(), "v2__", 4);
+        auto seg_v1 = Segment::initialize(
+                SegmentHeader{}, std::move(buf1), desc1.data_ptr(), desc1.fields_ptr(), desc1.id()
+        );
+        auto seg_v2 = Segment::initialize(
+                SegmentHeader{}, std::move(buf2), desc2.data_ptr(), desc2.fields_ptr(), desc2.id()
+        );
+
+        bool created = false;
+        auto cleanup_guard = folly::makeGuard([this, &created, &dummy_key]() {
+            if (created) {
+                try {
+                    remove(VariantKey{dummy_key}, RemoveOpts{.ignores_missing_key_ = true});
+                } catch (...) {
+                }
+            }
+        });
+
+        try {
+            // Step 1: If-None-Match:* create must succeed with a non-empty ETag.
+            KeySegmentPair kv1{dummy_key, seg_v1.clone()};
+            const std::string etag1 = write_if_none_with_etag(kv1);
+            created = true;
+            if (etag1.empty()) {
+                log::storage().warn("CAS probe failed at Step 1: empty ETag returned on If-None-Match create");
+                return false;
+            }
+
+            // Step 2: Duplicate If-None-Match:* MUST throw AtomicOperationFailedException (VAST detector).
+            bool step2_rejected = false;
+            try {
+                KeySegmentPair kv1b{dummy_key, seg_v1.clone()};
+                (void)write_if_none_with_etag(kv1b);
+            } catch (const AtomicOperationFailedException&) {
+                step2_rejected = true;
+            }
+            if (!step2_rejected) {
+                log::storage().warn("CAS probe failed at Step 2: storage silently overwrote on If-None-Match:*");
+                return false;
+            }
+
+            // Step 3: Stale If-Match MUST throw AtomicOperationFailedException (partial-support detector).
+            // Flip a valid hex nibble inside etag1 so strict S3 gateways validating MD5 hex do not return HTTP 400.
+            std::string stale_etag = etag1;
+            bool flipped = false;
+            for (char& ch : stale_etag) {
+                if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+                    ch = (ch == '0') ? '1' : '0';
+                    flipped = true;
+                    break;
+                }
+            }
+            if (!flipped || stale_etag == etag1) {
+                stale_etag = "\"00000000000000000000000000000000\"";
+            }
+            bool step3_rejected = false;
+            try {
+                KeySegmentPair kv_bad{dummy_key, seg_v2.clone()};
+                (void)write_if_match(kv_bad, stale_etag);
+            } catch (const AtomicOperationFailedException&) {
+                step3_rejected = true;
+            }
+            if (!step3_rejected) {
+                log::storage().warn("CAS probe failed at Step 3: storage silently overwrote on stale If-Match");
+                return false;
+            }
+
+            // Step 4: Positive If-Match with etag1 must succeed with non-empty etag2 matching read_with_etag().
+            KeySegmentPair kv2{dummy_key, seg_v2.clone()};
+            const std::string etag2 = write_if_match(kv2, etag1);
+            if (etag2.empty()) {
+                log::storage().warn("CAS probe failed at Step 4: empty ETag returned on If-Match");
+                return false;
+            }
+            auto [read_ks, read_etag] = read_with_etag(VariantKey{dummy_key}, ReadKeyOpts{});
+            (void)read_ks;
+            if (read_etag != etag2) {
+                log::storage().warn(
+                        "CAS probe failed at Step 4: ETag round-trip mismatch (put='{}' vs get='{}')", etag2, read_etag
+                );
+                return false;
+            }
+            return true;
+        } catch (const NotImplementedException&) {
+            return false;
+        } catch (const UnsupportedAtomicOperationException&) {
+            return false;
+        } catch (const S3RetryableException& e) {
+            log::storage().warn("CAS probe hit transient retryable error (not cached): {}", e.what());
+            return std::nullopt;
+        } catch (const std::exception& e) {
+            log::storage().warn("CAS probe failed closed with exception: {}", e.what());
+            return false;
+        }
+    }
+
+    [[nodiscard]] bool test_cas_write_support() { return test_cas_write_support_checked().value_or(false); }
+
     virtual void do_write(KeySegmentPair& key_seg) = 0;
 
     virtual void do_write_if_none(KeySegmentPair& kv) = 0;
+
+    virtual std::string do_write_if_none_with_etag(KeySegmentPair& /*kv*/) {
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(
+                "write_if_none_with_etag is not supported by storage " + name()
+        );
+    }
+
+    virtual std::string do_write_if_match(KeySegmentPair& /*kv*/, const std::string& /*expected_etag*/) {
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(
+                "write_if_match is not supported by storage " + name()
+        );
+    }
+
+    virtual std::pair<KeySegmentPair, std::string> do_read_with_etag(VariantKey&& /*variant_key*/, ReadKeyOpts /*opts*/) {
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(
+                "read_with_etag is not supported by storage " + name()
+        );
+    }
 
     virtual void do_update(KeySegmentPair& key_seg, UpdateOpts opts) = 0;
 
@@ -632,6 +837,8 @@ class Storage {
     virtual void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) = 0;
 
     virtual bool do_key_exists(const VariantKey& key) = 0;
+
+    virtual std::optional<ObjectMetadata> do_get_object_metadata(const VariantKey& /*key*/) { return std::nullopt; }
 
     virtual bool do_supports_prefix_matching() const = 0;
 
@@ -678,6 +885,8 @@ class Storage {
     std::string library_name_;
     OpenMode mode_;
     std::optional<bool> supports_atomic_writes_;
+    std::shared_ptr<std::mutex> cas_probe_mutex_ = std::make_shared<std::mutex>();
+    std::optional<bool> supports_cas_writes_;
 };
 
 } // namespace arcticdb::storage

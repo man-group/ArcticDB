@@ -68,6 +68,13 @@ struct StreamSink {
             IndexValue end_index, SegmentInMemory&& segment
     ) = 0;
 
+    virtual entity::VariantKey write_sync(
+            stream::KeyType key_type, VersionId version_id, const StreamId& stream_id, timestamp creation_ts,
+            IndexValue start_index, IndexValue end_index, SegmentInMemory&& segment
+    ) {
+        return write(key_type, version_id, stream_id, creation_ts, start_index, end_index, std::move(segment)).get();
+    }
+
     [[nodiscard]] virtual folly::Future<entity::VariantKey> update(
             const VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts = storage::UpdateOpts{}
     ) = 0;
@@ -86,19 +93,58 @@ struct StreamSink {
 
     virtual entity::VariantKey write_sync(PartialKey pk, SegmentInMemory&& segment) = 0;
 
+    virtual entity::VariantKey write_sync(PartialKey pk, timestamp creation_ts, SegmentInMemory&& segment) {
+        return write_sync(
+                pk.key_type, pk.version_id, pk.stream_id, creation_ts, pk.start_index, pk.end_index, std::move(segment)
+        );
+    }
+
     virtual entity::VariantKey write_sync(KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment) = 0;
 
     virtual bool supports_atomic_writes() const = 0;
 
+    virtual bool supports_cas_writes() const { return false; }
+
     virtual entity::VariantKey write_if_none_sync(
             KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment
     ) = 0;
+
+    virtual std::pair<entity::VariantKey, std::string> write_if_none_with_etag_sync(
+            KeyType /*key_type*/, const StreamId& /*stream_id*/, SegmentInMemory&& /*segment*/
+    ) {
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(
+                "write_if_none_with_etag_sync not supported by this StreamSink"
+        );
+    }
+
+    virtual std::pair<entity::VariantKey, std::string> write_if_match_sync(
+            KeyType /*key_type*/, const StreamId& /*stream_id*/, SegmentInMemory&& /*segment*/,
+            const std::string& /*expected_etag*/
+    ) {
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(
+                "write_if_match_sync not supported by this StreamSink"
+        );
+    }
 
     [[nodiscard]] virtual folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair ks) = 0;
 
     virtual void write_compressed_sync(storage::KeySegmentPair ks) = 0;
 
     virtual void update_compressed_sync(storage::KeySegmentPair ks, storage::UpdateOpts opts) = 0;
+
+    // Pre-encode an atom segment locally (computing its deterministic content-hashed AtomKey) without issuing I/O.
+    // Returns std::nullopt on minimal mock sinks that do not expose codec encoding; AsyncStore overrides this.
+    [[nodiscard]] virtual std::optional<storage::KeySegmentPair> encode_atom_sync(
+            PartialKey /*pk*/, timestamp /*creation_ts*/, SegmentInMemory&& /*segment*/
+    ) {
+        return std::nullopt;
+    }
+
+    // Write a pre-encoded KeySegmentPair asynchronously on the IO executor, capturing write metadata when enabled.
+    [[nodiscard]] virtual folly::Future<entity::VariantKey> write_encoded_atom(storage::KeySegmentPair ks) {
+        auto key = ks.variant_key();
+        return write_compressed(std::move(ks)).thenValueInline([key = std::move(key)](folly::Unit&&) { return key; });
+    }
 
     [[nodiscard]] virtual folly::Future<pipelines::SliceAndKey> async_write(
             folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
@@ -154,6 +200,11 @@ struct StreamSink {
     }
 
     virtual void discard_captured_version_write(const StreamId& /*stream_id*/, entity::VersionId /*version_id*/) {}
+
+    virtual void record_adopted_version_data(
+            const StreamId& /*stream_id*/, entity::VersionId /*target_version_id*/,
+            std::span<const entity::AtomKey> /*keys*/
+    ) {}
 
     virtual timestamp current_timestamp() = 0;
 };

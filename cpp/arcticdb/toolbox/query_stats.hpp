@@ -63,6 +63,7 @@ enum class StorageOp : uint8_t {
     VisitSizes = 10,
     FastDelete = 11,
     VisitMetadata = 12,
+    WriteIfMatch = 13,
     COUNT
 };
 

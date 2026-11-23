@@ -74,13 +74,34 @@ S3Result<std::monostate> MockS3Client::head_object(const std::string& s3_object_
     return {std::monostate()};
 }
 
-S3Result<Segment> MockS3Client::get_object(const std::string& s3_object_name, const std::string& bucket_name) const {
+S3Result<ObjectMetadata> MockS3Client::head_object_metadata(
+        const std::string& s3_object_name, const std::string& bucket_name
+) const {
     std::scoped_lock<std::mutex> lock(mutex_);
     auto pos = s3_contents_.find({bucket_name, s3_object_name});
     if (pos == s3_contents_.end() || !pos->second.has_value()) {
         return {not_found_error};
     }
-    return {pos->second->segment.clone()};
+    return {ObjectMetadata{pos->second->etag, pos->second->size, pos->second->last_modified_ms}};
+}
+
+S3Result<Segment> MockS3Client::get_object(const std::string& s3_object_name, const std::string& bucket_name) const {
+    auto res = get_object_with_etag(s3_object_name, bucket_name);
+    if (!res.is_success()) {
+        return {std::move(res.get_error())};
+    }
+    return {std::move(res.get_output().segment)};
+}
+
+S3Result<GetObjectWithEtagOutput> MockS3Client::get_object_with_etag(
+        const std::string& s3_object_name, const std::string& bucket_name
+) const {
+    std::scoped_lock<std::mutex> lock(mutex_);
+    auto pos = s3_contents_.find({bucket_name, s3_object_name});
+    if (pos == s3_contents_.end() || !pos->second.has_value()) {
+        return {not_found_error};
+    }
+    return {GetObjectWithEtagOutput{pos->second->segment.clone(), pos->second->etag}};
 }
 
 folly::Future<S3Result<Segment>> MockS3Client::get_object_async(
@@ -92,10 +113,27 @@ folly::Future<S3Result<Segment>> MockS3Client::get_object_async(
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string& s3_object_name, Segment& segment, const std::string& bucket_name, PutHeader header
 ) {
+    auto res = put_object_with_etag(s3_object_name, segment, bucket_name, header, std::nullopt);
+    if (!res.is_success()) {
+        return {std::move(res.get_error())};
+    }
+    return {std::monostate()};
+}
+
+S3Result<PutObjectOutput> MockS3Client::put_object_with_etag(
+        const std::string& s3_object_name, Segment& segment, const std::string& bucket_name, PutHeader header,
+        const std::optional<std::string>& if_match_etag
+) {
     std::scoped_lock<std::mutex> lock(mutex_);
     auto pos = s3_contents_.find({bucket_name, s3_object_name});
-    if (header == PutHeader::IF_NONE_MATCH && pos != s3_contents_.end() && pos->second.has_value()) {
+    const bool exists = pos != s3_contents_.end() && pos->second.has_value();
+    if (header == PutHeader::IF_NONE_MATCH && exists) {
         return {precondition_failed_error};
+    }
+    if (header == PutHeader::IF_MATCH) {
+        if (!exists || !if_match_etag.has_value() || pos->second->etag != *if_match_etag) {
+            return {precondition_failed_error};
+        }
     }
 
     // When we write Segments we occasionally don't fill in the size_. This is fine as it's not needed for writing.
@@ -103,12 +141,11 @@ S3Result<std::monostate> MockS3Client::put_object(
     const uint64_t size = segment.calculate_size();
     // Synthetic per-write quoted ETag (matching AWS S3) and monotonic timestamp (ms) for metadata listing tests.
     const uint64_t seq = ++write_seq_;
-    MockObject obj{
-            segment.clone(), size, fmt::format("\"mock-{}-{}\"", bucket_name, seq), static_cast<int64_t>(seq * 1000)
-    };
+    std::string etag = fmt::format("\"mock-{}-{}\"", bucket_name, seq);
+    MockObject obj{segment.clone(), size, etag, static_cast<int64_t>(seq * 1000)};
     s3_contents_.insert_or_assign({bucket_name, s3_object_name}, std::move(obj));
 
-    return {std::monostate()};
+    return {PutObjectOutput{std::move(etag)}};
 }
 
 S3Result<DeleteObjectsOutput> MockS3Client::delete_objects(

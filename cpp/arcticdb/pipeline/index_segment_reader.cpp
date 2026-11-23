@@ -40,6 +40,15 @@ bool IndexSegmentReader::empty() const { return seg_.empty(); }
 
 IndexRange get_index_segment_range(const AtomKey& prev_index, const std::shared_ptr<Store>& store) {
     auto isr = get_index_reader(prev_index, store);
+    if (isr.empty()) {
+        return unspecified_range();
+    }
+    if (!isr.has_timestamp_index()) {
+        return IndexRange{
+                NumericIndex{static_cast<timestamp>(isr.begin()->slice().row_range.first)},
+                NumericIndex{static_cast<timestamp>(isr.last()->slice().row_range.second)}
+        };
+    }
     return IndexRange{isr.begin()->key().start_index(), isr.last()->key().end_index()};
 }
 

@@ -30,6 +30,7 @@ std::string MemoryStorage::name() const { return "memory_storage-0"; }
 
 void MemoryStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
+    std::lock_guard<std::mutex> cas_lk(cas_mutex_);
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
 
@@ -41,6 +42,7 @@ void MemoryStorage::do_write(KeySegmentPair& key_seg) {
                 }
                 add_serialization_fields(key_seg);
                 key_vec.try_emplace(key, key_seg.segment().clone());
+                etags_[key_seg.variant_key()] = fmt::format("\"mem-{}\"", ++etag_seq_);
             },
             [&](const AtomKey& key) {
                 if (key_vec.find(key) != key_vec.end()) {
@@ -48,12 +50,60 @@ void MemoryStorage::do_write(KeySegmentPair& key_seg) {
                 }
                 add_serialization_fields(key_seg);
                 key_vec.try_emplace(key, key_seg.segment().clone());
+                etags_[key_seg.variant_key()] = fmt::format("\"mem-{}\"", ++etag_seq_);
             }
     );
 }
 
+std::string MemoryStorage::do_write_if_none_with_etag(KeySegmentPair& kv) {
+    std::lock_guard<std::mutex> cas_lk(cas_mutex_);
+    auto& key_vec = data_[variant_key_type(kv.variant_key())];
+    if (key_vec.find(kv.variant_key()) != key_vec.end()) {
+        storage::raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>(
+                "MemoryStorage write_if_none_with_etag failed: key already exists"
+        );
+    }
+    add_serialization_fields(kv);
+    key_vec.try_emplace(kv.variant_key(), kv.segment().clone());
+    std::string etag = fmt::format("\"mem-{}\"", ++etag_seq_);
+    etags_[kv.variant_key()] = etag;
+    return etag;
+}
+
+std::string MemoryStorage::do_write_if_match(KeySegmentPair& kv, const std::string& expected_etag) {
+    std::lock_guard<std::mutex> cas_lk(cas_mutex_);
+    auto& key_vec = data_[variant_key_type(kv.variant_key())];
+    auto it = key_vec.find(kv.variant_key());
+    auto et_it = etags_.find(kv.variant_key());
+    if (it == key_vec.end() || et_it == etags_.end() || et_it->second != expected_etag) {
+        storage::raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>(
+                "MemoryStorage write_if_match failed: ETag mismatch or key missing"
+        );
+    }
+    key_vec.erase(it);
+    add_serialization_fields(kv);
+    key_vec.try_emplace(kv.variant_key(), kv.segment().clone());
+    std::string etag = fmt::format("\"mem-{}\"", ++etag_seq_);
+    etags_[kv.variant_key()] = etag;
+    return etag;
+}
+
+std::pair<KeySegmentPair, std::string> MemoryStorage::do_read_with_etag(VariantKey&& variant_key, ReadKeyOpts) {
+    std::lock_guard<std::mutex> cas_lk(cas_mutex_);
+    auto& key_vec = data_[variant_key_type(variant_key)];
+    auto it = key_vec.find(variant_key);
+    if (it == key_vec.end()) {
+        throw KeyNotFoundException(variant_key);
+    }
+    auto et_it = etags_.find(variant_key);
+    std::string etag = (et_it != etags_.end()) ? et_it->second : std::string{"\"mem-0\""};
+    auto seg = it->second.clone();
+    return {KeySegmentPair{std::move(variant_key), std::move(seg)}, std::move(etag)};
+}
+
 void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
+    std::lock_guard<std::mutex> cas_lk(cas_mutex_);
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
     auto it = key_vec.find(key_seg.variant_key());
@@ -70,6 +120,7 @@ void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
 
     add_serialization_fields(key_seg);
     key_vec.insert(std::make_pair(key_seg.variant_key(), key_seg.segment().clone()));
+    etags_[key_seg.variant_key()] = fmt::format("\"mem-{}\"", ++etag_seq_);
 }
 
 void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts) {
@@ -100,6 +151,7 @@ bool MemoryStorage::do_key_exists(const VariantKey& key) {
 
 void MemoryStorage::do_remove_single(VariantKey&& variant_key, RemoveOpts opts, bool record_legacy) {
     ARCTICDB_SAMPLE(MemoryStorageRemove, 0)
+    std::lock_guard<std::mutex> cas_lk(cas_mutex_);
     const auto key_type = variant_key_type(variant_key);
     auto& key_vec = data_[key_type];
 
@@ -115,6 +167,7 @@ void MemoryStorage::do_remove_single(VariantKey&& variant_key, RemoveOpts opts, 
             }
         }
         key_vec.erase(it);
+        etags_.erase(variant_key);
     } else if (!opts.ignores_missing_key_) {
         if (record_legacy && query_stats::is_active()) {
             query_stats::record_legacy_memory_delete(key_type, 0);
@@ -137,7 +190,9 @@ void MemoryStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opt
 }
 
 bool MemoryStorage::do_fast_delete() {
+    std::lock_guard<std::mutex> cas_lk(cas_mutex_);
     foreach_key_type([&](KeyType key_type) { data_[key_type].clear(); });
+    etags_.clear();
     return true;
 }
 

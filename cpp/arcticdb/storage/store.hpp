@@ -55,6 +55,14 @@ class Store : public stream::StreamSink, public stream::StreamSource, public std
         write_capture_cache_->discard(stream_id, version_id);
     }
 
+    void record_adopted_version_data(
+            const StreamId& stream_id, entity::VersionId target_version_id, std::span<const entity::AtomKey> keys
+    ) override {
+        if (write_capture_cache_ && is_enriched_op_log_enabled()) {
+            write_capture_cache_->record_adopted_data(stream_id, target_version_id, keys);
+        }
+    }
+
   protected:
     [[nodiscard]] const std::shared_ptr<WriteCaptureCache>& write_capture_cache() const noexcept {
         return write_capture_cache_;

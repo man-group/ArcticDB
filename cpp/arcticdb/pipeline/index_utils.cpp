@@ -20,10 +20,10 @@ namespace arcticdb::pipelines::index {
 template<class IndexType>
 folly::Future<entity::AtomKey> write_index(
         const TimeseriesDescriptor& metadata, std::vector<SliceAndKey>&& sk, const IndexPartialKey& partial_key,
-        const std::shared_ptr<stream::StreamSink>& sink
+        const std::shared_ptr<stream::StreamSink>& sink, std::optional<entity::timestamp> creation_ts
 ) {
     auto slice_and_keys = std::move(sk);
-    IndexWriter<IndexType> writer(sink, partial_key, metadata);
+    IndexWriter<IndexType> writer(sink, partial_key, metadata, std::nullopt, false, creation_ts);
     for (const auto& slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice_);
     }
@@ -33,11 +33,26 @@ folly::Future<entity::AtomKey> write_index(
 
 folly::Future<entity::AtomKey> write_index(
         const stream::Index& index, const TimeseriesDescriptor& metadata, std::vector<SliceAndKey>&& sk,
-        const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink
+        const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
+        std::optional<entity::timestamp> creation_ts
 ) {
     return util::variant_match(index, [&](auto idx) {
         using IndexType = decltype(idx);
-        return write_index<IndexType>(metadata, std::move(sk), partial_key, sink);
+        return write_index<IndexType>(metadata, std::move(sk), partial_key, sink, creation_ts);
+    });
+}
+
+std::pair<stream::PartialKey, SegmentInMemory> build_index_segment(
+        const stream::Index& index, const TimeseriesDescriptor& metadata, const std::vector<SliceAndKey>& sk,
+        const IndexPartialKey& partial_key
+) {
+    return util::variant_match(index, [&](auto idx) {
+        using IndexType = decltype(idx);
+        IndexWriter<IndexType> writer(nullptr, partial_key, metadata, std::nullopt, true, std::nullopt);
+        for (const auto& slice_and_key : sk) {
+            writer.add(slice_and_key.key(), slice_and_key.slice_);
+        }
+        return writer.build_segment();
     });
 }
 

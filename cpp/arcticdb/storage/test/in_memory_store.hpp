@@ -42,6 +42,8 @@ class InMemoryStore : public Store {
 
     bool supports_atomic_writes() const override { return true; }
 
+    bool supports_cas_writes() const override { return true; }
+
     bool fast_delete() override { return false; }
 
     storage::OpenMode open_mode() const override {
@@ -136,6 +138,64 @@ class InMemoryStore : public Store {
         auto key = entity::RefKey{stream_id, key_type};
         add_segment(key, std::move(segment), true);
         return key;
+    }
+
+    std::pair<entity::VariantKey, std::string> write_if_none_with_etag_sync(
+            KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment
+    ) override {
+        StorageFailureSimulator::instance()->go(FailureType::WRITE);
+        std::lock_guard lock{mutex_};
+        auto key = entity::RefKey{stream_id, key_type};
+        if (seg_by_ref_key_.find(key) != seg_by_ref_key_.end()) {
+            storage::raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>("Precondition failed. Object is already present.");
+        }
+        seg_by_ref_key_[key] = std::make_unique<SegmentInMemory>(std::move(segment));
+        std::string etag = fmt::format("\"inmem-{}\"", ++etag_seq_);
+        ref_etags_[key] = etag;
+        return {key, std::move(etag)};
+    }
+
+    std::pair<entity::VariantKey, std::string> write_if_match_sync(
+            KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment, const std::string& expected_etag
+    ) override {
+        StorageFailureSimulator::instance()->go(FailureType::WRITE);
+        std::lock_guard lock{mutex_};
+        auto key = entity::RefKey{stream_id, key_type};
+        auto it = seg_by_ref_key_.find(key);
+        auto et_it = ref_etags_.find(key);
+        if (it == seg_by_ref_key_.end() || et_it == ref_etags_.end() || et_it->second != expected_etag) {
+            storage::raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>("Precondition failed. ETag mismatch.");
+        }
+        seg_by_ref_key_[key] = std::make_unique<SegmentInMemory>(std::move(segment));
+        std::string etag = fmt::format("\"inmem-{}\"", ++etag_seq_);
+        ref_etags_[key] = etag;
+        return {key, std::move(etag)};
+    }
+
+    std::tuple<VariantKey, SegmentInMemory, std::string> read_with_etag_sync(
+            const VariantKey& key, storage::ReadKeyOpts
+    ) override {
+        StorageFailureSimulator::instance()->go(FailureType::READ);
+        std::lock_guard lock{mutex_};
+        return util::variant_match(
+                key,
+                [&](const RefKey& ref_key) -> std::tuple<VariantKey, SegmentInMemory, std::string> {
+                    auto it = seg_by_ref_key_.find(ref_key);
+                    if (it == seg_by_ref_key_.end()) {
+                        throw storage::KeyNotFoundException(ref_key);
+                    }
+                    auto et_it = ref_etags_.find(ref_key);
+                    std::string etag = (et_it != ref_etags_.end()) ? et_it->second : std::string{"\"inmem-0\""};
+                    return {it->first, it->second->clone(), std::move(etag)};
+                },
+                [&](const AtomKey& atom_key) -> std::tuple<VariantKey, SegmentInMemory, std::string> {
+                    auto it = seg_by_atom_key_.find(atom_key);
+                    if (it == seg_by_atom_key_.end()) {
+                        throw storage::KeyNotFoundException(atom_key);
+                    }
+                    return {it->first, it->second->clone(), "\"inmem-atom\""};
+                }
+        );
     }
 
     const std::set<char>& unsupported_symbol_chars() const override { return storage::GLOBALLY_UNSUPPORTED_CHARS; }
@@ -292,7 +352,10 @@ class InMemoryStore : public Store {
         size_t removed = util::variant_match(
                 key,
                 [&](const AtomKey& atom_key) { return seg_by_atom_key_.erase(atom_key); },
-                [&](const RefKey& ref_key) { return seg_by_ref_key_.erase(ref_key); }
+                [&](const RefKey& ref_key) {
+                    ref_etags_.erase(ref_key);
+                    return seg_by_ref_key_.erase(ref_key);
+                }
         );
         ARCTICDB_DEBUG(log::storage(), "Mock store removed {} {}", removed, key);
         if (removed == 0 && !opts.ignores_missing_key_) {
@@ -579,12 +642,15 @@ class InMemoryStore : public Store {
             }
         }
         seg_by_ref_key_[key] = std::make_unique<SegmentInMemory>(std::move(seg));
+        ref_etags_[key] = fmt::format("\"inmem-{}\"", ++etag_seq_);
     }
 
   protected:
     std::recursive_mutex mutex_; // Allow iterate_type() to be re-entrant
     std::unordered_map<AtomKey, std::unique_ptr<SegmentInMemory>> seg_by_atom_key_;
     std::unordered_map<RefKey, std::unique_ptr<SegmentInMemory>> seg_by_ref_key_;
+    std::unordered_map<RefKey, std::string> ref_etags_;
+    uint64_t etag_seq_{0};
     arcticdb::proto::encoding::VariantCodec codec_;
 };
 

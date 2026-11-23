@@ -311,9 +311,6 @@ std::vector<uint8_t> encode_enriched_op_log_payload(const EnrichedOpLogPayload& 
         flags |= kFlagIsCleanChainSuccessor;
     }
 
-    const uint64_t body_hash = XXH64(out.data() + kHeaderBytes, out.size() - kHeaderBytes, 0);
-
-    std::memcpy(out.data(), kMagic.data(), kMagic.size());
     out[8] = static_cast<uint8_t>(kFormatVersion & 0xFFu);
     out[9] = static_cast<uint8_t>((kFormatVersion >> 8) & 0xFFu);
     out[10] = static_cast<uint8_t>((kFormatVersion >> 16) & 0xFFu);
@@ -323,6 +320,16 @@ std::vector<uint8_t> encode_enriched_op_log_payload(const EnrichedOpLogPayload& 
     out[13] = static_cast<uint8_t>((flags >> 8) & 0xFFu);
     out[14] = static_cast<uint8_t>((flags >> 16) & 0xFFu);
     out[15] = static_cast<uint8_t>((flags >> 24) & 0xFFu);
+
+    // P2-4: Include header version + flags alongside body bytes in the XXH64 checksum.
+    XXH64_state_t* hstate = XXH64_createState();
+    XXH64_reset(hstate, 0);
+    XXH64_update(hstate, out.data() + kMagic.size(), sizeof(uint32_t) * 2);
+    XXH64_update(hstate, out.data() + kHeaderBytes, out.size() - kHeaderBytes);
+    const uint64_t body_hash = XXH64_digest(hstate);
+    XXH64_freeState(hstate);
+
+    std::memcpy(out.data(), kMagic.data(), kMagic.size());
 
     for (size_t i = 0; i < sizeof(uint64_t); ++i) {
         out[16 + i] = static_cast<uint8_t>((body_hash >> (i * 8)) & 0xFFu);
@@ -350,7 +357,12 @@ std::optional<EnrichedOpLogPayload> decode_enriched_op_log_payload(std::span<con
         return std::nullopt;
     }
 
-    const uint64_t actual_hash = XXH64(reader.ptr, reader.remaining(), 0);
+    XXH64_state_t* hstate = XXH64_createState();
+    XXH64_reset(hstate, 0);
+    XXH64_update(hstate, bytes.data() + kMagic.size(), sizeof(uint32_t) * 2);
+    XXH64_update(hstate, reader.ptr, reader.remaining());
+    const uint64_t actual_hash = XXH64_digest(hstate);
+    XXH64_freeState(hstate);
     if (actual_hash != expected_hash) {
         return std::nullopt;
     }
@@ -467,6 +479,21 @@ void WriteCaptureCache::record_data(const entity::AtomKey& key) {
     std::lock_guard lock(mutex_);
     auto& entry = get_or_create_locked(CacheKey{key.id(), key.version_id()});
     entry.newly_written_data_keys.push_back(key);
+}
+
+void WriteCaptureCache::record_adopted_data(
+        const StreamId& stream_id, entity::VersionId target_version_id, std::span<const entity::AtomKey> keys
+) {
+    if (keys.empty()) {
+        return;
+    }
+    std::lock_guard lock(mutex_);
+    auto& entry = get_or_create_locked(CacheKey{stream_id, target_version_id});
+    for (const auto& k : keys) {
+        if (k.type() == entity::KeyType::TABLE_DATA) {
+            entry.newly_written_data_keys.push_back(k);
+        }
+    }
 }
 
 void WriteCaptureCache::record_index(const entity::AtomKey& key, Segment& segment) {

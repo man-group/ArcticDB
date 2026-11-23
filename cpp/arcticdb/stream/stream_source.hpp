@@ -33,6 +33,14 @@ struct StreamSource {
             const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
     ) = 0;
 
+    virtual std::tuple<entity::VariantKey, SegmentInMemory, std::string> read_with_etag_sync(
+            const entity::VariantKey& /*key*/, storage::ReadKeyOpts /*opts*/ = storage::ReadKeyOpts{}
+    ) {
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(
+                "read_with_etag_sync not supported by this StreamSource"
+        );
+    }
+
     virtual folly::Future<storage::KeySegmentPair> read_compressed(
             const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
     ) = 0;
@@ -68,6 +76,11 @@ struct StreamSource {
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey& key) = 0;
     [[nodiscard]] virtual bool key_exists_sync(const entity::VariantKey& key) = 0;
+    [[nodiscard]] virtual std::optional<storage::ObjectMetadata> get_object_metadata_sync(
+            const entity::VariantKey& /*key*/
+    ) {
+        return std::nullopt;
+    }
     [[nodiscard]] virtual bool supports_prefix_matching() const = 0;
     [[nodiscard]] virtual bool fast_delete() = 0;
 

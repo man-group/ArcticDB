@@ -52,6 +52,23 @@ S3Result<std::monostate> S3ClientImpl::head_object(const std::string& s3_object_
     return {std::monostate()};
 }
 
+S3Result<ObjectMetadata> S3ClientImpl::head_object_metadata(
+        const std::string& s3_object_name, const std::string& bucket_name
+) const {
+    Aws::S3::Model::HeadObjectRequest request;
+    request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
+    auto outcome = s3_client.HeadObject(request);
+    if (!outcome.IsSuccess()) {
+        return {outcome.GetError()};
+    }
+    const auto& res = outcome.GetResult();
+    ObjectMetadata meta;
+    meta.etag = res.GetETag();
+    meta.size = res.GetContentLength() > 0 ? static_cast<CompressedSize>(res.GetContentLength()) : 0;
+    meta.last_modified_ms = res.GetLastModified().Millis();
+    return {std::move(meta)};
+}
+
 // TODO Use buffer pool once memory profile and lifetime is well understood
 struct S3StreamBuffer : public std::streambuf {
     ARCTICDB_NO_MOVE_OR_COPY(S3StreamBuffer)
@@ -104,6 +121,16 @@ Aws::IOStreamFactory S3StreamFactory() {
 }
 
 S3Result<Segment> S3ClientImpl::get_object(const std::string& s3_object_name, const std::string& bucket_name) const {
+    auto res = get_object_with_etag(s3_object_name, bucket_name);
+    if (!res.is_success()) {
+        return {std::move(res.get_error())};
+    }
+    return {std::move(res.get_output().segment)};
+}
+
+S3Result<GetObjectWithEtagOutput> S3ClientImpl::get_object_with_etag(
+        const std::string& s3_object_name, const std::string& bucket_name
+) const {
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for object {}", s3_object_name);
     auto start = util::SysClock::coarse_nanos_since_epoch();
     Aws::S3::Model::GetObjectRequest request;
@@ -115,11 +142,13 @@ S3Result<Segment> S3ClientImpl::get_object(const std::string& s3_object_name, co
         return {outcome.GetError()};
     }
 
-    auto& retrieved = dynamic_cast<S3IOStream&>(outcome.GetResult().GetBody());
+    auto& result = outcome.GetResult();
+    std::string etag{result.GetETag().c_str(), result.GetETag().size()};
+    auto& retrieved = dynamic_cast<S3IOStream&>(result.GetBody());
     auto nanos = util::SysClock::coarse_nanos_since_epoch() - start;
     auto time_taken = double(nanos) / BILLION;
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {} in {}s", s3_object_name, time_taken);
-    return {Segment::from_buffer(retrieved.get_buffer())};
+    return {GetObjectWithEtagOutput{Segment::from_buffer(retrieved.get_buffer()), std::move(etag)}};
 }
 
 struct GetObjectAsyncHandler {
@@ -163,13 +192,26 @@ folly::Future<S3Result<Segment>> S3ClientImpl::get_object_async(
 S3Result<std::monostate> S3ClientImpl::put_object(
         const std::string& s3_object_name, Segment& segment, const std::string& bucket_name, PutHeader header
 ) {
+    auto res = put_object_with_etag(s3_object_name, segment, bucket_name, header, std::nullopt);
+    if (!res.is_success()) {
+        return {std::move(res.get_error())};
+    }
+    return {std::monostate()};
+}
 
+S3Result<PutObjectOutput> S3ClientImpl::put_object_with_etag(
+        const std::string& s3_object_name, Segment& segment, const std::string& bucket_name, PutHeader header,
+        const std::optional<std::string>& if_match_etag
+) {
     ARCTICDB_SUBSAMPLE(S3StorageWritePreamble, 0)
     Aws::S3::Model::PutObjectRequest request;
     request.SetBucket(bucket_name.c_str());
     request.SetKey(s3_object_name.c_str());
     if (header == PutHeader::IF_NONE_MATCH) {
         request.SetIfNoneMatch("*");
+    } else if (header == PutHeader::IF_MATCH) {
+        util::check(if_match_etag.has_value() && !if_match_etag->empty(), "IF_MATCH requires a non-empty ETag");
+        request.SetIfMatch(if_match_etag->c_str());
     }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Set s3 key {}", request.GetKey().c_str());
     auto [dst, write_size, buffer] = segment.serialize_header();
@@ -184,8 +226,10 @@ S3Result<std::monostate> S3ClientImpl::put_object(
         return {outcome.GetError()};
     }
 
+    const auto& aws_etag = outcome.GetResult().GetETag();
+    std::string etag{aws_etag.c_str(), aws_etag.size()};
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key '{}', with {} bytes of data", s3_object_name, segment.size());
-    return {std::monostate()};
+    return {PutObjectOutput{std::move(etag)}};
 }
 
 bool delete_objects_request_use_md5_checksum() {

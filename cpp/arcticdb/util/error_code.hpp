@@ -97,6 +97,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR)                                                                         \
     ERROR_CODE(5052, E_MONGO_RETRYABLE)                                                                                \
     ERROR_CODE(5090, E_NON_INCREASING_INDEX_VERSION)                                                                   \
+    ERROR_CODE(5091, E_DATA_CONFLICT)                                                                                  \
+    ERROR_CODE(5092, E_SLICE_CONFLICT)                                                                                 \
     ERROR_CODE(6000, E_UNSORTED_DATA)                                                                                  \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT)                                                                          \
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)                                                                         \
@@ -198,6 +200,8 @@ using MongoOperationNoReplyException = ArcticSpecificException<ErrorCode::E_MONG
 using UnexpectedMongoException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_MONGO_ERROR>;
 using MongoRetryableException = ArcticSpecificException<ErrorCode::E_MONGO_RETRYABLE>;
 using NonIncreasingIndexVersionException = ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>;
+using DataConflictException = ArcticSpecificException<ErrorCode::E_DATA_CONFLICT>;
+using SliceConflictException = ArcticSpecificException<ErrorCode::E_SLICE_CONFLICT>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 using StreamDescriptorMismatch = ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>;
@@ -267,6 +271,16 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_DATA_CONFLICT>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_DATA_CONFLICT>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_SLICE_CONFLICT>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_SLICE_CONFLICT>(msg);
 }
 
 template<>

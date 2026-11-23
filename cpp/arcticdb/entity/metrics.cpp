@@ -298,8 +298,10 @@ void PrometheusInstance::unregisterCollectable(const std::weak_ptr<prometheus::C
 }
 
 std::vector<prometheus::MetricFamily> PrometheusInstance::get_metrics() {
-    util::check(registry_, "registry_ not set");
-    auto families = registry_->Collect();
+    std::vector<prometheus::MetricFamily> families;
+    if (registry_) {
+        families = registry_->Collect();
+    }
     std::vector<std::shared_ptr<prometheus::Collectable>> live;
     {
         std::scoped_lock lock{metrics_mutex_};

@@ -25,6 +25,10 @@ ChecksumMismatchRetryStrategy::ChecksumMismatchRetryStrategy(
 bool ChecksumMismatchRetryStrategy::ShouldRetry(
         const Aws::Client::AWSError<Aws::Client::CoreErrors>& error, long attempted_retries
 ) const {
+    if (error.GetResponseCode() == Aws::Http::HttpResponseCode::PRECONDITION_FAILED ||
+        error.GetResponseCode() == Aws::Http::HttpResponseCode::CONFLICT) {
+        return false;
+    }
     if (!is_response_checksum_mismatch(error)) {
         return inner_->ShouldRetry(error, attempted_retries);
     }

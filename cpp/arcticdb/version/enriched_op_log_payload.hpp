@@ -100,6 +100,9 @@ class WriteCaptureCache {
     static constexpr size_t kMaxCachedEntries = 1024;
 
     void record_data(const entity::AtomKey& key);
+    void record_adopted_data(
+            const StreamId& stream_id, entity::VersionId target_version_id, std::span<const entity::AtomKey> keys
+    );
     void record_index(const entity::AtomKey& key, Segment& segment);
     void record_column_stats(const entity::AtomKey& key, Segment& segment);
 

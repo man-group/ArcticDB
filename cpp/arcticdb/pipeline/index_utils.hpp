@@ -17,6 +17,7 @@
 
 namespace arcticdb {
 namespace stream {
+struct PartialKey;
 struct StreamSink;
 }
 
@@ -90,12 +91,19 @@ IndexValue index_end_from_segment(const SegmentType& seg, size_t row_id) {
 template<class IndexType>
 folly::Future<entity::AtomKey> write_index(
         const TimeseriesDescriptor& metadata, std::vector<SliceAndKey>&& slice_and_keys,
-        const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink
+        const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
+        std::optional<entity::timestamp> creation_ts = std::nullopt
 );
 
 folly::Future<entity::AtomKey> write_index(
         const stream::Index& index, const TimeseriesDescriptor& metadata, std::vector<SliceAndKey>&& sk,
-        const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink
+        const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
+        std::optional<entity::timestamp> creation_ts = std::nullopt
+);
+
+std::pair<stream::PartialKey, SegmentInMemory> build_index_segment(
+        const stream::Index& index, const TimeseriesDescriptor& metadata, const std::vector<SliceAndKey>& sk,
+        const IndexPartialKey& partial_key
 );
 
 folly::Future<entity::AtomKey> write_index(

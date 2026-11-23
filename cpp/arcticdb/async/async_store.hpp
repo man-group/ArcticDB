@@ -166,7 +166,15 @@ class AsyncStore : public Store {
             stream::KeyType key_type, VersionId version_id, const StreamId& stream_id, IndexValue start_index,
             IndexValue end_index, SegmentInMemory&& segment
     ) override {
+        return write_sync(
+                key_type, version_id, stream_id, current_timestamp(), start_index, end_index, std::move(segment)
+        );
+    }
 
+    entity::VariantKey write_sync(
+            stream::KeyType key_type, VersionId version_id, const StreamId& stream_id, timestamp creation_ts,
+            IndexValue start_index, IndexValue end_index, SegmentInMemory&& segment
+    ) override {
         util::check(
                 segment.descriptor().id() == stream_id,
                 "Descriptor id mismatch in atom key {} != {}",
@@ -180,7 +188,7 @@ class AsyncStore : public Store {
                 stream_id,
                 start_index,
                 end_index,
-                current_timestamp(),
+                creation_ts,
                 std::move(segment),
                 codec_,
                 encoding_version_
@@ -194,6 +202,12 @@ class AsyncStore : public Store {
         return write_sync(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment));
     }
 
+    entity::VariantKey write_sync(stream::PartialKey pk, timestamp creation_ts, SegmentInMemory&& segment) override {
+        return write_sync(
+                pk.key_type, pk.version_id, pk.stream_id, creation_ts, pk.start_index, pk.end_index, std::move(segment)
+        );
+    }
+
     entity::VariantKey write_sync(KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment) override {
         util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
         auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
@@ -205,6 +219,24 @@ class AsyncStore : public Store {
         util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
         auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
         return WriteIfNoneTask{library_}(std::move(encoded));
+    }
+
+    std::pair<entity::VariantKey, std::string> write_if_none_with_etag_sync(
+            KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment
+    ) override {
+        util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
+        auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
+        auto etag = library_->write_if_none_with_etag(encoded);
+        return {std::move(encoded).variant_key(), std::move(etag)};
+    }
+
+    std::pair<entity::VariantKey, std::string> write_if_match_sync(
+            KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment, const std::string& expected_etag
+    ) override {
+        util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
+        auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
+        auto etag = library_->write_if_match(encoded, expected_etag);
+        return {std::move(encoded).variant_key(), std::move(etag)};
     }
 
     const std::set<char>& unsupported_symbol_chars() const override { return library_->unsupported_symbol_chars(); }
@@ -223,6 +255,42 @@ class AsyncStore : public Store {
 
     void update_compressed_sync(storage::KeySegmentPair ks, storage::UpdateOpts opts) override {
         library_->update(ks, opts);
+    }
+
+    std::optional<storage::KeySegmentPair> encode_atom_sync(
+            stream::PartialKey pk, timestamp creation_ts, SegmentInMemory&& segment
+    ) override {
+        util::check(
+                segment.descriptor().id() == pk.stream_id,
+                "Descriptor id mismatch in atom key {} != {}",
+                pk.stream_id,
+                segment.descriptor().id()
+        );
+        return EncodeAtomTask{std::move(pk), creation_ts, std::move(segment), codec_, encoding_version_}();
+    }
+
+    folly::Future<entity::VariantKey> write_encoded_atom(storage::KeySegmentPair ks) override {
+        struct WriteEncodedAtomTask : BaseTask {
+            std::shared_ptr<storage::Library> lib;
+            std::shared_ptr<WriteCaptureCache> cache;
+            storage::KeySegmentPair ks;
+
+            WriteEncodedAtomTask(
+                    std::shared_ptr<storage::Library> l,
+                    std::shared_ptr<WriteCaptureCache> c,
+                    storage::KeySegmentPair pair
+            ) :
+                lib(std::move(l)),
+                cache(std::move(c)),
+                ks(std::move(pair)) {}
+
+            entity::VariantKey operator()() {
+                lib->write(ks);
+                record_captured_write_if_enabled(cache, ks);
+                return std::move(ks).variant_key();
+            }
+        };
+        return async::submit_io_task(WriteEncodedAtomTask{library_, write_capture_cache(), std::move(ks)});
     }
 
     folly::Future<entity::VariantKey> update(
@@ -356,6 +424,14 @@ class AsyncStore : public Store {
         return DecodeSegmentTask{}(read_sync_dispatch(key, library_, opts));
     }
 
+    std::tuple<entity::VariantKey, SegmentInMemory, std::string> read_with_etag_sync(
+            const entity::VariantKey& key, storage::ReadKeyOpts opts
+    ) override {
+        auto [ks, etag] = library_->read_with_etag_sync(key, opts);
+        auto [vk, seg] = DecodeSegmentTask{}(std::move(ks));
+        return {std::move(vk), std::move(seg), std::move(etag)};
+    }
+
     folly::Future<storage::KeySegmentPair> read_compressed(const entity::VariantKey& key, storage::ReadKeyOpts opts)
             override {
         return read_and_continue(key, library_, opts, PassThroughTask{});
@@ -399,11 +475,17 @@ class AsyncStore : public Store {
 
     bool key_exists_sync(const entity::VariantKey& key) override { return KeyExistsTask{key, library_}(); }
 
+    std::optional<storage::ObjectMetadata> get_object_metadata_sync(const entity::VariantKey& key) override {
+        return library_->get_object_metadata(key);
+    }
+
     bool key_exists_sync(entity::VariantKey&& key) { return KeyExistsTask{std::move(key), library_}(); }
 
     bool supports_prefix_matching() const override { return library_->supports_prefix_matching(); }
 
     bool supports_atomic_writes() const override { return library_->supports_atomic_writes(); }
+
+    bool supports_cas_writes() const override { return library_->supports_cas_writes(); }
 
     std::string key_path(const VariantKey& key) const { return library_->key_path(key); }
 

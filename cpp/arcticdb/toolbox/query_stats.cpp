@@ -248,6 +248,7 @@ std::optional<TaskType> to_legacy_task_type(StorageBackend backend, StorageOp op
             return TaskType::S3_GetObjectAsync;
         case StorageOp::Write:
         case StorageOp::WriteIfNone:
+        case StorageOp::WriteIfMatch:
         case StorageOp::Update:
             return TaskType::S3_PutObject;
         case StorageOp::Delete:
@@ -271,6 +272,7 @@ std::optional<TaskType> to_legacy_task_type(StorageBackend backend, StorageOp op
             return TaskType::Memory_GetObject;
         case StorageOp::Write:
         case StorageOp::WriteIfNone:
+        case StorageOp::WriteIfMatch:
         case StorageOp::Update:
             return TaskType::Memory_PutObject;
         case StorageOp::Delete:
@@ -335,6 +337,7 @@ void apply_storage_op_to_symbol(
         break;
     case StorageOp::Write:
     case StorageOp::WriteIfNone:
+    case StorageOp::WriteIfMatch:
     case StorageOp::Update:
         ++sym.writes;
         sym.bytes_written += bytes;
@@ -944,6 +947,8 @@ const char* to_string(StorageOp op) noexcept {
         return "write";
     case StorageOp::WriteIfNone:
         return "write_if_none";
+    case StorageOp::WriteIfMatch:
+        return "write_if_match";
     case StorageOp::Update:
         return "update";
     case StorageOp::Delete:

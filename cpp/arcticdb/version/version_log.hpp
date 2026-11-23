@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/version/enriched_op_log_payload.hpp>
@@ -48,6 +49,38 @@ inline void log_write_enriched(
                 std::move(seg)
         );
     });
+}
+
+inline folly::Future<folly::Unit> log_write_enriched_async(
+        std::shared_ptr<StreamSink> store, StreamId symbol, VersionId version_id,
+        std::optional<EnrichedOpLogPayload> payload
+) {
+    struct LogWriteEnrichedTask : async::BaseTask {
+        std::shared_ptr<StreamSink> store;
+        StreamId symbol;
+        VersionId version_id;
+        std::optional<EnrichedOpLogPayload> payload;
+
+        LogWriteEnrichedTask(
+                std::shared_ptr<StreamSink> s, StreamId sym, VersionId vid, std::optional<EnrichedOpLogPayload> pl
+        ) :
+            store(std::move(s)),
+            symbol(std::move(sym)),
+            version_id(vid),
+            payload(std::move(pl)) {}
+
+        folly::Unit operator()() {
+            if (payload.has_value() && is_enriched_op_log_enabled()) {
+                log_write_enriched(store, symbol, version_id, *payload);
+            } else {
+                log_write(store, symbol, version_id);
+            }
+            return folly::Unit{};
+        }
+    };
+    return async::submit_io_task(
+            LogWriteEnrichedTask{std::move(store), std::move(symbol), version_id, std::move(payload)}
+    );
 }
 
 inline void log_tombstone(const std::shared_ptr<StreamSink>& store, const StreamId& symbol, VersionId version_id) {

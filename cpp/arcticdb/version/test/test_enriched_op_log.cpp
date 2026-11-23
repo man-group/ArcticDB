@@ -112,6 +112,22 @@ class RecordingInMemoryStore : public InMemoryStore {
     }
 
     folly::Future<entity::VariantKey> write(
+            stream::KeyType key_type, VersionId gen_id, const StreamId& stream_id, timestamp creation_ts,
+            IndexValue start_index, IndexValue end_index, SegmentInMemory&& segment
+    ) override {
+        if (on_before_write_) {
+            on_before_write_(key_type, stream_id, gen_id, start_index);
+        }
+        {
+            std::lock_guard lock(events_mutex_);
+            write_events_.push_back(WriteEvent{key_type, stream_id, gen_id, start_index});
+        }
+        return InMemoryStore::write(
+                key_type, gen_id, stream_id, creation_ts, std::move(start_index), std::move(end_index), std::move(segment)
+        );
+    }
+
+    folly::Future<entity::VariantKey> write(
             stream::KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment
     ) override {
         if (on_before_write_) {

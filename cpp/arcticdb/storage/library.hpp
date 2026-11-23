@@ -108,6 +108,24 @@ class Library {
         storages_->write_if_none(kv);
     }
 
+    std::string write_if_none_with_etag(KeySegmentPair& kv) {
+        if (open_mode() < OpenMode::WRITE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "write");
+        }
+        return storages_->write_if_none_with_etag(kv);
+    }
+
+    std::string write_if_match(KeySegmentPair& kv, const std::string& expected_etag) {
+        if (open_mode() < OpenMode::WRITE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "write");
+        }
+        return storages_->write_if_match(kv, expected_etag);
+    }
+
+    std::pair<KeySegmentPair, std::string> read_with_etag_sync(const VariantKey& key, ReadKeyOpts opts = ReadKeyOpts{}) {
+        return storages_->read_with_etag_sync(key, opts);
+    }
+
     void update(KeySegmentPair& key_seg, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
         if (open_mode() < OpenMode::WRITE)
@@ -167,6 +185,10 @@ class Library {
 
     bool key_exists(const VariantKey& key) { return storages_->key_exists(key); }
 
+    std::optional<ObjectMetadata> get_object_metadata(const VariantKey& key) {
+        return storages_->get_object_metadata(key);
+    }
+
     [[nodiscard]] const std::set<char>& unsupported_symbol_chars() const {
         return storages_->unsupported_symbol_chars();
     }
@@ -189,6 +211,8 @@ class Library {
     [[nodiscard]] bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
 
     bool supports_atomic_writes() const { return storages_->supports_atomic_writes(); }
+
+    bool supports_cas_writes() const { return storages_->supports_cas_writes(); }
 
     [[nodiscard]] std::optional<size_t> max_delete_batch_size() const { return storages_->max_delete_batch_size(); }
 

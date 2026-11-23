@@ -50,6 +50,16 @@ class Storages {
 
     void write_if_none(KeySegmentPair& kv) { primary().write_if_none(kv); }
 
+    std::string write_if_none_with_etag(KeySegmentPair& kv) { return primary().write_if_none_with_etag(kv); }
+
+    std::string write_if_match(KeySegmentPair& kv, const std::string& expected_etag) {
+        return primary().write_if_match(kv, expected_etag);
+    }
+
+    std::pair<KeySegmentPair, std::string> read_with_etag_sync(const VariantKey& variant_key, ReadKeyOpts opts) {
+        return primary().read_with_etag(VariantKey{variant_key}, opts);
+    }
+
     void update(KeySegmentPair& key_seg, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(StoragesUpdate, 0)
         primary().update(key_seg, opts);
@@ -58,6 +68,8 @@ class Storages {
     [[nodiscard]] bool supports_prefix_matching() const { return primary().supports_prefix_matching(); }
 
     [[nodiscard]] bool supports_atomic_writes() { return primary().supports_atomic_writes(); }
+
+    [[nodiscard]] bool supports_cas_writes() { return primary().supports_cas_writes(); }
 
     [[nodiscard]] bool supports_object_size_calculation() {
         return std::all_of(storages_.begin(), storages_.end(), [](const auto& storage) {
@@ -76,6 +88,10 @@ class Storages {
     void cleanup() { primary().cleanup(); }
 
     bool key_exists(const VariantKey& key) { return primary().key_exists(key); }
+
+    std::optional<ObjectMetadata> get_object_metadata(const VariantKey& key) {
+        return primary().get_object_metadata(key);
+    }
 
     [[nodiscard]] const std::set<char>& unsupported_symbol_chars() const {
         return primary().unsupported_symbol_chars();

@@ -33,11 +33,17 @@ class MemoryStorage final : public Storage {
         );
     };
 
+    std::string do_write_if_none_with_etag(KeySegmentPair& kv) final;
+
+    std::string do_write_if_match(KeySegmentPair& kv, const std::string& expected_etag) final;
+
     void do_update(KeySegmentPair& key_seg, UpdateOpts opts) final;
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
     KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts) final;
+
+    std::pair<KeySegmentPair, std::string> do_read_with_etag(VariantKey&& variant_key, ReadKeyOpts opts) final;
 
     void do_remove_single(VariantKey&& variant_key, RemoveOpts opts, bool record_legacy);
 
@@ -64,6 +70,9 @@ class MemoryStorage final : public Storage {
     using TypeMap = std::unordered_map<KeyType, KeyMap>;
 
     TypeMap data_;
+    mutable std::mutex cas_mutex_;
+    std::unordered_map<VariantKey, std::string> etags_;
+    uint64_t etag_seq_{0};
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config() {

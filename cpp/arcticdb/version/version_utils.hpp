@@ -174,6 +174,62 @@ inline void read_symbol_ref(
     entry.load_progress_ = load_progress;
 }
 
+inline std::optional<std::string> read_symbol_ref_with_etag(
+        const std::shared_ptr<StreamSource>& store, const StreamId& stream_id, VersionMapEntry& entry
+) {
+    storage::ReadKeyOpts read_opts;
+    read_opts.dont_warn_about_missing_key = true;
+    try {
+        auto [vk, seg, etag] = store->read_with_etag_sync(RefKey{stream_id, KeyType::VERSION_REF}, read_opts);
+        (void)vk;
+        LoadProgress load_progress;
+        entry.head_ = read_segment_with_keys(seg, entry, load_progress);
+        entry.load_progress_ = load_progress;
+        return etag;
+    } catch (const storage::KeyNotFoundException&) {
+        return std::nullopt;
+    }
+}
+
+inline std::string write_symbol_ref_cas(
+        std::shared_ptr<StreamSink> store, const AtomKey& latest_index, const std::optional<AtomKey>& previous_key,
+        const AtomKey& journal_key, bool use_cas, const std::optional<std::string>& expected_etag
+) {
+    check_is_index_or_tombstone(latest_index);
+    check_is_version(journal_key);
+    if (previous_key)
+        check_is_index_or_tombstone(*previous_key);
+
+    std::string new_etag;
+    IndexAggregator<RowCountIndex> ref_agg(
+            latest_index.id(),
+            [&store, &latest_index, use_cas, &expected_etag, &new_etag](auto&& s) {
+                auto segment = std::forward<decltype(s)>(s);
+                if (!use_cas) {
+                    store->write_sync(KeyType::VERSION_REF, latest_index.id(), std::move(segment));
+                } else if (!expected_etag.has_value() || expected_etag->empty()) {
+                    auto [vk, etag] = store->write_if_none_with_etag_sync(
+                            KeyType::VERSION_REF, latest_index.id(), std::move(segment)
+                    );
+                    (void)vk;
+                    new_etag = std::move(etag);
+                } else {
+                    auto [vk, etag] = store->write_if_match_sync(
+                            KeyType::VERSION_REF, latest_index.id(), std::move(segment), *expected_etag
+                    );
+                    (void)vk;
+                    new_etag = std::move(etag);
+                }
+            }
+    );
+    ref_agg.add_key(latest_index);
+    if (previous_key && is_index_key_type(latest_index.type()))
+        ref_agg.add_key(*previous_key);
+    ref_agg.add_key(journal_key);
+    ref_agg.finalize();
+    return new_etag;
+}
+
 inline void write_symbol_ref(
         std::shared_ptr<StreamSink> store, const AtomKey& latest_index, const std::optional<AtomKey>& previous_key,
         const AtomKey& journal_key

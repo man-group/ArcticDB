@@ -483,7 +483,7 @@ struct VersionMapEntry {
     }
 
     void validate() const {
-        if (!head_ && keys_.empty())
+        if (keys_.empty())
             return;
         check_is_index_or_tombstone(keys_[0]);
         check_ordering();

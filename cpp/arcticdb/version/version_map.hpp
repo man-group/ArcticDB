@@ -286,6 +286,247 @@ class VersionMapImpl {
         }
     }
 
+    // Sequencer atomic commit path: writes HLC-clamped VERSION blob + conditional (or watchdog-fenced) VERSION_REF
+    // + single enriched KeyType::LOG entry (using explicit_enriched_payload when supplied to avoid LRU eviction).
+    // On CAS failure (AtomicOperationFailedException), restores cached entry and rethrows cleanly.
+    std::pair<AtomKey, std::string> write_version_cas(
+            std::shared_ptr<Store> store, const AtomKey& key, const std::optional<AtomKey>& previous_key,
+            bool use_cas, const std::optional<std::string>& expected_etag,
+            const std::optional<EnrichedOpLogPayload>& explicit_enriched_payload = std::nullopt,
+            const std::optional<AtomKey>& known_prev_head = std::nullopt,
+            bool* out_vref_committed = nullptr
+    ) {
+        std::shared_ptr<VersionMapEntry> entry;
+        std::shared_ptr<Lock> lock_obj;
+        std::unique_lock<Lock> sym_lock;
+        if (known_prev_head.has_value()) {
+            entry = std::make_shared<VersionMapEntry>(key.id());
+            entry->head_ = *known_prev_head;
+            if (previous_key.has_value()) {
+                entry->keys_.push_back(*previous_key);
+            }
+        } else if (use_cas && !expected_etag.has_value()) {
+            entry = std::make_shared<VersionMapEntry>(key.id());
+        } else {
+            lock_obj = get_lock_object(key.id());
+            sym_lock = std::unique_lock(*lock_obj);
+            LoadStrategy load_param{LoadType::LATEST, LoadObjective::INCLUDE_DELETED};
+            entry = check_reload(store, key.id(), load_param, __FUNCTION__);
+        }
+
+        VersionMapEntry backup(*entry);
+        const bool is_clean_successor =
+                !entry->empty()
+                        ? (!entry->keys_.empty() && entry->keys_.front().type() == KeyType::TABLE_INDEX &&
+                           !entry->is_tombstoned(entry->keys_.front()) &&
+                           (!previous_key.has_value() ||
+                            *previous_key == entry->keys_.front().to_atom_key(entry->stream_id_)))
+                        : !previous_key.has_value();
+
+        do_write(
+                store,
+                key.version_id(),
+                key.id(),
+                std::span{&key, 1},
+                entry,
+                /*prevent_non_increasing_version_id=*/true,
+                key.creation_ts()
+        );
+        const AtomKey committed_version_key = entry->head_.value();
+
+        std::string new_etag;
+        try {
+            new_etag = write_symbol_ref_cas(store, key, previous_key, committed_version_key, use_cas, expected_etag);
+        } catch (...) {
+            *entry = std::move(backup);
+            store->discard_captured_version_write(key.id(), key.version_id());
+            throw;
+        }
+        // P0-3: Mark VERSION_REF committed immediately before post-CAS OpLog emission so an OpLog
+        // failure (e.g. HTTP 403/400/409) can never trigger cleanup of live committed keys!
+        if (out_vref_committed != nullptr) {
+            *out_vref_committed = true;
+        }
+        if (sym_lock.owns_lock()) {
+            sym_lock.unlock();
+        }
+
+        inject_latest_version(key.id(), key, committed_version_key, previous_key);
+
+        if (log_changes_) {
+            if (explicit_enriched_payload.has_value() && is_enriched_op_log_enabled()) {
+                store->discard_captured_version_write(key.id(), key.version_id());
+                log_write_enriched(store, key.id(), key.version_id(), *explicit_enriched_payload);
+            } else {
+                emit_write_op_log(store, key, previous_key, is_clean_successor);
+            }
+        } else {
+            store->discard_captured_version_write(key.id(), key.version_id());
+        }
+        return {committed_version_key, std::move(new_etag)};
+    }
+
+    // Invalidate a single symbol's cached VersionMapEntry so subsequent reads/reloads hit storage.
+    void invalidate(const StreamId& stream_id) {
+        auto lock_obj = get_lock_object(stream_id);
+        std::unique_lock sym_lock(*lock_obj);
+        std::lock_guard<std::mutex> map_lk(map_mutex_);
+        if (map_.erase(stream_id) > 0) {
+            query_stats::detail::adjust_version_map_entries(-1);
+        }
+    }
+
+    // 0-RTT Read-Your-Own-Writes cache injection for clients after receiving a sequencer CommitResponse.
+    void inject_latest_version(
+            const StreamId& stream_id, const AtomKey& index_key, const AtomKey& version_key,
+            const std::optional<AtomKey>& prev_index_key = std::nullopt
+    ) {
+        auto lock_obj = get_lock_object(stream_id);
+        std::unique_lock sym_lock(*lock_obj);
+        auto entry = get_entry(stream_id);
+
+        if (entry->head_.has_value() && entry->head_->version_id() >= version_key.version_id()) {
+            return;
+        }
+
+        VersionMapEntry new_entry(stream_id);
+        new_entry.head_ = version_key;
+        new_entry.keys_.push_back(index_key);
+        const bool has_valid_prev =
+                prev_index_key.has_value() && prev_index_key->version_id() < index_key.version_id();
+        if (has_valid_prev) {
+            new_entry.keys_.push_back(*prev_index_key);
+        }
+        new_entry.last_reload_time_ = now();
+        if (is_tombstone_key_type(index_key.type())) {
+            new_entry.rebuild_tombstones_from_keys();
+        }
+
+        const AtomKey& oldest = has_valid_prev ? *prev_index_key : index_key;
+        // Only mark earliest version loaded if there cannot be any hidden intervening deleted versions.
+        const bool earliest_complete =
+                !is_tombstone_key_type(index_key.type()) &&
+                (index_key.version_id() == 0 ||
+                 (has_valid_prev && prev_index_key->version_id() == 0 && index_key.version_id() == 1));
+        new_entry.load_progress_.is_earliest_version_loaded = earliest_complete;
+        new_entry.load_progress_.oldest_loaded_index_version_ = oldest.version_id();
+        new_entry.load_progress_.oldest_loaded_undeleted_index_version_ = oldest.version_id();
+        new_entry.load_progress_.earliest_loaded_timestamp_ = oldest.creation_ts();
+        new_entry.load_progress_.earliest_loaded_undeleted_timestamp_ = oldest.creation_ts();
+
+        if (validate_) {
+            new_entry.validate();
+        }
+        *entry = std::move(new_entry);
+    }
+
+    /**
+     * CAS-protected variant of tombstone_from_key_or_all for the commit sequencer.
+     * Prevents DELETE_ALL_VERSIONS / PRUNE_PREVIOUS_VERSIONS from overwriting VERSION_REF unconditionally
+     * when CONDITIONAL_PUT fencing is active.
+     */
+    std::tuple<VersionId, std::vector<AtomKey>, std::string> tombstone_from_key_or_all_cas(
+            std::shared_ptr<Store> store, const StreamId& stream_id, bool use_cas,
+            const std::optional<std::string>& expected_etag,
+            std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
+            std::optional<std::shared_ptr<VersionMapEntry>> cached_entry = std::nullopt,
+            bool force_reload = false
+    ) {
+        auto lock_obj = get_lock_object(stream_id);
+        std::unique_lock sym_lock(*lock_obj);
+        std::shared_ptr<VersionMapEntry> entry;
+        if (cached_entry && !force_reload) {
+            entry = cached_entry.value();
+        } else {
+            if (force_reload) {
+                std::lock_guard<std::mutex> map_lk(map_mutex_);
+                if (map_.erase(stream_id) > 0) {
+                    query_stats::detail::adjust_version_map_entries(-1);
+                }
+            }
+            entry = check_reload(
+                    store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
+            );
+        }
+
+        VersionMapEntry backup(*entry);
+        std::optional<AtomKey> tombstone_key;
+        auto [latest_version, keys_to_delete] = tombstone_from_key_or_all_internal(
+                store, stream_id, first_key_to_tombstone, entry, /*should_write_to_storage=*/true, &tombstone_key
+        );
+
+        if (validate_)
+            entry->validate();
+
+        std::string new_etag;
+        if (entry->head_ && !keys_to_delete.empty()) {
+            try {
+                new_etag = write_symbol_ref_cas(
+                        store,
+                        entry->keys_.cbegin()->to_atom_key(entry->stream_id_),
+                        std::nullopt,
+                        entry->head_.value(),
+                        use_cas,
+                        expected_etag
+                );
+            } catch (...) {
+                *entry = std::move(backup);
+                throw;
+            }
+        }
+        sym_lock.unlock();
+
+        if (log_changes_ && tombstone_key.has_value()) {
+            log_tombstone_all(store, stream_id, tombstone_key->version_id());
+        }
+
+        return {latest_version, std::move(keys_to_delete), std::move(new_etag)};
+    }
+
+    /**
+     * Build the VERSION segment in memory (without writing it yet) so callers can pre-encode
+     * and upload {TABLE_DATA, TABLE_INDEX, VERSION} concurrently in RTT #1.
+     */
+    static SegmentInMemory build_version_segment(
+            const StreamId& stream_id, std::span<const AtomKey> keys, const std::optional<AtomKey>& prev_journal_key
+    ) {
+        std::optional<SegmentInMemory> result;
+        IndexAggregator<RowCountIndex> journal_agg(stream_id, [&result](auto&& segment) {
+            result = std::forward<decltype(segment)>(segment);
+        });
+        for (const auto& key : keys) {
+            journal_agg.add_key(key);
+        }
+        if (prev_journal_key) {
+            journal_agg.add_key(*prev_journal_key);
+        }
+        journal_agg.finalize();
+        util::check(result.has_value(), "build_version_segment produced no segment for {}", stream_id);
+        return std::move(*result);
+    }
+
+    /**
+     * Finalize a pre-uploaded VERSION atom key with conditional VERSION_REF CAS write (RTT #2),
+     * skipping synchronous OpLog emission when `defer_op_log == true` (caller emits overlapped
+     * EnrichedOpLog before acknowledging client).
+     */
+    std::string commit_prewritten_version_cas(
+            std::shared_ptr<Store> store, const AtomKey& index_key, const std::optional<AtomKey>& previous_key,
+            const AtomKey& committed_version_key, bool use_cas, const std::optional<std::string>& expected_etag,
+            bool defer_op_log = true
+    ) {
+        std::string new_etag = write_symbol_ref_cas(
+                store, index_key, previous_key, committed_version_key, use_cas, expected_etag
+        );
+        inject_latest_version(index_key.id(), index_key, committed_version_key, previous_key);
+        if (!defer_op_log && log_changes_) {
+            emit_write_op_log(store, index_key, previous_key, /*is_clean_successor=*/true);
+        } else {
+            store->discard_captured_version_write(index_key.id(), index_key.version_id());
+        }
+        return new_etag;
+    }
+
     /**
      * Tombstone all non-deleted versions of the given stream and do the related housekeeping.
      * @param first_key_to_tombstone The first key in the version chain that should be tombstoned. When empty
@@ -464,7 +705,8 @@ class VersionMapImpl {
 
     VariantKey journal_key(
             std::shared_ptr<Store> store, const VersionId& version_id, const StreamId& stream_id,
-            std::span<const AtomKey> keys, std::optional<AtomKey> prev_journal_key
+            std::span<const AtomKey> keys, std::optional<AtomKey> prev_journal_key,
+            std::optional<timestamp> creation_ts = std::nullopt
     ) {
         ARCTICDB_SAMPLE(WriteJournalEntry, 0)
         ARCTICDB_DEBUG(log::version(), "Version map writing version for keys {}", keys);
@@ -472,16 +714,26 @@ class VersionMapImpl {
         VariantKey journal_key;
         IndexAggregator<RowCountIndex> journal_agg(
                 stream_id,
-                [&store, &journal_key, &version_id, &stream_id](auto&& segment) {
-                    const PartialKey pk{
-                            KeyType::VERSION,
-                            version_id,
-                            stream_id,
-                            IndexValue(NumericIndex{0}),
-                            IndexValue(NumericIndex{0})
-                    };
-
-                    journal_key = store->write_sync(pk, std::forward<decltype(segment)>(segment));
+                [&store, &journal_key, &version_id, &stream_id, creation_ts](auto&& segment) {
+                    if (creation_ts.has_value()) {
+                        const PartialKey pk{
+                                KeyType::VERSION,
+                                version_id,
+                                stream_id,
+                                IndexValue(NumericIndex{0}),
+                                IndexValue(NumericIndex{0})
+                        };
+                        journal_key = store->write_sync(pk, *creation_ts, std::forward<decltype(segment)>(segment));
+                    } else {
+                        journal_key = store->write_sync(
+                                KeyType::VERSION,
+                                version_id,
+                                stream_id,
+                                IndexValue(NumericIndex{0}),
+                                IndexValue(NumericIndex{0}),
+                                std::forward<decltype(segment)>(segment)
+                        );
+                    }
                 }
         );
 
@@ -671,19 +923,27 @@ class VersionMapImpl {
     std::optional<AtomKey> do_write(
             std::shared_ptr<Store> store, const VersionId& version_id, const StreamId& stream_id,
             const std::span<const AtomKey>& keys, const std::shared_ptr<VersionMapEntry>& entry,
-            const bool prevent_non_increasing_version_id = true
+            const bool prevent_non_increasing_version_id = true,
+            const std::optional<timestamp>& min_commit_ts = std::nullopt
     ) {
         if (validate_)
             entry->validate();
 
-        auto atom_journal_key = to_atom(journal_key(store, version_id, stream_id, keys, entry->head_));
-
-        bool has_index_key = false;
         auto original_head = entry->head_;
-        if (original_head.has_value()) {
-            entry->unshift_key(*original_head);
-        }
 
+        // Pre-validate increasing version ID BEFORE writing the VERSION blob (prevents orphan VERSION leaks)
+        // and compute HLC-clamped commit_ts strictly greater than original_head->creation_ts().
+        bool has_index_key = false;
+        bool needs_hlc_clamp = false;
+        timestamp commit_ts = store->current_timestamp();
+        if (min_commit_ts.has_value() && *min_commit_ts > commit_ts) {
+            commit_ts = *min_commit_ts;
+            needs_hlc_clamp = true;
+        }
+        if (original_head.has_value() && commit_ts <= original_head->creation_ts()) {
+            commit_ts = original_head->creation_ts() + 1;
+            needs_hlc_clamp = true;
+        }
         for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
             const auto& key = *it;
             if (key.type() == KeyType::TABLE_INDEX) {
@@ -721,8 +981,17 @@ class VersionMapImpl {
                     }
                 }
             }
+        }
 
-            write_to_entry(entry, key, atom_journal_key);
+        const std::optional<timestamp> explicit_ts = needs_hlc_clamp ? std::make_optional(commit_ts) : std::nullopt;
+        auto atom_journal_key = to_atom(journal_key(store, version_id, stream_id, keys, original_head, explicit_ts));
+
+        if (original_head.has_value()) {
+            entry->unshift_key(*original_head);
+        }
+
+        for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
+            write_to_entry(entry, *it, atom_journal_key);
         }
 
         auto previous_index = entry->get_second_undeleted_index();

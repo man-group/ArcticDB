@@ -32,7 +32,8 @@ class IndexWriter {
 
     IndexWriter(
             std::shared_ptr<stream::StreamSink> sink, IndexPartialKey partial_key, const TimeseriesDescriptor& tsd,
-            const std::optional<KeyType>& key_type = std::nullopt, bool sync = false
+            const std::optional<KeyType>& key_type = std::nullopt, bool sync = false,
+            std::optional<timestamp> creation_ts = std::nullopt
     ) :
         bucketize_columns_(tsd.column_groups()),
         sync_(sync),
@@ -45,7 +46,8 @@ class IndexWriter {
         ),
         sink_(std::move(sink)),
         key_being_committed_(folly::Future<AtomKey>::makeEmpty()),
-        key_type_(key_type) {
+        key_type_(key_type),
+        creation_ts_(creation_ts) {
         agg_.segment().set_timeseries_descriptor(tsd);
     }
 
@@ -132,6 +134,15 @@ class IndexWriter {
         return committed_key_.value();
     }
 
+    // Build the TABLE_INDEX PartialKey + SegmentInMemory locally without writing to storage yet
+    // (enables concurrent RTT #1 pre-encoded uploads of {TABLE_DATA, TABLE_INDEX, VERSION}).
+    std::pair<stream::PartialKey, SegmentInMemory> build_segment() {
+        capture_only_ = true;
+        agg_.finalize();
+        util::check(captured_segment_.has_value(), "IndexWriter::build_segment produced no segment");
+        return std::move(*captured_segment_);
+    }
+
   private:
     IndexValue segment_start(const SegmentInMemory& segment) const {
         return Index::start_value_for_keys_segment(segment);
@@ -143,24 +154,55 @@ class IndexWriter {
         auto seg = std::move(s);
         auto key_type = key_type_.value_or(get_key_type_for_index_stream(partial_key_.id));
 
-        if (sync_) {
-            committed_key_ = std::make_optional(to_atom(sink_->write_sync(
-                    key_type,
-                    partial_key_.version_id,
-                    partial_key_.id,
-                    segment_start(seg),
-                    segment_end(seg),
-                    std::move(seg)
-            )));
-        } else {
+        if (capture_only_) {
+            stream::PartialKey pk{
+                    key_type, partial_key_.version_id, partial_key_.id, segment_start(seg), segment_end(seg)
+            };
+            captured_segment_.emplace(std::move(pk), std::move(seg));
+            return;
+        }
 
-            key_being_committed_ = sink_->write(key_type,
-                                                partial_key_.version_id,
-                                                partial_key_.id,
-                                                segment_start(seg),
-                                                segment_end(seg),
-                                                std::move(seg))
-                                           .thenValue([](auto&& variant_key) { return to_atom(variant_key); });
+        if (sync_) {
+            committed_key_ = std::make_optional(to_atom(
+                    creation_ts_.has_value()
+                            ? sink_->write_sync(
+                                      key_type,
+                                      partial_key_.version_id,
+                                      partial_key_.id,
+                                      *creation_ts_,
+                                      segment_start(seg),
+                                      segment_end(seg),
+                                      std::move(seg)
+                              )
+                            : sink_->write_sync(
+                                      key_type,
+                                      partial_key_.version_id,
+                                      partial_key_.id,
+                                      segment_start(seg),
+                                      segment_end(seg),
+                                      std::move(seg)
+                              )
+            ));
+        } else {
+            auto fut = creation_ts_.has_value()
+                               ? sink_->write(
+                                         key_type,
+                                         partial_key_.version_id,
+                                         partial_key_.id,
+                                         *creation_ts_,
+                                         segment_start(seg),
+                                         segment_end(seg),
+                                         std::move(seg)
+                                 )
+                               : sink_->write(
+                                         key_type,
+                                         partial_key_.version_id,
+                                         partial_key_.id,
+                                         segment_start(seg),
+                                         segment_end(seg),
+                                         std::move(seg)
+                                 );
+            key_being_committed_ = std::move(fut).thenValue([](auto&& variant_key) { return to_atom(variant_key); });
         }
     }
 
@@ -175,6 +217,9 @@ class IndexWriter {
     std::optional<std::size_t> current_col_ = std::nullopt;
     std::optional<std::size_t> current_row_ = std::nullopt;
     std::optional<KeyType> key_type_ = std::nullopt;
+    std::optional<timestamp> creation_ts_ = std::nullopt;
+    bool capture_only_ = false;
+    std::optional<std::pair<stream::PartialKey, SegmentInMemory>> captured_segment_ = std::nullopt;
 };
 
 } // namespace arcticdb::pipelines::index

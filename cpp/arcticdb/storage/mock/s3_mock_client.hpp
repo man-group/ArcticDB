@@ -39,8 +39,16 @@ class MockS3Client : public S3ClientInterface {
             const std::string& s3_object_name, const std::string& bucket_name
     ) const override;
 
+    [[nodiscard]] S3Result<ObjectMetadata> head_object_metadata(
+            const std::string& s3_object_name, const std::string& bucket_name
+    ) const override;
+
     [[nodiscard]] S3Result<Segment> get_object(const std::string& s3_object_name, const std::string& bucket_name)
             const override;
+
+    [[nodiscard]] S3Result<GetObjectWithEtagOutput> get_object_with_etag(
+            const std::string& s3_object_name, const std::string& bucket_name
+    ) const override;
 
     [[nodiscard]] folly::Future<S3Result<Segment>> get_object_async(
             const std::string& s3_object_name, const std::string& bucket_name
@@ -49,6 +57,11 @@ class MockS3Client : public S3ClientInterface {
     S3Result<std::monostate> put_object(
             const std::string& s3_object_name, Segment& segment, const std::string& bucket_name,
             PutHeader header = PutHeader::NONE
+    ) override;
+
+    S3Result<PutObjectOutput> put_object_with_etag(
+            const std::string& s3_object_name, Segment& segment, const std::string& bucket_name,
+            PutHeader header = PutHeader::NONE, const std::optional<std::string>& if_match_etag = std::nullopt
     ) override;
 
     S3Result<DeleteObjectsOutput> delete_objects(

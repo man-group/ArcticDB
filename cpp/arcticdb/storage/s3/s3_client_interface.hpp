@@ -71,7 +71,16 @@ struct DeleteObjectsOutput {
     std::vector<FailedDelete> failed_deletes;
 };
 
-enum class PutHeader { NONE, IF_NONE_MATCH };
+struct GetObjectWithEtagOutput {
+    Segment segment;
+    std::string etag;
+};
+
+struct PutObjectOutput {
+    std::string etag;
+};
+
+enum class PutHeader { NONE, IF_NONE_MATCH, IF_MATCH };
 
 // An abstract class, which is responsible for sending the requests and parsing the responses from S3.
 // It can be derived as either a real connection to S3 or a mock used for unit tests.
@@ -81,9 +90,29 @@ class S3ClientInterface {
             const std::string& s3_object_name, const std::string& bucket_name
     ) const = 0;
 
+    [[nodiscard]] virtual S3Result<ObjectMetadata> head_object_metadata(
+            const std::string& s3_object_name, const std::string& bucket_name
+    ) const {
+        (void)s3_object_name;
+        (void)bucket_name;
+        return {Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                Aws::S3::S3Errors::UNKNOWN, "NotImplemented", "head_object_metadata not implemented", false
+        ))};
+    }
+
     [[nodiscard]] virtual S3Result<Segment> get_object(
             const std::string& s3_object_name, const std::string& bucket_name
     ) const = 0;
+
+    [[nodiscard]] virtual S3Result<GetObjectWithEtagOutput> get_object_with_etag(
+            const std::string& s3_object_name, const std::string& bucket_name
+    ) const {
+        (void)s3_object_name;
+        (void)bucket_name;
+        return {Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                Aws::S3::S3Errors::UNKNOWN, "NotImplemented", "get_object_with_etag not implemented", false
+        ))};
+    }
 
     [[nodiscard]] virtual folly::Future<S3Result<Segment>> get_object_async(
             const std::string& s3_object_name, const std::string& bucket_name
@@ -93,6 +122,20 @@ class S3ClientInterface {
             const std::string& s3_object_name, Segment& segment, const std::string& bucket_name,
             PutHeader header = PutHeader::NONE
     ) = 0;
+
+    virtual S3Result<PutObjectOutput> put_object_with_etag(
+            const std::string& s3_object_name, Segment& segment, const std::string& bucket_name,
+            PutHeader header = PutHeader::NONE, const std::optional<std::string>& if_match_etag = std::nullopt
+    ) {
+        (void)s3_object_name;
+        (void)segment;
+        (void)bucket_name;
+        (void)header;
+        (void)if_match_etag;
+        return {Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                Aws::S3::S3Errors::UNKNOWN, "NotImplemented", "put_object_with_etag not implemented", false
+        ))};
+    }
 
     virtual S3Result<DeleteObjectsOutput> delete_objects(
             const std::vector<std::string>& s3_object_names, const std::string& bucket_name
