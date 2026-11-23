@@ -6,6 +6,7 @@ from arcticdb.exceptions import UserInputException
 from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb_ext.storage import AWSAuthMethod
+from tests.util.mark import WINDOWS
 
 
 def _add_s3_library(aws_auth, aws_profile, is_nfs_layout=False):
@@ -152,5 +153,6 @@ def test_gcp_path_prefix():
 
 
 def test_file_library_parser():
-    adapter = FileLibraryAdapter("experimental_file:///home/some_user/arctic_data", encoding_version=EncodingVersion.V1)
-    assert adapter._dir_path == "/home/some_user/arctic_data"
+    path = "/home/some_user/arctic_data" if not WINDOWS else r"c:\data\arctic_storage"
+    adapter = FileLibraryAdapter(f"experimental_file://{path}", encoding_version=EncodingVersion.V1)
+    assert adapter._dir_path == path
