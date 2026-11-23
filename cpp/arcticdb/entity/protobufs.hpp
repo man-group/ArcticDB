@@ -24,6 +24,8 @@
 
 namespace arcticdb::proto {
 
+// NOLINTBEGIN(misc-unused-alias-decls)
+
 namespace descriptors = arcticc::pb2::descriptors_pb2;
 namespace encoding = arcticc::pb2::encoding_pb2;
 namespace storage = arcticc::pb2::storage_pb2;
@@ -38,5 +40,7 @@ namespace config = arcticc::pb2::config_pb2;
 namespace nfs_backed_storage = arcticc::pb2::nfs_backed_storage_pb2;
 namespace file_storage = arcticc::pb2::file_storage_pb2;
 namespace utils = arcticc::pb2::utils_pb2;
+
+// NOLINTEND(misc-unused-alias-decls)
 
 } // namespace arcticdb::proto
