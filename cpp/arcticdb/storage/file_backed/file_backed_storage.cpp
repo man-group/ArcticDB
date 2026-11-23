@@ -68,6 +68,7 @@ void raise_io_error(int error_code, std::string_view message) {
     case ESTALE:
         storage::raise<ErrorCode::E_STALE_FILE_DESCRIPTOR>(message);
         break;
+    case ENOTDIR:
     default:
         storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>("{}: {}", message, std::strerror(error_code));
         break;
@@ -376,9 +377,7 @@ FileBackedStorage::FileBackedStorage(
         if (created)
             root_path_fd.sync();
     }
-    // Can we open it? The mkdir above could have reported EEXIST but it was actually a file.
-    // TODO: If OpenMode::READ, and we get ENOENT, we'd throw a KeyNotFound which is weird. Write a unit test to shed
-    // light.
+    // Ensure we can open the path as a directory.
     Directory storage_dir_fd(*posix_, root_path_fd, lib_path_str);
     storage_dir_fd.close();
     root_path_fd.close();
