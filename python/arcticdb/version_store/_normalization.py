@@ -175,7 +175,8 @@ def get_sample_from_non_empty_arr(arr, arr_name):
 
         return element
 
-    log.info("Column {} does not have non null elements.", arr_name)
+    if os.getenv("ARCTICDB_LOG_ON_ALL_NULL_COLUMN", "1") == "1":
+        log.info("Column {} does not have non null elements.", arr_name)
     return None
 
 
