@@ -32,8 +32,6 @@
 // TODO: Because of Windows, all my usages of c_str() are bad. They return wchar_t*.
 // TODO: The usages of `to_tokenized_key` need to be reconsidered. They are not compatible with Windows.
 //       due to the use of '*' as separator.
-// TODO: Check that all return values are consistently checked as `... != 0`. It's confusing that sometimes I
-//       check < 0, or I just write if(syscall()) { handle error }.
 #ifndef _WIN32
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -207,14 +205,14 @@ class FdHolder {
 
     void sync() const {
         int res = posix_.fsync(fd_);
-        if (res < 0) {
+        if (res != 0) {
             if (errno == EINTR) {
                 // Try one more time? TODO: Quick retries should be wrapped in a retry() that takes a lambda.
                 res = posix_.fsync(fd_);
             }
         }
 
-        if (res < 0)
+        if (res != 0)
             raise_io_error(errno, "fsync failed");
     }
 
@@ -242,7 +240,7 @@ class Directory : public FdHolder {
     // Returns true if the directory was created.
     bool mkdir(const fs::path& pathname, mode_t mode) const {
         int res = posix_.mkdirat(fd_, pathname.c_str(), mode);
-        if (res < 0) {
+        if (res != 0) {
             if (errno != EEXIST)
                 raise_io_error(errno, fmt::format("failed to create subdir {}", pathname.c_str()));
             return false;
@@ -343,7 +341,7 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
 
 bool remove_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
     const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
-    if (posix.unlink(dest_path.c_str()) < 0) {
+    if (posix.unlink(dest_path.c_str()) != 0) {
         // TODO: Special error handling? Retry?
         return false;
     }
