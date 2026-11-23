@@ -14,6 +14,16 @@ option(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING "Build with Perfetto instrumented tr
 if(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING)
     list(APPEND VCPKG_MANIFEST_FEATURES perfetto)
 endif()
+set(ARCTICDB_ALLOCATOR "system" CACHE STRING
+    "Allocator behind operator new/delete and arcticdb::Allocator in arcticdb_ext: system, mimalloc, jemalloc or tcmalloc")
+set_property(CACHE ARCTICDB_ALLOCATOR PROPERTY STRINGS system mimalloc jemalloc tcmalloc)
+if(NOT ARCTICDB_ALLOCATOR MATCHES "^(system|mimalloc|jemalloc|tcmalloc)$")
+    message(FATAL_ERROR "Unknown ARCTICDB_ALLOCATOR '${ARCTICDB_ALLOCATOR}'")
+endif()
+# jemalloc and tcmalloc are only wired up for Linux and macOS
+if(ARCTICDB_ALLOCATOR STREQUAL "mimalloc" OR (NOT ARCTICDB_ALLOCATOR STREQUAL "system" AND NOT CMAKE_HOST_WIN32))
+    list(APPEND VCPKG_MANIFEST_FEATURES "allocator-${ARCTICDB_ALLOCATOR}")
+endif()
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 project(arcticdb VERSION 0.0.1)
@@ -90,6 +100,31 @@ if(${ARCTICDB_COUNT_ALLOCATIONS})
             GIT_TAG        v0.7.3
     )
     FetchContent_MakeAvailable(cpptrace)
+endif()
+
+# Static builds link every C and C++ dependency into arcticdb_ext, so an allocator that replaces operator new/delete
+# there stays inside the module. C malloc/free are left alone, because libc allocates memory (strdup, for one) that
+# statically linked C code later frees. Conda builds link shared dependencies, so they keep the system allocator.
+set(ARCTICDB_CUSTOM_ALLOCATOR OFF)
+if(NOT ARCTICDB_ALLOCATOR STREQUAL "system")
+    if(ARCTICDB_USING_CONDA OR ARCTICDB_COUNT_ALLOCATIONS OR ARCTICDB_SANITIZER_FLAGS)
+        message(WARNING "ARCTICDB_ALLOCATOR=${ARCTICDB_ALLOCATOR} is ignored for conda, allocation counting and sanitizer builds")
+    elseif(WIN32 AND NOT ARCTICDB_ALLOCATOR STREQUAL "mimalloc")
+        message(WARNING "ARCTICDB_ALLOCATOR=${ARCTICDB_ALLOCATOR} is not supported on Windows; using the system allocator")
+    else()
+        set(ARCTICDB_CUSTOM_ALLOCATOR ON)
+        string(TOUPPER "${ARCTICDB_ALLOCATOR}" _arcticdb_allocator_upper)
+        add_compile_definitions(ARCTICDB_ALLOCATOR_${_arcticdb_allocator_upper})
+        message(STATUS "Building ArcticDB with the ${ARCTICDB_ALLOCATOR} allocator")
+    endif()
+endif()
+# libstdc++.so instantiates parts of std::basic_string and other templates itself, so memory it allocates with its own
+# operator new reaches the inline destructors in arcticdb_ext. Linking it statically puts all C++ code in arcticdb_ext
+# behind one operator new/delete. Required with a custom allocator on Linux; available for the system allocator so
+# that both are linked the same way.
+option(ARCTICDB_STATIC_LIBSTDCXX "Linux: link libstdc++ statically into arcticdb_ext and export only its module init" ON)
+if(ARCTICDB_CUSTOM_ALLOCATOR AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(ARCTICDB_STATIC_LIBSTDCXX ON)
 endif()
 
 if(ARCTICDB_SANITIZER_FLAGS)
