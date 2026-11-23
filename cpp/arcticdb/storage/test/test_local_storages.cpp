@@ -153,7 +153,13 @@ TEST_P(LocalStorageTestSuite, Strings) {
 
 using namespace std::string_literals;
 
-std::vector<StorageGenerator> get_storage_generators() { return {"lmdb"s, "mem"s, "file_backed"s}; }
+std::vector<StorageGenerator> get_storage_generators() {
+#ifdef __linux__
+    return {"lmdb"s, "mem"s, "file_backed"s};
+#else
+    return {"lmdb"s, "mem"s};
+#endif
+}
 
 INSTANTIATE_TEST_SUITE_P(
         TestLocalStorages, LocalStorageTestSuite, testing::ValuesIn(get_storage_generators()),

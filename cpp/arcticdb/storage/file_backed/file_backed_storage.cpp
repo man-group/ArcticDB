@@ -373,7 +373,7 @@ FileBackedStorage::FileBackedStorage(
     Directory root_path_fd(*posix_, root_path, root_path);
     if (mode > OpenMode::READ) {
         // TODO: It's important to set sensible permissions on these directories, so that group users have read access.
-        bool created = root_path_fd.mkdir(lib_path_str, DIR_MODE_MASK);
+        bool created = root_path_fd.mkdir(lib_path_str, new_dir_mode_);
         if (created)
             root_path_fd.sync();
     }
@@ -538,8 +538,9 @@ void FileBackedStorage::do_visit_object_sizes(
 [[nodiscard]] const std::set<char>& FileBackedStorage::do_unsupported_symbol_chars() const {
     static const std::set<char> unsupported_characters = []() {
         std::set<char> result = GLOBALLY_UNSUPPORTED_CHARS;
-        // Forward slash intentionally omitted and should be escaped. Far too useful to users.
-        for (char x : {'?', '!', '*', '\\', ':', '"', '|'})
+        // Forward slash should be intentionally omitted from this list, it should be escaped. Far too useful to users.
+        // TODO: Remove forward slash from list.
+        for (char x : {'?', '!', '*', '\\', ':', '"', '|', '/'})
             result.insert(x);
 
         return result;
