@@ -130,7 +130,16 @@ class EncodedFieldCollection {
         size_t field_count = 0;
         auto pos = 0UL;
         while (pos < data_.bytes()) {
-            pos += encoded_field_bytes(to_field(pos));
+            const auto& field = to_field(pos);
+            const size_t fbytes = encoded_field_bytes(field);
+            util::check_arg(
+                    fbytes >= EncodedFieldImpl::Size && fbytes <= data_.bytes() - pos,
+                    "Corrupt EncodedFieldCollection: field size {} out of bounds at offset {} (total {})",
+                    fbytes,
+                    pos,
+                    data_.bytes()
+            );
+            pos += fbytes;
             ++field_count;
         }
         util::check(pos == data_.bytes(), "Size mismatch in regenerate_offsets, {} != {}", pos, data_.bytes());

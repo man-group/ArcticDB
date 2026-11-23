@@ -89,10 +89,35 @@ size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg) {
 }
 
 void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) {
+    deserialize_from_bytes(data, std::numeric_limits<size_t>::max(), copy_data);
+}
+
+void SegmentHeader::deserialize_from_bytes(const uint8_t* data, size_t max_bytes, bool copy_data) {
+    util::check_arg(data != nullptr, "Null data pointer in SegmentHeader::deserialize_from_bytes");
+    util::check_arg(
+            max_bytes >= sizeof(HeaderData) + sizeof(offset_),
+            "Truncated V2 SegmentHeader: {} bytes < minimum {}",
+            max_bytes,
+            sizeof(HeaderData) + sizeof(offset_)
+    );
     memcpy(&data_, data, sizeof(HeaderData));
     data += sizeof(HeaderData);
     ChunkedBuffer fields_buffer;
-    const auto fields_bytes = data_.field_buffer_.fields_bytes_;
+    const size_t fields_bytes = data_.field_buffer_.fields_bytes_;
+    const size_t offset_bytes = data_.field_buffer_.offset_bytes_;
+    const size_t remaining = max_bytes - sizeof(HeaderData) - sizeof(offset_);
+    util::check_arg(
+            fields_bytes <= remaining && offset_bytes <= remaining - fields_bytes,
+            "Corrupt V2 SegmentHeader: fields_bytes ({}) + offset_bytes ({}) exceeds remaining {} bytes",
+            fields_bytes,
+            offset_bytes,
+            remaining
+    );
+    util::check_arg(
+            offset_bytes % sizeof(uint64_t) == 0,
+            "Corrupt V2 SegmentHeader: offset_bytes ({}) not aligned to uint64_t",
+            offset_bytes
+    );
 
     if (copy_data) {
         fields_buffer.ensure(fields_bytes);
@@ -101,14 +126,48 @@ void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) 
         fields_buffer.add_external_block(data, fields_bytes);
     }
 
-    data += data_.field_buffer_.fields_bytes_;
-    Buffer offsets_buffer{data_.field_buffer_.offset_bytes_};
-    memcpy(offsets_buffer.data(), data, data_.field_buffer_.offset_bytes_);
+    data += fields_bytes;
+    Buffer offsets_buffer{offset_bytes};
+    memcpy(offsets_buffer.data(), data, offset_bytes);
     data += offsets_buffer.bytes();
     header_fields_ = EncodedFieldCollection{std::move(fields_buffer), std::move(offsets_buffer)};
     auto* offsets = reinterpret_cast<const uint32_t*>(data);
     for (auto i = 0UL; i < offset_.size(); ++i)
         offset_[i] = *offsets++;
+
+    // P0-12: Validate every header_fields_ offset and field bounds, and every active FieldOffset index.
+    const size_t num_hdr_fields = header_fields_.size();
+    for (size_t fi = 0; fi < num_hdr_fields; ++fi) {
+        const uint64_t off = header_fields_.get_offset(fi);
+        util::check_arg(
+                off <= fields_bytes && EncodedFieldImpl::Size <= fields_bytes - off,
+                "Corrupt V2 SegmentHeader: field {} offset {} out of bounds (fields_bytes={})",
+                fi,
+                off,
+                fields_bytes
+        );
+        const auto& ef = header_fields_.to_field(off);
+        const size_t ef_bytes = encoded_field_bytes(ef);
+        util::check_arg(
+                ef_bytes <= fields_bytes - off,
+                "Corrupt V2 SegmentHeader: field {} length {} exceeds fields_bytes {}",
+                fi,
+                ef_bytes,
+                fields_bytes
+        );
+    }
+    for (size_t i = 0; i < static_cast<size_t>(FieldOffset::COUNT); ++i) {
+        const auto fo = static_cast<FieldOffset>(i);
+        if (has_field(fo)) {
+            util::check_arg(
+                    static_cast<size_t>(offset_[i]) < num_hdr_fields,
+                    "Corrupt V2 SegmentHeader: FieldOffset {} index {} >= num_hdr_fields {}",
+                    i,
+                    offset_[i],
+                    num_hdr_fields
+            );
+        }
+    }
 }
 
 size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg) {

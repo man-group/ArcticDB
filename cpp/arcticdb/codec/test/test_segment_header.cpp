@@ -75,6 +75,7 @@ TEST(SegmentHeader, SerializeUnserializeV1) {
     auto proto = generate_v1_header(header, desc);
     const auto header_size = proto.ByteSizeLong();
     std::vector<uint8_t> vec(header_size);
+    ASSERT_TRUE(proto.SerializeToArray(vec.data(), static_cast<int>(header_size)));
     auto read_header = decode_protobuf_header(vec.data(), header_size);
 
     const auto& string_pool = read_header.proto().string_pool_field();

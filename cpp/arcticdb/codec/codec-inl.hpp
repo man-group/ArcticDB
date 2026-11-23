@@ -49,9 +49,24 @@ void decode_block(const BlockType& block, const std::uint8_t* input, T* output) 
 
 template<typename FieldType, class DataSink>
 inline void read_shapes(
-        FieldType& encoded_field, DataSink& data_sink, uint8_t const*& data_in, int shapes_block, shape_t*& shapes_out
+        FieldType& encoded_field, DataSink& data_sink, uint8_t const*& data_in, int shapes_block, shape_t*& shapes_out,
+        const uint8_t* input_end = nullptr
 ) {
+    util::check_arg(
+            shapes_block >= 0 && shapes_block < encoded_field.shapes_size(),
+            "Corrupt segment: shapes block index {} out of bounds (shapes_size={})",
+            shapes_block,
+            encoded_field.shapes_size()
+    );
     const auto& shape = encoded_field.shapes(shapes_block);
+    if (input_end != nullptr) {
+        util::check_arg(
+                data_in <= input_end && static_cast<size_t>(shape.out_bytes()) <= static_cast<size_t>(input_end - data_in),
+                "Corrupt segment: shape block out_bytes {} exceeds remaining {} bytes",
+                shape.out_bytes(),
+                data_in <= input_end ? static_cast<size_t>(input_end - data_in) : 0u
+        );
+    }
     decode_block<shape_t>(shape, data_in, shapes_out);
     data_in += shape.out_bytes();
     shapes_out += shape.in_bytes() / sizeof(shape_t);
@@ -61,7 +76,8 @@ inline void read_shapes(
 template<class DataSink, typename NDArrayEncodedFieldType>
 std::size_t decode_ndarray(
         const TypeDescriptor& td, const NDArrayEncodedFieldType& field, const std::uint8_t* input, DataSink& data_sink,
-        std::optional<util::BitMagic>& bv, EncodingVersion encoding_version
+        std::optional<util::BitMagic>& bv, EncodingVersion encoding_version,
+        const std::uint8_t* input_end = nullptr
 ) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeNdArray)
 
@@ -113,7 +129,7 @@ std::size_t decode_ndarray(
             if (shape_size > 0) {
                 shapes_out = data_sink.allocate_shapes(shape_size);
                 if (encoding_version == EncodingVersion::V2)
-                    read_shapes(field, data_sink, data_in, 0, shapes_out);
+                    read_shapes(field, data_sink, data_in, 0, shapes_out, input_end);
             }
         }
         for (auto block_num = 0; block_num < num_blocks; ++block_num) {
@@ -121,11 +137,21 @@ std::size_t decode_ndarray(
                 // In V1 encoding each block of values is preceded by a block of shapes.
                 // In V2 encoding all shapes are put in a single block placed at the beginning of the block chain.
                 if (encoding_version == EncodingVersion::V1) {
-                    read_shapes(field, data_sink, data_in, block_num, shapes_out);
+                    read_shapes(field, data_sink, data_in, block_num, shapes_out, input_end);
                 }
             }
 
             const auto& block_info = field.values(block_num);
+            if (input_end != nullptr) {
+                util::check_arg(
+                        data_in <= input_end &&
+                                static_cast<size_t>(block_info.out_bytes()) <= static_cast<size_t>(input_end - data_in),
+                        "Corrupt segment: value block {} out_bytes {} exceeds remaining {} bytes",
+                        block_num,
+                        block_info.out_bytes(),
+                        data_in <= input_end ? static_cast<size_t>(input_end - data_in) : 0u
+                );
+            }
             ARCTICDB_TRACE(log::codec(), "Decoding block {} at pos {}", block_num, data_in - input);
             size_t block_inflated_size;
             decode_block<T>(block_info, data_in, reinterpret_cast<T*>(data_out));
@@ -137,6 +163,20 @@ std::size_t decode_ndarray(
 
         if (field.sparse_map_bytes()) {
             util::check(!is_empty_type(type_desc_tag.data_type()), "Empty typed columns should not have sparse map");
+            util::check_arg(
+                    field.sparse_map_bytes() >= util::combined_bit_magic_delimiters_size(),
+                    "Corrupt segment: sparse_map_bytes ({}) smaller than delimiter size",
+                    field.sparse_map_bytes()
+            );
+            if (input_end != nullptr) {
+                util::check_arg(
+                        data_in <= input_end && static_cast<size_t>(field.sparse_map_bytes()) <=
+                                                        static_cast<size_t>(input_end - data_in),
+                        "Corrupt segment: sparse_map_bytes ({}) exceeds remaining {} bytes",
+                        field.sparse_map_bytes(),
+                        data_in <= input_end ? static_cast<size_t>(input_end - data_in) : 0u
+                );
+            }
             util::check_magic<util::BitMagicStart>(data_in);
             const auto bitmap_size = field.sparse_map_bytes() - util::combined_bit_magic_delimiters_size();
             bv = util::deserialize_bytes_to_bitmap(data_in, bitmap_size);
@@ -165,17 +205,23 @@ std::size_t decode_ndarray(
 template<class DataSink>
 std::size_t decode_field(
         const TypeDescriptor& td, const EncodedFieldImpl& field, const std::uint8_t* input, DataSink& data_sink,
-        std::optional<util::BitMagic>& bv, EncodingVersion encoding_version
+        std::optional<util::BitMagic>& bv, EncodingVersion encoding_version, const std::uint8_t* input_end
 ) {
     size_t magic_size = 0u;
     if (encoding_version != EncodingVersion::V1) {
         magic_size += sizeof(ColumnMagic);
+        if (input_end != nullptr) {
+            util::check_arg(
+                    input <= input_end && static_cast<size_t>(input_end - input) >= sizeof(ColumnMagic),
+                    "Truncated V2 segment before ColumnMagic"
+            );
+        }
         util::check_magic<ColumnMagic>(input);
     }
 
     switch (field.encoding_case()) {
     case EncodedFieldType::NDARRAY:
-        return decode_ndarray(td, field.ndarray(), input, data_sink, bv, encoding_version) + magic_size;
+        return decode_ndarray(td, field.ndarray(), input, data_sink, bv, encoding_version, input_end) + magic_size;
     default:
         util::raise_rte("Unsupported encoding {}", field);
     }

@@ -75,4 +75,56 @@ inline void skip_identifier(const uint8_t*& data) {
     }
 }
 
+inline StreamId read_identifier_bounded(const uint8_t*& data, const uint8_t* end) {
+    util::check_arg(
+            data <= end && static_cast<size_t>(end - data) >= SegmentIdentifierSize,
+            "Truncated segment before SegmentIdentifierHeader"
+    );
+    auto* identifier = reinterpret_cast<const SegmentIdentifier*>(data);
+    switch (identifier->header_.type_) {
+    case IdentifierType::STRING: {
+        const size_t str_len = static_cast<size_t>(identifier->header_.size_);
+        util::check_arg(
+                str_len <= static_cast<size_t>(end - data) - SegmentIdentifierSize,
+                "Corrupt segment: string identifier length {} exceeds remaining {} bytes",
+                str_len,
+                static_cast<size_t>(end - data) - SegmentIdentifierSize
+        );
+        data += SegmentIdentifierSize + str_len;
+        return StringId(&identifier->data_[0], str_len);
+    }
+    case IdentifierType::NUMERIC:
+        data += SegmentIdentifierSize;
+        return NumericId(identifier->header_.size_);
+    default:
+        util::raise_rte("Unknown identifier type in read_identifier");
+    }
+}
+
+inline void skip_identifier_bounded(const uint8_t*& data, const uint8_t* end) {
+    util::check_arg(
+            data <= end && static_cast<size_t>(end - data) >= SegmentIdentifierSize,
+            "Truncated segment before SegmentIdentifierHeader"
+    );
+    auto* identifier = reinterpret_cast<const SegmentIdentifier*>(data);
+    switch (identifier->header_.type_) {
+    case IdentifierType::STRING: {
+        const size_t str_len = static_cast<size_t>(identifier->header_.size_);
+        util::check_arg(
+                str_len <= static_cast<size_t>(end - data) - SegmentIdentifierSize,
+                "Corrupt segment: string identifier length {} exceeds remaining {} bytes",
+                str_len,
+                static_cast<size_t>(end - data) - SegmentIdentifierSize
+        );
+        data += SegmentIdentifierSize + str_len;
+        break;
+    }
+    case IdentifierType::NUMERIC:
+        data += SegmentIdentifierSize;
+        break;
+    default:
+        util::raise_rte("Unknown identifier type in skip_identifier");
+    }
+}
+
 } // namespace arcticdb

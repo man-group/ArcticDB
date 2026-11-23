@@ -68,11 +68,22 @@ struct Lz4Decoder {
     ) {
         ARCTICDB_TRACE(log::codec(), "Lz4 decoder reading block: {} {}", in_bytes, out_bytes);
 
+        codec::check<ErrorCode::E_DECODE_ERROR>(
+                in_bytes <= static_cast<std::size_t>(std::numeric_limits<int>::max()) &&
+                        out_bytes <= static_cast<std::size_t>(std::numeric_limits<int>::max()),
+                "LZ4 block size exceeds INT_MAX (in_bytes={}, out_bytes={})",
+                in_bytes,
+                out_bytes
+        );
+
         // Decompressed size < 0 means an error occurred in LZ4 during the decompression. In case it's  negative
         // the specific value is somewhat random and does not mean anything. Decompressed size of 0 is allowed and means
         // 0 bytes were passed for compression. In that case t_out is allowed to be null since it's not used at all.
         const int decompressed_size = LZ4_decompress_safe(
-                reinterpret_cast<const char*>(in), reinterpret_cast<char*>(t_out), int(in_bytes), int(out_bytes)
+                reinterpret_cast<const char*>(in),
+                reinterpret_cast<char*>(t_out),
+                static_cast<int>(in_bytes),
+                static_cast<int>(out_bytes)
         );
         codec::check<ErrorCode::E_DECODE_ERROR>(
                 decompressed_size >= 0,

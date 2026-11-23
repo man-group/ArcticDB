@@ -148,6 +148,10 @@ class Segment {
 
     [[nodiscard]] std::size_t buffer_bytes() const { return buffer_.bytes(); }
 
+    // Overflow-safe pre-decode estimate of total uncompressed payload bytes (data + shapes + bitmaps).
+    // Returns UINT64_MAX on overflow; safe to call on untrusted encoded segments before decode_segment().
+    [[nodiscard]] uint64_t estimate_uncompressed_bytes() const;
+
     SegmentHeader& header() { return header_; }
 
     [[nodiscard]] const SegmentHeader& header() const { return header_; }
