@@ -6,6 +6,14 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+// TODO: Windows will be an entirely separate implementation. Some of the Storage class implementations will be
+//       platform independent, so perhaps it is prudent to introduce some separate TUs per platform.
+// TODO: Because of Windows, all my usages of c_str() are bad. They return wchar_t*.
+// TODO: The usages of `to_tokenized_key` need to be reconsidered. They are not compatible with Windows.
+//       due to the use of '*' as separator.
+
+#ifdef __linux__
+
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/log/log.hpp>
@@ -27,15 +35,8 @@
 #include <stack>
 #include <stdexcept>
 
-// TODO: Windows will be an entirely separate implementation. Some of the Storage class implementations will be
-//       platform independent, so perhaps it is prudent to introduce some separate TUs per platform.
-// TODO: Because of Windows, all my usages of c_str() are bad. They return wchar_t*.
-// TODO: The usages of `to_tokenized_key` need to be reconsidered. They are not compatible with Windows.
-//       due to the use of '*' as separator.
-#ifndef _WIN32
 #include <fcntl.h>
 #include <sys/stat.h>
-#endif
 
 namespace fs = std::filesystem;
 
@@ -604,3 +605,5 @@ size_t FileBackedStorage::get_num_temporary_files() const {
 }
 
 } // namespace arcticdb::storage::file_backed
+
+#endif

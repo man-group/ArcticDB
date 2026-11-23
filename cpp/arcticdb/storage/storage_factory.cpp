@@ -73,11 +73,15 @@ std::shared_ptr<Storage> create_storage(
         file::MappedFileStorage::Config mapped_config;
         storage_descriptor.config().UnpackTo(&mapped_config);
         storage = std::make_shared<file::MappedFileStorage>(library_path, mode, mapped_config);
-    } else if (type_name == file_backed::FileBackedStorage::Config::descriptor()->full_name()) {
+    }
+#ifdef __linux__
+    else if (type_name == file_backed::FileBackedStorage::Config::descriptor()->full_name()) {
         file_backed::FileBackedStorage::Config file_backed_config;
         storage_descriptor.config().UnpackTo(&file_backed_config);
         storage = std::make_shared<file_backed::FileBackedStorage>(library_path, mode, file_backed_config);
-    } else
+    }
+#endif
+    else
         throw std::runtime_error(fmt::format("Unknown config type {}", type_name));
 
     return storage;

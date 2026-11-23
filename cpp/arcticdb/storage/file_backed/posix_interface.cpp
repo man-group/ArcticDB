@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#ifdef __linux__
+
 #include <arcticdb/storage/file_backed/posix_interface.hpp>
 
 namespace arcticdb::storage::file_backed {
@@ -13,3 +15,5 @@ namespace arcticdb::storage::file_backed {
 PosixInterface::~PosixInterface() = default;
 
 }
+
+#endif

@@ -229,13 +229,17 @@ class StorageGenerator {
         } else if (storage_ == "mem") {
             arcticdb::proto::memory_storage::Config cfg;
             return std::make_unique<storage::memory::MemoryStorage>(library_path, storage::OpenMode::WRITE, cfg);
-        } else if (storage_ == "file_backed") {
+        }
+#ifdef __linux__
+        else if (storage_ == "file_backed") {
             arcticdb::proto::file_storage::Config cfg;
             cfg.set_dir_path(TEST_DATABASES_PATH);
             return std::make_unique<storage::file_backed::FileBackedStorage>(
                     library_path, storage::OpenMode::WRITE, cfg
             );
-        } else if (storage_ == "azure") {
+        }
+#endif
+        else if (storage_ == "azure") {
             arcticdb::proto::azure_storage::Config cfg;
             cfg.set_use_mock_storage_for_testing(true);
             return std::make_unique<storage::azure::AzureStorage>(library_path, storage::OpenMode::WRITE, cfg);

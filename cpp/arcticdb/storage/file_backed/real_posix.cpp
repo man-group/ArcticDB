@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#ifdef __linux__
+
 #include <arcticdb/storage/file_backed/real_posix.hpp>
 
 #include <cstdio>
@@ -42,3 +44,5 @@ int RealPosix::unlink(const char* pathname) { return ::unlink(pathname); }
 int RealPosix::unlinkat(int dirfd, const char* pathname, int flags) { return ::unlinkat(dirfd, pathname, flags); }
 
 } // namespace arcticdb::storage::file_backed
+
+#endif

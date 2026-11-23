@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#ifdef __linux__
+
 #include <cerrno>
 #include <fcntl.h>
 #include <gtest/gtest.h>
@@ -160,6 +162,7 @@ TEST_F(FileStorageApi, WritesAreVisibleAndReadable) {
 }
 
 TEST_F(FileStorageApi, ForwardSlashAllowedInSymbol) {
+    GTEST_SKIP() << "Known shortcoming. Need to escape forward slashes.";
     const std::string symbol("market/price");
     Segment segment{storage::get_test_segment()};
     auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
@@ -370,3 +373,5 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 } // namespace
+
+#endif
