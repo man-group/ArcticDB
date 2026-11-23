@@ -111,7 +111,7 @@ void refresh_ancestors(PosixInterface& posix, const fs::path& dir, const fs::pat
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE,
             to_check.has_parent_path() && dir.is_absolute() && subpath.is_absolute(),
-            "Expected dir {} and subpath {subpath} to be absolute paths, and dir should be a parent of subpath",
+            "Expected dir {} and subpath {} to be absolute paths, and dir should be a parent of subpath",
             dir.c_str(),
             subpath.c_str()
     );
