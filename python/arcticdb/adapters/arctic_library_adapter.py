@@ -45,6 +45,48 @@ def set_library_options(
 
     write_options.sync_passive.enabled = enterprise_library_options.replication
     write_options.delayed_deletes = enterprise_library_options.background_deletion
+    if enterprise_library_options.sequencer_url:
+        raw_urls = str(enterprise_library_options.sequencer_url)
+        tokens = [t.strip() for t in raw_urls.split(",") if t.strip()]
+        if not tokens:
+            raise ValueError("sequencer_url must contain at least one http:// or https:// endpoint")
+        for tok in tokens:
+            low = tok.lower()
+            if not (low.startswith("http://") or low.startswith("https://")):
+                raise ValueError(f"sequencer_url entries must start with http:// or https://, got: {tok!r}")
+            if any(c in tok for c in ("@", "?", "#", "\\", "\r", "\n", "\x00")) or any(ord(c) < 0x20 for c in tok):
+                raise ValueError("sequencer_url must not contain userinfo, query, fragment, backslash, or control chars")
+        write_options.sequencer_url = ",".join(tokens)
+    if enterprise_library_options.sequencer_inline_threshold_bytes is not None:
+        thresh = int(enterprise_library_options.sequencer_inline_threshold_bytes)
+        if thresh < 0 or thresh > 16 * 1024 * 1024:
+            raise ValueError(f"sequencer_inline_threshold_bytes must be in [0, 16777216], got {thresh}")
+        write_options.sequencer_inline_threshold_bytes = thresh
+    if enterprise_library_options.sequencer_conflict_policy is not None and enterprise_library_options.sequencer_conflict_policy != "":
+        policy_map = {
+            "unspecified": 0,
+            "strict_append": 1,
+            "strict": 1,
+            "reject": 2,
+            "overwrite_lww": 3,
+            "lww": 3,
+            "overwrite": 3,
+            "keep_both": 4,
+        }
+        p = enterprise_library_options.sequencer_conflict_policy
+        if isinstance(p, int) and not isinstance(p, bool):
+            if p < 0 or p > 4:
+                raise ValueError(f"sequencer_conflict_policy integer must be in [0, 4], got {p}")
+            write_options.sequencer_conflict_policy = p
+        else:
+            key = str(p).strip().lower()
+            if key not in policy_map:
+                raise ValueError(
+                    f"Invalid sequencer_conflict_policy {p!r}; expected one of {sorted(policy_map.keys())}"
+                )
+            write_options.sequencer_conflict_policy = policy_map[key]
+    if enterprise_library_options.sequencer_conflict_key_columns:
+        write_options.sequencer_conflict_key_columns.extend(enterprise_library_options.sequencer_conflict_key_columns)
 
 
 class ArcticLibraryAdapter(ABC):
@@ -66,6 +108,9 @@ class ArcticLibraryAdapter(ABC):
         raise NotImplementedError
 
     def native_config(self):
+        return None
+
+    def get_sequencer_config(self):
         return None
 
     def get_library_config(

@@ -58,7 +58,10 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
          See `EnterpriseLibraryOptions` for a description of each option.
      )pbdoc")
             .value("REPLICATION", ModifiableEnterpriseLibraryOption::REPLICATION)
-            .value("BACKGROUND_DELETION", ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION);
+            .value("BACKGROUND_DELETION", ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION)
+            .value("SEQUENCER_URL", ModifiableEnterpriseLibraryOption::SEQUENCER_URL)
+            .value("SEQUENCER_INLINE_THRESHOLD_BYTES", ModifiableEnterpriseLibraryOption::SEQUENCER_INLINE_THRESHOLD_BYTES)
+            .value("SEQUENCER_CONFLICT_POLICY", ModifiableEnterpriseLibraryOption::SEQUENCER_CONFLICT_POLICY);
 
     py::register_local_exception<UnknownLibraryOption>(storage, "UnknownLibraryOption", base_exception.ptr());
     py::register_local_exception<UnsupportedLibraryOptionValue>(
@@ -141,10 +144,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                        std::string_view library_path,
                        std::variant<ModifiableLibraryOption, ModifiableEnterpriseLibraryOption>
                                option,
-                       std::variant<bool, int64_t>
-                               new_value) {
+                       LibraryOptionValue new_value) {
                         LibraryPath lib_path{library_path, '.'};
-                        return library_manager.modify_library_option(lib_path, option, new_value);
+                        return library_manager.modify_library_option(lib_path, option, std::move(new_value));
                     },
                     py::arg("library_path"),
                     py::arg("option"),

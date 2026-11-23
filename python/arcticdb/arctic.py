@@ -150,6 +150,7 @@ class Arctic:
                 lib_cfg=lib_with_config.config,
                 native_cfg=self._library_adapter.native_config(),
                 runtime_options=runtime_options,
+                sequencer_config=self._library_adapter.get_sequencer_config(),
             )
         except KeyNotFoundException as ex:
             raise LibraryNotFound(name) from ex
@@ -405,9 +406,15 @@ class Arctic:
             The new setting for the library option.
         """
 
-        self._library_manager.modify_library_option(library.name, option, option_value)
+        if option_value is None and option in (
+            ModifiableEnterpriseLibraryOption.SEQUENCER_URL,
+            ModifiableEnterpriseLibraryOption.SEQUENCER_CONFLICT_POLICY,
+        ):
+            option_value = ""
 
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(library.name)
+        self._library_manager.modify_library_option(lib_mgr_name, option, option_value)
+
         storage_override = self._library_adapter.get_storage_override()
         lib_with_config = self._library_manager.get_library(
             lib_mgr_name,
@@ -415,12 +422,31 @@ class Arctic:
             ignore_cache=True,
             native_storage_config=self._library_adapter.native_config(),
         )
+        updated_seq_cfg = dict(library._nvs._sequencer_config) if library._nvs._sequencer_config else None
+        if option == ModifiableEnterpriseLibraryOption.SEQUENCER_URL:
+            if not str(option_value).strip():
+                if updated_seq_cfg is None:
+                    updated_seq_cfg = {}
+                updated_seq_cfg.pop("endpoint", None)
+                updated_seq_cfg["_explicitly_disabled"] = True
+            elif updated_seq_cfg is not None:
+                updated_seq_cfg.pop("_explicitly_disabled", None)
+                updated_seq_cfg["endpoint"] = str(option_value).strip()
         library._nvs._initialize(
             lib_with_config.library,
             library._nvs.env,
             lib_with_config.config,
             library._nvs._custom_normalizer,
             library._nvs._open_mode,
+            native_cfg=library._nvs._native_cfg,
+            runtime_options=library._nvs._runtime_options,
+            sequencer_config=updated_seq_cfg,
         )
 
-        logger.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")
+        logged_val = option_value
+        if option == ModifiableEnterpriseLibraryOption.SEQUENCER_URL and isinstance(option_value, str):
+            import re as _re
+
+            logged_val = _re.sub(r"(https?://)[^/@\s]+@", r"\1***@", option_value)
+            logged_val = logged_val.split("?", 1)[0]
+        logger.info(f"Set option=[{option}] to value=[{logged_val}] for Arctic=[{self}] Library=[{library}]")

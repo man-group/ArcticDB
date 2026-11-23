@@ -201,6 +201,9 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
             m, "KeyNotFoundException", storage_exception.get_stored().ptr()
     );
     py::register_local_exception<PermissionException>(m, "PermissionException", storage_exception.get_stored().ptr());
+    py::register_local_exception<QuotaExceededException>(
+            m, "QuotaExceededException", storage_exception.get_stored().ptr()
+    );
 
     auto schema_exception = py::register_local_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_local_exception<StreamDescriptorMismatch>(m, "StreamDescriptorMismatch", schema_exception.ptr());
@@ -212,6 +215,12 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     py::register_local_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
     py::register_local_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
     py::register_local_exception<CodecException>(m, "CodecException", compat_exception.ptr());
+    py::register_local_exception<DataConflictException>(
+            m, "DataConflictException", storage_exception.get_stored().ptr()
+    );
+    py::register_local_exception<SliceConflictException>(
+            m, "SliceConflictException", storage_exception.get_stored().ptr()
+    );
 }
 
 void reinit_scheduler() {

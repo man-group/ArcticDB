@@ -1007,8 +1007,15 @@ class Library:
     def enterprise_options(self) -> EnterpriseLibraryOptions:
         """Enterprise library options set on this library. See also `options` for non-enterprise options."""
         write_options = self._nvs.lib_cfg().lib_desc.version.write_options
+        policy_names = {1: "strict_append", 2: "reject", 3: "overwrite_lww", 4: "keep_both"}
+        seq_policy = policy_names.get(int(write_options.sequencer_conflict_policy), None)
         return EnterpriseLibraryOptions(
-            replication=write_options.sync_passive.enabled, background_deletion=write_options.delayed_deletes
+            replication=write_options.sync_passive.enabled,
+            background_deletion=write_options.delayed_deletes,
+            sequencer_url=write_options.sequencer_url or None,
+            sequencer_inline_threshold_bytes=int(write_options.sequencer_inline_threshold_bytes),
+            sequencer_conflict_policy=seq_policy,
+            sequencer_conflict_key_columns=list(write_options.sequencer_conflict_key_columns),
         )
 
     def stage(
@@ -1082,6 +1089,7 @@ class Library:
         validate_index=True,
         index_column: bool = False,
         recursive_normalizers: bool = None,
+        base_version: Optional[int] = None,
     ) -> VersionedItem:
         """
         Write ``data`` to the specified ``symbol``.
@@ -1199,6 +1207,7 @@ class Library:
             "(such as date_range filtering and column selection) will not work on pickled data.",
             recursive_normalizers=recursive_normalizers,
             recursive_normalize_msgpack_no_pickle_fallback=True,
+            base_version=base_version,
         )
 
     def write_pickle(
@@ -1590,6 +1599,7 @@ class Library:
         upsert: bool = False,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
         prune_previous_versions: Optional[bool] = None,
+        base_version: Optional[int] = None,
     ) -> VersionedItem:
         """
         Overwrites existing symbol data with the contents of ``data``.
@@ -1705,6 +1715,7 @@ class Library:
             upsert=upsert,
             date_range=date_range,
             prune_previous_version=prune_previous_versions,
+            base_version=base_version,
         )
 
     def update_batch(
@@ -2845,6 +2856,7 @@ class Library:
         symbol: str,
         date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
         prune_previous_versions: Optional[bool] = None,
+        base_version: Optional[int] = None,
     ) -> None:
         """Delete data within the given date range, creating a new version of ``symbol``.
 
@@ -2875,7 +2887,9 @@ class Library:
         """
         if date_range is None:
             raise ArcticInvalidApiUsageException("date_range must be given but was None")
-        self._nvs.delete(symbol, date_range=date_range, prune_previous_version=prune_previous_versions)
+        self._nvs.delete(
+            symbol, date_range=date_range, prune_previous_version=prune_previous_versions, base_version=base_version
+        )
 
     def delete_snapshot(self, snapshot_name: str) -> None:
         """

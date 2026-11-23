@@ -34,6 +34,18 @@ class ParsedQuery:
     CA_cert_path: Optional[str] = ""  # CURLOPT_CAINFO in curl
     CA_cert_dir: Optional[str] = ""  # CURLOPT_CAPATH in curl
     Container: Optional[str] = None
+    sequencer_url: Optional[str] = None
+    sequencer_inline_threshold_bytes: Optional[int] = None
+    sequencer_conflict_policy: Optional[str] = None
+    sequencer_conflict_key: Optional[str] = None
+    sequencer_ca_cert_path: Optional[str] = None
+    sequencer_ca_cert_dir: Optional[str] = None
+    sequencer_client_cert_path: Optional[str] = None
+    sequencer_client_key_path: Optional[str] = None
+    sequencer_verify_tls: Optional[bool] = None
+    sequencer_bearer_token_file: Optional[str] = None
+    sequencer_allowed_redirect_hosts: Optional[str] = None
+    sequencer_retry_budget_ms: Optional[int] = None
 
 
 class AzureLibraryAdapter(ArcticLibraryAdapter):
@@ -81,6 +93,38 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
 
         super().__init__(uri, self._encoding_version)
 
+    def get_sequencer_config(self):
+        cfg = {}
+        if self._query_params.sequencer_url:
+            cfg["endpoint"] = self._query_params.sequencer_url
+        if self._query_params.sequencer_inline_threshold_bytes is not None:
+            cfg["inline_threshold_bytes"] = int(self._query_params.sequencer_inline_threshold_bytes)
+        if self._query_params.sequencer_conflict_policy:
+            cfg["conflict_policy"] = self._query_params.sequencer_conflict_policy
+        if self._query_params.sequencer_conflict_key:
+            cfg["conflict_key_columns"] = [
+                col.strip() for col in self._query_params.sequencer_conflict_key.split(",") if col.strip()
+            ]
+        if self._query_params.sequencer_ca_cert_path:
+            cfg["ca_cert_path"] = self._query_params.sequencer_ca_cert_path
+        if self._query_params.sequencer_ca_cert_dir:
+            cfg["ca_cert_dir"] = self._query_params.sequencer_ca_cert_dir
+        if self._query_params.sequencer_client_cert_path:
+            cfg["client_cert_path"] = self._query_params.sequencer_client_cert_path
+        if self._query_params.sequencer_client_key_path:
+            cfg["client_key_path"] = self._query_params.sequencer_client_key_path
+        if self._query_params.sequencer_verify_tls is not None:
+            cfg["verify_tls"] = bool(self._query_params.sequencer_verify_tls)
+        if self._query_params.sequencer_bearer_token_file:
+            cfg["bearer_token_file"] = self._query_params.sequencer_bearer_token_file
+        if self._query_params.sequencer_allowed_redirect_hosts:
+            cfg["allowed_redirect_hosts"] = [
+                h.strip() for h in self._query_params.sequencer_allowed_redirect_hosts.split(",") if h.strip()
+            ]
+        if self._query_params.sequencer_retry_budget_ms is not None:
+            cfg["total_retry_budget_ms"] = int(self._query_params.sequencer_retry_budget_ms)
+        return cfg or None
+
     def __repr__(self):
         censored_endpoint = re.sub(r"AccountKey=.+?;", "AccountKey=...;", self._endpoint)
         return "azure(endpoint=%s, container=%s)" % (censored_endpoint, self._container)
@@ -120,6 +164,30 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
 
         if parsed_query.get("Path_prefix"):
             parsed_query["Path_prefix"] = parsed_query["Path_prefix"].strip("/")
+
+        from urllib.parse import unquote
+        from arcticdb.util.utils import strtobool
+
+        for _seq_str_key in (
+            "sequencer_url",
+            "sequencer_conflict_policy",
+            "sequencer_conflict_key",
+            "sequencer_ca_cert_path",
+            "sequencer_ca_cert_dir",
+            "sequencer_client_cert_path",
+            "sequencer_client_key_path",
+            "sequencer_bearer_token_file",
+            "sequencer_allowed_redirect_hosts",
+        ):
+            if parsed_query.get(_seq_str_key):
+                parsed_query[_seq_str_key] = unquote(parsed_query[_seq_str_key])
+        for _seq_int_key in ("sequencer_inline_threshold_bytes", "sequencer_retry_budget_ms"):
+            if parsed_query.get(_seq_int_key):
+                parsed_query[_seq_int_key] = int(unquote(str(parsed_query[_seq_int_key])))
+        if parsed_query.get("sequencer_verify_tls") is not None and not isinstance(
+            parsed_query["sequencer_verify_tls"], bool
+        ):
+            parsed_query["sequencer_verify_tls"] = bool(strtobool(unquote(str(parsed_query["sequencer_verify_tls"]))))
 
         _kwargs = {k: v for k, v in parsed_query.items() if k in field_dict.keys()}
         return _kwargs

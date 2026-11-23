@@ -225,3 +225,79 @@ def test_options_equality_with_other_type_is_false(options_class, other):
 @pytest.mark.parametrize("options_class", [LibraryOptions, EnterpriseLibraryOptions])
 def test_options_equality_with_same_type(options_class):
     assert options_class() == options_class()
+
+
+def test_modify_enterprise_sequencer_library_options(lmdb_storage, lib_name):
+    from arcticdb.options import ModifiableEnterpriseLibraryOption
+    from arcticdb_ext.storage import UnsupportedLibraryOptionValue
+
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+
+    # Valid updates persisted into _arctic_cfg
+    ac.modify_library_option(
+        lib,
+        ModifiableEnterpriseLibraryOption.SEQUENCER_URL,
+        "https://seq-0.svc.cluster.local:9100, https://seq-1.svc.cluster.local:9100",
+    )
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_CONFLICT_POLICY, "keep_both")
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_INLINE_THRESHOLD_BYTES, 2 * 1024 * 1024)
+
+    wo = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert wo.sequencer_url == "https://seq-0.svc.cluster.local:9100,https://seq-1.svc.cluster.local:9100"
+    assert wo.sequencer_conflict_policy == 4
+    assert wo.sequencer_inline_threshold_bytes == 2 * 1024 * 1024
+
+    # Invalid inputs rejected without mutating _arctic_cfg
+    with pytest.raises(UnsupportedLibraryOptionValue):
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_URL, "not-a-url")
+    with pytest.raises(UnsupportedLibraryOptionValue):
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_CONFLICT_POLICY, "invalid_policy")
+    with pytest.raises(UnsupportedLibraryOptionValue):
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_INLINE_THRESHOLD_BYTES, -1)
+    with pytest.raises(UnsupportedLibraryOptionValue):
+        ac.modify_library_option(
+            lib, ModifiableEnterpriseLibraryOption.SEQUENCER_INLINE_THRESHOLD_BYTES, 32 * 1024 * 1024
+        )
+
+    # Clearing via None or "" disables cleanly
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_URL, None)
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_CONFLICT_POLICY, "")
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_INLINE_THRESHOLD_BYTES, 0)
+    wo2 = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert wo2.sequencer_url == ""
+    assert wo2.sequencer_conflict_policy == 0
+    assert wo2.sequencer_inline_threshold_bytes == 0
+
+    # P0-25: Unsafe URLs (userinfo, query strings, control chars, empty comma lists) rejected
+    for bad_url in (
+        "https://user:secret@seq.local:9100",
+        "https://seq.local:9100?token=leak",
+        "https://seq.local:9100\r\nX-Injected: 1",
+        ",,,",
+    ):
+        with pytest.raises(UnsupportedLibraryOptionValue):
+            ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_URL, bad_url)
+
+    # P1-5: Library.enterprise_options() exposes all 4 sequencer fields
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_URL, "https://seq-0.local:9100")
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_CONFLICT_POLICY, "overwrite_lww")
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.SEQUENCER_INLINE_THRESHOLD_BYTES, 131072)
+    ent_opts = lib.enterprise_options()
+    assert ent_opts.sequencer_url == "https://seq-0.local:9100"
+    assert ent_opts.sequencer_conflict_policy == "overwrite_lww"
+    assert ent_opts.sequencer_inline_threshold_bytes == 131072
+
+    # P1-11: Exception hierarchy for DataConflictException, SliceConflictException, QuotaExceededException
+    from arcticdb.exceptions import (
+        ArcticException,
+        DataConflictException,
+        QuotaExceededException,
+        SliceConflictException,
+        StorageException,
+    )
+
+    assert issubclass(DataConflictException, StorageException)
+    assert issubclass(SliceConflictException, StorageException)
+    assert issubclass(QuotaExceededException, StorageException)
+    assert issubclass(QuotaExceededException, ArcticException)

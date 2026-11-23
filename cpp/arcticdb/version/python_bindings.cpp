@@ -1224,6 +1224,40 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::rename_columns_arrow_compat,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Rename indexes and columns for compatability with valid Arrow schema")
+            .def("configure_commit_sequencer",
+                 &PythonVersionStore::configure_commit_sequencer_py,
+                 py::arg("endpoint"),
+                 py::arg("inline_threshold_bytes") = 65536,
+                 py::arg("conflict_policy") = "",
+                 py::arg("conflict_key_columns") = std::vector<std::string>{},
+                 py::arg("request_timeout_ms") = 30000,
+                 py::arg("connect_timeout_ms") = 5000,
+                 py::arg("max_retries") = 8,
+                 py::arg("total_retry_budget_ms") = 25000,
+                 py::arg("ca_cert_path") = "",
+                 py::arg("ca_cert_dir") = "",
+                 py::arg("client_cert_path") = "",
+                 py::arg("client_key_path") = "",
+                 py::arg("verify_tls") = true,
+                 py::arg("bearer_token") = "",
+                 py::arg("bearer_token_file") = "",
+                 py::arg("auth_token_header") = "Authorization",
+                 py::arg("allowed_redirect_hosts") = std::vector<std::string>{},
+                 py::arg("enable_http2") = true,
+                 py::arg("use_multiplexing") = true,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Route write operations through an external commit sequencer endpoint")
+            .def("set_next_base_version_id",
+                 [](PythonVersionStore& self, std::optional<VersionId> base_version_id) {
+                     self.set_next_base_version_id(base_version_id);
+                 },
+                 py::arg("base_version_id"),
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Set optional Range-SSI base_version_id for the next write/update/delete_range call")
+            .def("has_commit_sequencer",
+                 [](const PythonVersionStore& self) { return self.has_commit_sequencer(); },
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Return True if a commit sequencer router is attached")
             .def_static("reuse_storage_for_testing", [](PythonVersionStore& from, PythonVersionStore& to) {
                 to._test_set_store(from._test_get_store());
             });

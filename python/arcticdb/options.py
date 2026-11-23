@@ -6,7 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from typing import Optional, Union
+from typing import List, Optional, Union
 from enum import Enum
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE
@@ -348,6 +348,10 @@ class EnterpriseLibraryOptions:
         *,
         replication: bool = False,
         background_deletion: bool = False,
+        sequencer_url: Optional[str] = None,
+        sequencer_inline_threshold_bytes: Optional[int] = None,
+        sequencer_conflict_policy: Optional[str] = None,
+        sequencer_conflict_key_columns: Optional[List[str]] = None,
     ):
         """
         Construct an `EnterpriseLibraryOptions` instance.
@@ -376,16 +380,46 @@ class EnterpriseLibraryOptions:
 
             This flag does not affect the logical semantics of the ArcticDB APIs. Readers will see data in the same
             state following a `delete` or `prune_previous_versions` call regardless of whether this flag is set or not.
+
+        sequencer_url: Optional[str], default None
+            Optional HTTP endpoint URL of a Phase 2 commit sequencer daemon (e.g. ``http://127.0.0.1:9090``).
+
+        sequencer_inline_threshold_bytes: Optional[int], default None
+            Optional inline payload threshold in bytes (defaults to 65536 when unset).
+
+        sequencer_conflict_policy: Optional[str], default None
+            Optional conflict policy (``strict_append``, ``reject``, ``overwrite_lww``, or ``keep_both``).
+
+        sequencer_conflict_key_columns: Optional[List[str]], default None
+            Optional logical entity conflict key columns (e.g. ``["__index__", "ticker"]``).
         """
         self.replication = replication
         self.background_deletion = background_deletion
+        self.sequencer_url = sequencer_url
+        self.sequencer_inline_threshold_bytes = sequencer_inline_threshold_bytes
+        self.sequencer_conflict_policy = sequencer_conflict_policy
+        self.sequencer_conflict_key_columns = (
+            list(sequencer_conflict_key_columns) if sequencer_conflict_key_columns is not None else None
+        )
 
     def __eq__(self, right):
         if not isinstance(right, EnterpriseLibraryOptions):
             return NotImplemented
-        return self.replication == right.replication and self.background_deletion == right.background_deletion
+        return (
+            self.replication == right.replication
+            and self.background_deletion == right.background_deletion
+            and self.sequencer_url == right.sequencer_url
+            and self.sequencer_inline_threshold_bytes == right.sequencer_inline_threshold_bytes
+            and self.sequencer_conflict_policy == right.sequencer_conflict_policy
+            and self.sequencer_conflict_key_columns == right.sequencer_conflict_key_columns
+        )
 
     def __repr__(self):
         return (
-            f"EnterpriseLibraryOptions(replication={self.replication}, background_deletion={self.background_deletion})"
+            f"EnterpriseLibraryOptions(replication={self.replication}, "
+            f"background_deletion={self.background_deletion}, "
+            f"sequencer_url={self.sequencer_url!r}, "
+            f"sequencer_inline_threshold_bytes={self.sequencer_inline_threshold_bytes!r}, "
+            f"sequencer_conflict_policy={self.sequencer_conflict_policy!r}, "
+            f"sequencer_conflict_key_columns={self.sequencer_conflict_key_columns!r})"
         )

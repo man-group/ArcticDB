@@ -396,11 +396,22 @@ class NativeVersionStore:
         }
     )
 
-    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None, runtime_options=None):
+    def __init__(
+        self,
+        library,
+        env,
+        lib_cfg=None,
+        open_mode=OpenMode.DELETE,
+        native_cfg=None,
+        runtime_options=None,
+        sequencer_config=None,
+    ):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
         fail_on_missing = library.config.fail_on_missing_custom_normalizer if library.config is not None else False
         custom_normalizer = get_custom_normalizer(fail_on_missing)
-        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg, runtime_options)
+        self._initialize(
+            library, env, lib_cfg, custom_normalizer, open_mode, native_cfg, runtime_options, sequencer_config
+        )
 
     def _init_norm_failure_handler(self):
         # init normalization failure handler
@@ -419,7 +430,17 @@ class NativeVersionStore:
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
-    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None, runtime_options=None):
+    def _initialize(
+        self,
+        library,
+        env,
+        lib_cfg,
+        custom_normalizer,
+        open_mode,
+        native_cfg=None,
+        runtime_options=None,
+        sequencer_config=None,
+    ):
         self._library = library
         self._cfg = library.config
         self.version_store = _PythonVersionStore(self._library)
@@ -430,9 +451,177 @@ class NativeVersionStore:
         self._open_mode = open_mode
         self._native_cfg = native_cfg
         self._runtime_options = runtime_options
+        self._sequencer_config = dict(sequencer_config) if sequencer_config else None
         # Testing configuration to read as ARROW but directly convert back to PANDAS.
         # This is useful to mass enable ARROW testing on existing PANDAS tests without much code changes
         self._test_convert_arrow_back_to_pandas = False
+        self._apply_sequencer_config()
+
+    def _apply_sequencer_config(self):
+        import os
+
+        lib_name = self._lib_cfg.lib_desc.name if self._lib_cfg is not None else ""
+        if lib_name in ("_arctic_cfg", "arctic_cfg"):
+            return
+
+        endpoint = ""
+        inline_threshold_bytes = 65536
+        inline_threshold_set = False
+        conflict_policy = ""
+        conflict_key_columns = []
+        request_timeout_ms = 30000
+        connect_timeout_ms = 5000
+        max_retries = 64
+        total_retry_budget_ms = 25000
+        ca_cert_path = ""
+        ca_cert_dir = ""
+        client_cert_path = ""
+        client_key_path = ""
+        verify_tls = True
+        bearer_token = ""
+        bearer_token_file = ""
+        auth_token_header = "Authorization"
+        allowed_redirect_hosts = []
+        enable_http2 = True
+        use_multiplexing = True
+
+        if self._lib_cfg is not None:
+            wo = self._lib_cfg.lib_desc.version.write_options
+            if wo.sequencer_url:
+                endpoint = wo.sequencer_url
+            if wo.sequencer_inline_threshold_bytes > 0:
+                inline_threshold_bytes = int(wo.sequencer_inline_threshold_bytes)
+                inline_threshold_set = True
+            if wo.sequencer_conflict_policy:
+                policy_names = {1: "strict_append", 2: "reject", 3: "overwrite_lww", 4: "keep_both"}
+                conflict_policy = policy_names.get(int(wo.sequencer_conflict_policy), "")
+            if len(wo.sequencer_conflict_key_columns) > 0:
+                conflict_key_columns = list(wo.sequencer_conflict_key_columns)
+
+        sc = self._sequencer_config or {}
+        explicitly_disabled = bool(sc.get("_explicitly_disabled", False))
+        if sc:
+            if sc.get("endpoint") and not explicitly_disabled:
+                endpoint = str(sc["endpoint"])
+            if sc.get("inline_threshold_bytes") is not None:
+                inline_threshold_bytes = int(sc["inline_threshold_bytes"])
+                inline_threshold_set = True
+            if sc.get("conflict_policy"):
+                conflict_policy = str(sc["conflict_policy"])
+            if sc.get("conflict_key_columns"):
+                conflict_key_columns = list(sc["conflict_key_columns"])
+            if sc.get("request_timeout_ms") is not None:
+                request_timeout_ms = int(sc["request_timeout_ms"])
+            if sc.get("connect_timeout_ms") is not None:
+                connect_timeout_ms = int(sc["connect_timeout_ms"])
+            if sc.get("max_retries") is not None:
+                max_retries = int(sc["max_retries"])
+            if sc.get("total_retry_budget_ms") is not None:
+                total_retry_budget_ms = int(sc["total_retry_budget_ms"])
+            if sc.get("ca_cert_path"):
+                ca_cert_path = str(sc["ca_cert_path"])
+            if sc.get("ca_cert_dir"):
+                ca_cert_dir = str(sc["ca_cert_dir"])
+            if sc.get("client_cert_path"):
+                client_cert_path = str(sc["client_cert_path"])
+            if sc.get("client_key_path"):
+                client_key_path = str(sc["client_key_path"])
+            if sc.get("verify_tls") is not None:
+                verify_tls = bool(sc["verify_tls"])
+            if sc.get("bearer_token"):
+                bearer_token = str(sc["bearer_token"])
+            if sc.get("bearer_token_file"):
+                bearer_token_file = str(sc["bearer_token_file"])
+            if sc.get("auth_token_header"):
+                auth_token_header = str(sc["auth_token_header"])
+            if sc.get("allowed_redirect_hosts"):
+                allowed_redirect_hosts = list(sc["allowed_redirect_hosts"])
+            if sc.get("enable_http2") is not None:
+                enable_http2 = bool(sc["enable_http2"])
+            if sc.get("use_multiplexing") is not None:
+                use_multiplexing = bool(sc["use_multiplexing"])
+
+        # Process env vars supply defaults only when not explicitly set via URI or _arctic_cfg.
+        # Live offboarding (_explicitly_disabled=True) suppresses env fallback so clearing SEQUENCER_URL disables routing.
+        if not endpoint and not explicitly_disabled:
+            env_url = os.environ.get("ARCTICDB_SEQUENCER_URL", "").strip()
+            if env_url:
+                endpoint = env_url
+        if endpoint:
+            env_thresh = os.environ.get("ARCTICDB_SEQUENCER_INLINE_THRESHOLD_BYTES", "").strip()
+            if env_thresh and not inline_threshold_set:
+                inline_threshold_bytes = int(env_thresh)
+            env_policy = os.environ.get("ARCTICDB_SEQUENCER_CONFLICT_POLICY", "").strip()
+            if env_policy and not conflict_policy:
+                conflict_policy = env_policy
+            env_key = os.environ.get("ARCTICDB_SEQUENCER_CONFLICT_KEY", "").strip()
+            if env_key and not conflict_key_columns:
+                conflict_key_columns = [c.strip() for c in env_key.split(",") if c.strip()]
+            if not ca_cert_path:
+                ca_cert_path = os.environ.get("ARCTICDB_SEQUENCER_CA_CERT_PATH", "").strip()
+            if not ca_cert_dir:
+                ca_cert_dir = os.environ.get("ARCTICDB_SEQUENCER_CA_CERT_DIR", "").strip()
+            if not client_cert_path:
+                client_cert_path = os.environ.get("ARCTICDB_SEQUENCER_CLIENT_CERT_PATH", "").strip()
+            if not client_key_path:
+                client_key_path = os.environ.get("ARCTICDB_SEQUENCER_CLIENT_KEY_PATH", "").strip()
+            if sc.get("verify_tls") is None:
+                env_verify = os.environ.get("ARCTICDB_SEQUENCER_VERIFY_TLS", "").strip().lower()
+                if env_verify in ("0", "false", "no"):
+                    verify_tls = False
+                elif env_verify in ("1", "true", "yes"):
+                    verify_tls = True
+            if not bearer_token_file:
+                bearer_token_file = os.environ.get("ARCTICDB_SEQUENCER_BEARER_TOKEN_FILE", "").strip()
+            if not bearer_token:
+                bearer_token = os.environ.get("ARCTICDB_SEQUENCER_BEARER_TOKEN", "").strip()
+            if not sc.get("auth_token_header"):
+                env_auth_hdr = os.environ.get("ARCTICDB_SEQUENCER_AUTH_HEADER", "").strip()
+                if env_auth_hdr:
+                    auth_token_header = env_auth_hdr
+            env_redir = os.environ.get("ARCTICDB_SEQUENCER_ALLOWED_REDIRECT_HOSTS", "").strip()
+            if env_redir and not allowed_redirect_hosts:
+                allowed_redirect_hosts = [h.strip() for h in env_redir.split(",") if h.strip()]
+            if sc.get("total_retry_budget_ms") is None:
+                env_budget = os.environ.get("ARCTICDB_SEQUENCER_RETRY_BUDGET_MS", "").strip()
+                if env_budget:
+                    total_retry_budget_ms = int(env_budget)
+            if sc.get("enable_http2") is None:
+                env_h2 = os.environ.get("ARCTICDB_SEQUENCER_HTTP2", "").strip().lower()
+                if env_h2 in ("0", "false", "no"):
+                    enable_http2 = False
+                elif env_h2 in ("1", "true", "yes"):
+                    enable_http2 = True
+            if sc.get("use_multiplexing") is None:
+                env_mux = os.environ.get("ARCTICDB_SEQUENCER_MULTIPLEX", "").strip().lower()
+                if env_mux in ("0", "false", "no"):
+                    use_multiplexing = False
+                elif env_mux in ("1", "true", "yes"):
+                    use_multiplexing = True
+
+            self.version_store.configure_commit_sequencer(
+                endpoint,
+                inline_threshold_bytes,
+                conflict_policy,
+                conflict_key_columns,
+                request_timeout_ms,
+                connect_timeout_ms,
+                max_retries,
+                total_retry_budget_ms,
+                ca_cert_path,
+                ca_cert_dir,
+                client_cert_path,
+                client_key_path,
+                verify_tls,
+                bearer_token,
+                bearer_token_file,
+                auth_token_header,
+                allowed_redirect_hosts,
+                enable_http2,
+                use_multiplexing,
+            )
+        elif hasattr(self.version_store, "configure_commit_sequencer"):
+            self.version_store.configure_commit_sequencer("")
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         if self._runtime_options is None:
@@ -524,11 +713,16 @@ class NativeVersionStore:
             custom_normalizer=custom_norm,
             open_mode=open_mode,
             native_cfg=native_cfg,
+            sequencer_config=state.get("sequencer_config"),
         )
         if state.get("skip_df_consolidation"):
             self._normalizer.df.set_skip_df_consolidation()
 
     def __getstate__(self):
+        # Never serialize raw bearer secrets into pickle streams; preserve only non-secret config / file paths.
+        safe_seq_cfg = None
+        if self._sequencer_config:
+            safe_seq_cfg = {k: v for k, v in self._sequencer_config.items() if k != "bearer_token"}
         return {
             "env": self.env,
             "lib_cfg": self._lib_cfg.SerializeToString(),
@@ -541,6 +735,7 @@ class NativeVersionStore:
                 "double": get_all_config_double(),
             },
             "skip_df_consolidation": getattr(self._normalizer.df, "_skip_df_consolidation", False),
+            "sequencer_config": safe_seq_cfg,
         }
 
     def __repr__(self):
@@ -860,6 +1055,7 @@ class NativeVersionStore:
                 "coerce_columns",
                 "sparsify_floats",
                 "norm_failure_options_msg",
+                "base_version",
             },
             kwargs,
         )
@@ -934,9 +1130,16 @@ class NativeVersionStore:
                 return None
             else:
                 _log_warning_on_writing_empty_dataframe(data, symbol)
-                vit = self.version_store.write_versioned_dataframe(
-                    symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats, validate_index
-                )
+                base_version = kwargs.get("base_version", None)
+                if base_version is not None:
+                    self.version_store.set_next_base_version_id(int(base_version))
+                try:
+                    vit = self.version_store.write_versioned_dataframe(
+                        symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats, validate_index
+                    )
+                finally:
+                    if base_version is not None:
+                        self.version_store.set_next_base_version_id(None)
 
             return self._convert_thin_cxx_item_to_python(vit, metadata)
         else:
@@ -1189,6 +1392,7 @@ class NativeVersionStore:
                 "dynamic_strings",
                 "dynamic_schema",
                 "coerce_columns",
+                "base_version",
             },
             kwargs,
         )
@@ -1219,9 +1423,16 @@ class NativeVersionStore:
 
         if self._valid_item_type(item):
             call_time = time.time_ns()
-            vit = self.version_store.update(
-                symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
-            )
+            base_version = kwargs.get("base_version", None)
+            if base_version is not None:
+                self.version_store.set_next_base_version_id(int(base_version))
+            try:
+                vit = self.version_store.update(
+                    symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
+                )
+            finally:
+                if base_version is not None:
+                    self.version_store.set_next_base_version_id(None)
             # This is a heuristic to check for using update to write an empty dataframe in that case we want to warn
             # users that the processing pipeline might not work as expected. There are two cases when the version is
             # 0 either a new symbol was created by this call or there was an existing symbol with version 0 and the
@@ -3467,7 +3678,7 @@ class NativeVersionStore:
         """
         self._validate_kwargs(
             "delete",
-            {"dynamic_schema", "prune_previous_versions", "prune_previous_version"},
+            {"dynamic_schema", "prune_previous_versions", "prune_previous_version", "base_version"},
             kwargs,
         )
 
@@ -3485,7 +3696,14 @@ class NativeVersionStore:
                 )
             update_query = _PythonVersionStoreUpdateQuery()
             update_query.row_filter = _normalize_dt_range(date_range)
-            self.version_store.delete_range(symbol, update_query, dynamic_schema, prune_previous_version)
+            base_version = kwargs.get("base_version", None)
+            if base_version is not None:
+                self.version_store.set_next_base_version_id(int(base_version))
+            try:
+                self.version_store.delete_range(symbol, update_query, dynamic_schema, prune_previous_version)
+            finally:
+                if base_version is not None:
+                    self.version_store.set_next_base_version_id(None)
 
         else:
             self.version_store.delete(symbol)

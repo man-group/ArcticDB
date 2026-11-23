@@ -11,8 +11,11 @@ from typing import List as _List
 from arcticdb_ext.exceptions import *
 from arcticdb_ext.exceptions import (
     ArcticException as ArcticNativeException,
+    DataConflictException,
     DuplicateKeyException,
     PermissionException,
+    QuotaExceededException,
+    SliceConflictException,
     StreamDescriptorMismatch,
     _ArcticLegacyCompatibilityException,
 )
