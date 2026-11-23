@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#ifdef __linux__
+
 #include <arcticdb/storage/test/faulty_posix.hpp>
 
 #include <algorithm>
@@ -162,3 +164,5 @@ size_t FaultyPosix::num_open_file_descriptors() const noexcept {
 }
 
 } // namespace arcticdb::storage::file_backed
+
+#endif
