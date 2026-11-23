@@ -195,9 +195,6 @@ class FdHolder {
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
     // errors.
     void close_swallow_errors() {
-        ARCTICDB_DEBUG_CHECK(
-                ErrorCode::E_ASSERTION_FAILURE, fd_ >= 0, "Closing a file descriptor which was already closed"
-        );
         int res = posix_.close(fd_);
         if (res != 0)
             log::storage().warn("Failed to close file: {}", std::strerror(errno));
