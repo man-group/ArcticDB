@@ -122,7 +122,7 @@ endif()
 # operator new reaches the inline destructors in arcticdb_ext. Linking it statically puts all C++ code in arcticdb_ext
 # behind one operator new/delete. Required with a custom allocator on Linux; available for the system allocator so
 # that both are linked the same way.
-option(ARCTICDB_STATIC_LIBSTDCXX "Linux: link libstdc++ statically into arcticdb_ext and export only its module init" OFF)
+option(ARCTICDB_STATIC_LIBSTDCXX "Linux: link libstdc++ statically into arcticdb_ext and export only its module init" ON)
 if(ARCTICDB_CUSTOM_ALLOCATOR AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(ARCTICDB_STATIC_LIBSTDCXX ON)
 endif()
