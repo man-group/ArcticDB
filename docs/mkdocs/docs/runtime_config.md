@@ -283,6 +283,15 @@ Values:
 * 0: Disable
 * 1: Enable (Default)
 
+### VersionStore.LogAllNullColumns
+
+Control whether an info message is logged for each object column that holds only null values (`None`, `NaN` or `NaT`)
+when writing. ArcticDB has to guess the type of such a column, so later appends or updates can fail if the guess is wrong.
+
+Values:
+* 0: Disable
+* 1: Enable (Default)
+
 ### VersionStore.RecursiveNormalizerMetastructure
 
 Controls whether the recursive normalizer will use meta structure V2.
