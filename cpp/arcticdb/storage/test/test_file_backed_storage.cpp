@@ -21,6 +21,7 @@
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/error_code.hpp>
 
+#include <boost/algorithm/string/replace.hpp>
 #include <boost/scope_exit.hpp>
 #include <fmt/format.h>
 
@@ -41,11 +42,12 @@ static const std::string TEST_LIBRARY_NAME{"test_lib"};
 class TempDir {
   public:
     TempDir(const ::testing::TestInfo& info) {
-        temp_path_ =
-                fs::temp_directory_path() /
-                fmt::format(
-                        "arcticdb_{}_{}_{}", info.test_suite_name(), info.name(), util::SysClock::nanos_since_epoch()
-                );
+        std::string subdir = fmt::format(
+                "arcticdb_{}_{}_{}", info.test_suite_name(), info.name(), util::SysClock::nanos_since_epoch()
+        );
+        // Instantiated test suites contain slashes.
+        boost::algorithm::replace_all(subdir, "/", "_");
+        temp_path_ = fs::temp_directory_path() / subdir;
         fs::remove_all(temp_path_);
         fs::create_directories(temp_path_);
     }
