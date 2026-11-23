@@ -147,6 +147,6 @@ RequiredFieldInfo required_fields_info(
         const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta = std::nullopt
 );
 
-RequiredFieldInfo required_fields_info(const OutputSchema& schema);
+RequiredFieldInfo required_fields_info(const FrameSchema& schema);
 
 } // namespace arcticdb::pipelines::index

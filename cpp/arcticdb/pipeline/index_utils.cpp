@@ -122,7 +122,7 @@ RequiredFieldInfo required_fields_info(
     return info;
 }
 
-RequiredFieldInfo required_fields_info(const OutputSchema& schema) {
+RequiredFieldInfo required_fields_info(const FrameSchema& schema) {
     return required_fields_info(schema.stream_descriptor(), schema.norm_metadata_);
 }
 

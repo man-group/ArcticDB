@@ -157,9 +157,9 @@ struct RowSliceClause {
         component_manager_ = std::move(component_manager);
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const { return {}; }
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const { return {}; }
 };
 
 struct RestructuringClause {
@@ -212,9 +212,9 @@ struct RestructuringClause {
         component_manager_ = std::move(component_manager);
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const { return {}; }
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const { return {}; }
 };
 
 TEST(Clause, ScheduleClauseProcessingStress) {

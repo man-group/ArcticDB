@@ -85,14 +85,14 @@ class AggregationClauseOutputTypesTest : public testing::Test {
         }
     }
 
-    OutputSchema initial_schema() { return {initial_stream_desc_.clone(), {}}; }
+    FrameSchema initial_schema() { return {initial_stream_desc_.clone(), {}}; }
     StreamDescriptor initial_stream_desc_;
 };
 
 TEST_F(AggregationClauseOutputTypesTest, Sum) {
     AggregationClause aggregation_clause{"to_group", generate_aggregators("sum", false)};
-    auto output_schema = aggregation_clause.modify_schema(initial_schema());
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = aggregation_clause.modify_schema(initial_schema());
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc, false);
     ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::INT64);    // grouping column
     ASSERT_EQ(stream_desc.field(1).type().data_type(), DataType::INT64);    // int8
@@ -116,8 +116,8 @@ TEST_F(AggregationClauseOutputTypesTest, Sum) {
 
 TEST_F(AggregationClauseOutputTypesTest, Max) {
     AggregationClause aggregation_clause{"to_group", generate_aggregators("max")};
-    auto output_schema = aggregation_clause.modify_schema(initial_schema());
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = aggregation_clause.modify_schema(initial_schema());
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc);
     for (size_t idx = 0; idx < 13; ++idx) {
         ASSERT_EQ(stream_desc.field(idx).type().data_type(), initial_stream_desc_.field(idx).type().data_type());
@@ -129,8 +129,8 @@ TEST_F(AggregationClauseOutputTypesTest, Max) {
 
 TEST_F(AggregationClauseOutputTypesTest, Min) {
     AggregationClause aggregation_clause{"to_group", generate_aggregators("min")};
-    auto output_schema = aggregation_clause.modify_schema(initial_schema());
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = aggregation_clause.modify_schema(initial_schema());
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc);
     for (size_t idx = 0; idx < 13; ++idx) {
         ASSERT_EQ(stream_desc.field(idx).type().data_type(), initial_stream_desc_.field(idx).type().data_type());
@@ -142,8 +142,8 @@ TEST_F(AggregationClauseOutputTypesTest, Min) {
 
 TEST_F(AggregationClauseOutputTypesTest, Mean) {
     AggregationClause aggregation_clause{"to_group", generate_aggregators("mean")};
-    auto output_schema = aggregation_clause.modify_schema(initial_schema());
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = aggregation_clause.modify_schema(initial_schema());
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc);
     ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::INT64); // grouping column
     for (size_t idx = 1; idx < 13; ++idx) {
@@ -160,8 +160,8 @@ TEST_F(AggregationClauseOutputTypesTest, Mean) {
 
 TEST_F(AggregationClauseOutputTypesTest, Count) {
     AggregationClause aggregation_clause{"to_group", generate_aggregators("count", true, true)};
-    auto output_schema = aggregation_clause.modify_schema(initial_schema());
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = aggregation_clause.modify_schema(initial_schema());
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc, true, true);
     ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::INT64); // grouping column
     for (size_t idx = 1; idx < 14; ++idx) {
@@ -241,7 +241,7 @@ class ResampleClauseOutputTypesTest : public testing::Test {
         }
     }
 
-    OutputSchema initial_schema() { return {initial_stream_desc_.clone(), initial_norm_meta_}; }
+    FrameSchema initial_schema() { return {initial_stream_desc_.clone(), initial_norm_meta_}; }
 
     StreamDescriptor initial_stream_desc_;
     ;
@@ -250,9 +250,9 @@ class ResampleClauseOutputTypesTest : public testing::Test {
 
 TEST_F(ResampleClauseOutputTypesTest, Sum) {
     auto resample_clause = generate_resample_clause(generate_aggregators("sum", false));
-    auto output_schema = resample_clause.modify_schema(initial_schema());
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, initial_norm_meta_));
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = resample_clause.modify_schema(initial_schema());
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, initial_norm_meta_));
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc, false);
     ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::NANOSECONDS_UTC64); // index column
     ASSERT_EQ(stream_desc.field(1).type().data_type(), DataType::INT64);             // int8
@@ -276,9 +276,9 @@ TEST_F(ResampleClauseOutputTypesTest, Sum) {
 
 TEST_F(ResampleClauseOutputTypesTest, Max) {
     auto resample_clause = generate_resample_clause(generate_aggregators("max"));
-    auto output_schema = resample_clause.modify_schema(initial_schema());
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, initial_norm_meta_));
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = resample_clause.modify_schema(initial_schema());
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, initial_norm_meta_));
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc);
     for (size_t idx = 0; idx < 13; ++idx) {
         ASSERT_EQ(stream_desc.field(idx).type().data_type(), initial_stream_desc_.field(idx).type().data_type());
@@ -290,9 +290,9 @@ TEST_F(ResampleClauseOutputTypesTest, Max) {
 
 TEST_F(ResampleClauseOutputTypesTest, Min) {
     auto resample_clause = generate_resample_clause(generate_aggregators("min"));
-    auto output_schema = resample_clause.modify_schema(initial_schema());
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, initial_norm_meta_));
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = resample_clause.modify_schema(initial_schema());
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, initial_norm_meta_));
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc);
     for (size_t idx = 0; idx < 13; ++idx) {
         ASSERT_EQ(stream_desc.field(idx).type().data_type(), initial_stream_desc_.field(idx).type().data_type());
@@ -304,9 +304,9 @@ TEST_F(ResampleClauseOutputTypesTest, Min) {
 
 TEST_F(ResampleClauseOutputTypesTest, Mean) {
     auto resample_clause = generate_resample_clause(generate_aggregators("mean"));
-    auto output_schema = resample_clause.modify_schema(initial_schema());
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, initial_norm_meta_));
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = resample_clause.modify_schema(initial_schema());
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, initial_norm_meta_));
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc);
     ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::NANOSECONDS_UTC64); // index column
     for (size_t idx = 1; idx < 12; ++idx) {
@@ -320,9 +320,9 @@ TEST_F(ResampleClauseOutputTypesTest, Mean) {
 
 TEST_F(ResampleClauseOutputTypesTest, Count) {
     auto resample_clause = generate_resample_clause(generate_aggregators("count", true, true));
-    auto output_schema = resample_clause.modify_schema(initial_schema());
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, initial_norm_meta_));
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = resample_clause.modify_schema(initial_schema());
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, initial_norm_meta_));
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc, true, true);
     ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::NANOSECONDS_UTC64); // index column
     for (size_t idx = 1; idx < 14; ++idx) {
@@ -332,9 +332,9 @@ TEST_F(ResampleClauseOutputTypesTest, Count) {
 
 TEST_F(ResampleClauseOutputTypesTest, First) {
     auto resample_clause = generate_resample_clause(generate_aggregators("first", true, true));
-    auto output_schema = resample_clause.modify_schema(initial_schema());
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, initial_norm_meta_));
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = resample_clause.modify_schema(initial_schema());
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, initial_norm_meta_));
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc, true, true);
     for (size_t idx = 0; idx < 14; ++idx) {
         ASSERT_EQ(stream_desc.field(idx).type().data_type(), initial_stream_desc_.field(idx).type().data_type());
@@ -343,9 +343,9 @@ TEST_F(ResampleClauseOutputTypesTest, First) {
 
 TEST_F(ResampleClauseOutputTypesTest, Last) {
     auto resample_clause = generate_resample_clause(generate_aggregators("last", true, true));
-    auto output_schema = resample_clause.modify_schema(initial_schema());
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, initial_norm_meta_));
-    const auto& stream_desc = output_schema.stream_descriptor();
+    auto schema = resample_clause.modify_schema(initial_schema());
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, initial_norm_meta_));
+    const auto& stream_desc = schema.stream_descriptor();
     check_output_column_names(stream_desc, true, true);
     for (size_t idx = 0; idx < 14; ++idx) {
         ASSERT_EQ(stream_desc.field(idx).type().data_type(), initial_stream_desc_.field(idx).type().data_type());

@@ -37,8 +37,8 @@ namespace arcticdb {
 
 using namespace proto::descriptors;
 using entity::Field;
+using entity::FrameSchema;
 using entity::IndexDescriptorImpl;
-using entity::OutputSchema;
 using entity::StreamDescriptor;
 using entity::TypeDescriptor;
 using Arrow = NormalizationMetadata_Arrow;
@@ -282,7 +282,7 @@ void check_index_types_combinable(
 
 // The index type and field count must match across every schema.
 IndexDescriptorImpl combine_index_descriptors(
-        std::span<const OutputSchema> schemas, const SchemaCombineOptions& options
+        std::span<const FrameSchema> schemas, const SchemaCombineOptions& options
 ) {
     auto result = schemas.front().stream_descriptor().index();
     for (const auto& schema : schemas.subspan(1)) {
@@ -302,7 +302,7 @@ IndexDescriptorImpl combine_index_descriptors(
 // Merge the required fields - the index levels, plus the value column for a Series - which are always the leading
 // fields of the descriptor. Their names have already been canonicalized across all schemas.
 void add_required_fields(
-        StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
+        StreamDescriptor& out, std::span<const FrameSchema> schemas, const RequiredFieldInfo& info,
         const SchemaCombineOptions& options
 ) {
     const auto required_fields = info.num_physical_required_columns();
@@ -343,18 +343,18 @@ void add_required_fields(
 }
 
 // The non-index columns of a schema, in descriptor order. A view rather than a copy.
-auto data_columns(const OutputSchema& schema, const RequiredFieldInfo& info) {
+auto data_columns(const FrameSchema& schema, const RequiredFieldInfo& info) {
     return schema.stream_descriptor().fields() | std::views::drop(info.num_physical_required_columns());
 }
 
-size_t data_column_count(const OutputSchema& schema, const RequiredFieldInfo& info) {
+size_t data_column_count(const FrameSchema& schema, const RequiredFieldInfo& info) {
     return schema.stream_descriptor().field_count() - info.num_physical_required_columns();
 }
 
 // The non-index columns as an associative list, so that a union of two of them stays in descriptor order.
 using DataColumns = std::vector<std::pair<std::string_view, TypeDescriptor>>;
 
-DataColumns data_columns_of(const OutputSchema& schema, const RequiredFieldInfo& info) {
+DataColumns data_columns_of(const FrameSchema& schema, const RequiredFieldInfo& info) {
     auto columns = util::reserve_vector<DataColumns::value_type>(data_column_count(schema, info));
     for (const auto& field : data_columns(schema, info)) {
         columns.emplace_back(field.name(), field.type());
@@ -364,12 +364,10 @@ DataColumns data_columns_of(const OutputSchema& schema, const RequiredFieldInfo&
 
 // More detailed error message in case static schema recieves different number of columns.
 // Lists the missing or new unexpected columns.
-std::string data_column_differences(
-        const OutputSchema& base, const OutputSchema& other, const RequiredFieldInfo& info
-) {
+std::string data_column_differences(const FrameSchema& base, const FrameSchema& other, const RequiredFieldInfo& info) {
     // A wide symbol can disagree about hundreds of columns, and a message that long is unreadable and unloggable.
     constexpr size_t max_listed = 5;
-    const auto names_of = [&info](const OutputSchema& schema) {
+    const auto names_of = [&info](const FrameSchema& schema) {
         std::set<std::string_view> names;
         for (const auto& field : data_columns(schema, info)) {
             names.emplace(field.name());
@@ -398,7 +396,7 @@ std::string data_column_differences(
 
 // Every schema must carry the same non-index columns, in the same order.
 void add_data_columns_static(
-        StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
+        StreamDescriptor& out, std::span<const FrameSchema> schemas, const RequiredFieldInfo& info,
         const SchemaCombineOptions& options
 ) {
     const auto& base = schemas.front();
@@ -438,7 +436,7 @@ void add_data_columns_static(
 
 // Keep only the columns present in every schema.
 void add_data_columns_intersection(
-        StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
+        StreamDescriptor& out, std::span<const FrameSchema> schemas, const RequiredFieldInfo& info,
         const SchemaCombineOptions& options
 ) {
     const auto& base = schemas.front();
@@ -494,7 +492,7 @@ void add_data_columns_intersection(
 
 // Keep the union of the columns, in the order they are first seen.
 void add_data_columns_union(
-        StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
+        StreamDescriptor& out, std::span<const FrameSchema> schemas, const RequiredFieldInfo& info,
         const SchemaCombineOptions& options
 ) {
     ankerl::unordered_dense::map<std::string_view, TypeDescriptor> columns_to_keep;
@@ -515,7 +513,7 @@ void add_data_columns_union(
 }
 
 void add_data_columns(
-        StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
+        StreamDescriptor& out, std::span<const FrameSchema> schemas, const RequiredFieldInfo& info,
         const SchemaCombineOptions& options
 ) {
     // The three share only the per-schema column extraction, already factored into data_columns. Their control
@@ -872,13 +870,13 @@ NormalizationMetadata accumulate_norm_metadata(
 }
 
 struct PreparedSchemas {
-    std::vector<OutputSchema> schemas;
+    std::vector<FrameSchema> schemas;
     bool all_inferred_from_empty_pandas;
 };
 
 // Remove pandas schemas inferred from epty frame. Also if combining a mix of arrow and pandas, convert all schemas to
 // an arrow with pandas norm metadata.
-PreparedSchemas prepare_schemas(std::span<const OutputSchema> schemas) {
+PreparedSchemas prepare_schemas(std::span<const FrameSchema> schemas) {
     // Schemas inferred from empty pandas dataframes can have:
     // - incorrect pandas index (pd.DataFrame({"col": []}) will have either a rowrange or datetime index depending on
     //   pandas version)
@@ -887,13 +885,13 @@ PreparedSchemas prepare_schemas(std::span<const OutputSchema> schemas) {
     // Thus we ignore their indices and column types when another schema is present. If all schemas are empty pandas,
     // the first one is retained. Respecting their dtypes would need changes similar to commit 31c096da4 from PR #3406.
     const bool all_inferred_from_empty_pandas =
-            std::ranges::all_of(schemas, &OutputSchema::is_inferred_from_empty_pandas);
-    std::vector<OutputSchema> prepared;
+            std::ranges::all_of(schemas, &FrameSchema::is_inferred_from_empty_pandas);
+    std::vector<FrameSchema> prepared;
     if (all_inferred_from_empty_pandas) {
         prepared.emplace_back(schemas.front());
     } else {
-        prepared = util::reserve_vector<OutputSchema>(schemas.size());
-        std::ranges::copy_if(schemas, std::back_inserter(prepared), [](const OutputSchema& schema) {
+        prepared = util::reserve_vector<FrameSchema>(schemas.size());
+        std::ranges::copy_if(schemas, std::back_inserter(prepared), [](const FrameSchema& schema) {
             return !schema.is_inferred_from_empty_pandas();
         });
     }
@@ -901,7 +899,7 @@ PreparedSchemas prepare_schemas(std::span<const OutputSchema> schemas) {
     // With any Arrow in the mix, every pandas schema is converted to Arrow. With any pandas in it, every Arrow schema
     // gets pandas metadata derived from its own fields, so the fold always merges two pandas metadatas.
     const bool any_arrow =
-            std::ranges::any_of(prepared, [](const OutputSchema& schema) { return schema.norm_metadata_.has_arrow(); });
+            std::ranges::any_of(prepared, [](const FrameSchema& schema) { return schema.norm_metadata_.has_arrow(); });
     std::optional<NormalizationMetadata> pandas_shape;
     for (auto& schema : prepared) {
         if (any_arrow && is_pandas_convertible_to_arrow(schema.norm_metadata_)) {
@@ -938,7 +936,7 @@ std::optional<NormalizationMetadata> pandas_metadata(const NormalizationMetadata
 }
 
 // The descriptor field holding index level 0, if there is one.
-std::optional<std::string_view> index_field_name(const OutputSchema& schema, const RequiredFieldInfo& info) {
+std::optional<std::string_view> index_field_name(const FrameSchema& schema, const RequiredFieldInfo& info) {
     if (info.num_physical_indices == 0 || schema.stream_descriptor().field_count() == 0) {
         return std::nullopt;
     }
@@ -946,7 +944,7 @@ std::optional<std::string_view> index_field_name(const OutputSchema& schema, con
 }
 
 void add_normalization_name_mismatches(
-        const OutputSchema& base_schema, const OutputSchema& other_schema, const RequiredFieldInfo& info,
+        const FrameSchema& base_schema, const FrameSchema& other_schema, const RequiredFieldInfo& info,
         RequiredNameMismatches& mismatches
 ) {
     const auto& base = base_schema.norm_metadata_;
@@ -996,7 +994,7 @@ void add_normalization_name_mismatches(
     }
 }
 
-RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, const SchemaCombineOptions& options) {
+RequiredFieldsPlan required_fields_plan(std::span<const FrameSchema> schemas, const SchemaCombineOptions& options) {
     RequiredFieldsPlan plan{required_fields_info(schemas.front()), RequiredNameMismatches{options}};
     const auto& base = schemas.front();
     const auto base_pandas = pandas_metadata(base.norm_metadata_);
@@ -1099,7 +1097,7 @@ std::string reconciled_required_name(size_t position, const RequiredFieldInfo& i
 
 // Apply the required-field plan to one schema before any metadata or fields are combined. Every source then describes
 // corresponding required fields under the same name, so the ordinary folds also combine their column metadata.
-void apply_required_fields_plan(OutputSchema& schema, const RequiredFieldsPlan& plan) {
+void apply_required_fields_plan(FrameSchema& schema, const RequiredFieldsPlan& plan) {
     const auto& info = plan.info;
     const auto& mismatches = plan.name_mismatches;
     if (!mismatches.any()) {
@@ -1159,9 +1157,7 @@ void apply_required_fields_plan(OutputSchema& schema, const RequiredFieldsPlan& 
 }
 
 // Fold normalization metadata whose required names have already been canonicalized.
-NormalizationMetadata combine_norm_metadata(
-        std::span<const OutputSchema> schemas, const SchemaCombineOptions& options
-) {
+NormalizationMetadata combine_norm_metadata(std::span<const FrameSchema> schemas, const SchemaCombineOptions& options) {
     auto result = schemas.front().norm_metadata_;
     for (const auto& schema : schemas.subspan(1)) {
         result = accumulate_norm_metadata(result, schema.norm_metadata_, options);
@@ -1170,7 +1166,7 @@ NormalizationMetadata combine_norm_metadata(
 }
 
 // What is known about the sort order of every schema's data laid end to end.
-SortedValue combine_sorted(std::span<const OutputSchema> schemas) {
+SortedValue combine_sorted(std::span<const FrameSchema> schemas) {
     auto result = schemas.front().stream_descriptor().sorted();
     for (const auto& schema : schemas.subspan(1)) {
         result = deduce_sorted(result, schema.stream_descriptor().sorted());
@@ -1180,7 +1176,7 @@ SortedValue combine_sorted(std::span<const OutputSchema> schemas) {
 } // namespace
 
 void align_multi_index_names(
-        const OutputSchema& existing, StreamDescriptor& incoming, NormalizationMetadata& incoming_norm
+        const FrameSchema& existing, StreamDescriptor& incoming, NormalizationMetadata& incoming_norm
 ) {
     const auto info = required_fields_info(existing);
     // Pandas already stores its levels prefixed, and a schema with too few fields for the levels is left for
@@ -1247,7 +1243,7 @@ SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
     return final_state;
 }
 
-OutputSchema combine_schema(std::span<const OutputSchema> schemas, const SchemaCombineOptions& options) {
+FrameSchema combine_schema(std::span<const FrameSchema> schemas, const SchemaCombineOptions& options) {
     util::check(!schemas.empty(), "Cannot combine an empty list of schemas");
 
     auto prepared = prepare_schemas(schemas);
@@ -1267,20 +1263,20 @@ OutputSchema combine_schema(std::span<const OutputSchema> schemas, const SchemaC
     if (norm.has_arrow()) {
         check_embedded_pandas_agrees(norm.arrow(), out);
     }
-    return OutputSchema{std::move(out), std::move(norm), prepared.all_inferred_from_empty_pandas};
+    return FrameSchema{std::move(out), std::move(norm), prepared.all_inferred_from_empty_pandas};
 }
 
-OutputSchema schema_from_tsd(const TimeseriesDescriptor& tsd) {
+FrameSchema schema_from_tsd(const TimeseriesDescriptor& tsd) {
     return {tsd.as_stream_descriptor(), tsd.normalization(), tsd.total_rows() == 0};
 }
 
-OutputSchema schema_from_input_frame(const pipelines::InputFrame& frame) {
+FrameSchema schema_from_input_frame(const pipelines::InputFrame& frame) {
     // compute_desc_for_tsd rather than desc() because the result describes what will be stored, and an Arrow string
     // column holds 32 bit offsets in the frame but always 64 bit on disk.
     return {frame.compute_desc_for_tsd(), frame.norm_meta, frame.empty()};
 }
 
-TimeseriesDescriptor tsd_from_schema(OutputSchema&& schema, size_t total_rows, pipelines::InputFrame& frame) {
+TimeseriesDescriptor tsd_from_schema(FrameSchema&& schema, size_t total_rows, pipelines::InputFrame& frame) {
     auto [descriptor, norm_meta, _] = schema.release();
     descriptor.set_id(frame.desc().id());
     return make_timeseries_descriptor(

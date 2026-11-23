@@ -83,7 +83,7 @@ MultiIndex multiindex(const std::vector<std::variant<std::monostate, std::string
     return multiindex;
 }
 
-OutputSchema generate_schema(
+FrameSchema generate_schema(
         ObjectType object_type, bool has_synthetic_columns, std::variant<Index, MultiIndex> index,
         std::vector<ColumnSpec> columns
 ) {
