@@ -14,7 +14,7 @@ option(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING "Build with Perfetto instrumented tr
 if(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING)
     list(APPEND VCPKG_MANIFEST_FEATURES perfetto)
 endif()
-set(ARCTICDB_ALLOCATOR "system" CACHE STRING
+set(ARCTICDB_ALLOCATOR "tcmalloc" CACHE STRING
     "Allocator behind operator new/delete and arcticdb::Allocator in arcticdb_ext: system, mimalloc, jemalloc or tcmalloc")
 set_property(CACHE ARCTICDB_ALLOCATOR PROPERTY STRINGS system mimalloc jemalloc tcmalloc)
 if(NOT ARCTICDB_ALLOCATOR MATCHES "^(system|mimalloc|jemalloc|tcmalloc)$")
