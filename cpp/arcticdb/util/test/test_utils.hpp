@@ -258,6 +258,11 @@ class StorageGenerator {
         }
     }
 
+    void create_database_dir() const {
+        delete_any_test_databases();
+        fs::create_directories(TEST_DATABASES_PATH);
+    }
+
     void delete_any_test_databases() const {
         if (fs::exists(TEST_DATABASES_PATH)) {
             fs::remove_all(TEST_DATABASES_PATH);

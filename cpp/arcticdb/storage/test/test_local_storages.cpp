@@ -12,8 +12,6 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
-#include <filesystem>
-#include <stdexcept>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
@@ -26,7 +24,7 @@ namespace ac = arcticdb;
 namespace as = arcticdb::storage;
 
 class LocalStorageTestSuite : public testing::TestWithParam<StorageGenerator> {
-    void SetUp() override { GetParam().delete_any_test_databases(); }
+    void SetUp() override { GetParam().create_database_dir(); }
 
     void TearDown() override { GetParam().delete_any_test_databases(); }
 };

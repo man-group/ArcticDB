@@ -78,6 +78,7 @@ TEST(FileStorageInit, FileExistsWhereLibraryWouldGo) {
     ASSERT_EQ(res, 0);
 
     ASSERT_THROW(get_storage(temp_dir.get()), UnexpectedFileStorageException);
+    ASSERT_THROW(get_storage(temp_dir.get(), storage::OpenMode::READ), UnexpectedFileStorageException);
 }
 
 TEST(FileStorageInit, NoPermissionToCreateLibrary) {
