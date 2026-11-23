@@ -112,7 +112,7 @@ MergeUpdateClause create_clause(
 ) {
     auto strat = strategy;
     strat.match_na = match_na;
-    OutputSchema source_output_schema = schema_from_input_frame(input_frame);
+    FrameSchema source_output_schema = schema_from_input_frame(input_frame);
     auto frame = std::make_shared<InputFrame>(std::move(input_frame));
     // Same conversion as merge_update_impl. WriteToSegmentTask adds the index column itself.
     FrameSlice full_slice{

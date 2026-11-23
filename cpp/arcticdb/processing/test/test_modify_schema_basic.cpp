@@ -18,7 +18,7 @@ using namespace arcticdb;
 using namespace arcticdb::pipelines;
 using namespace google::protobuf::util;
 
-TEST(OutputSchema, NonModifyingClauses) {
+TEST(FrameSchema, NonModifyingClauses) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::TIMESTAMP, 1});
     stream_desc.add_scalar_field(DataType::NANOSECONDS_UTC64, "timestamp");
@@ -29,47 +29,47 @@ TEST(OutputSchema, NonModifyingClauses) {
     norm_meta.mutable_df()->mutable_common()->mutable_index()->set_is_physically_stored(true);
 
     PassthroughClause passthrough_clause;
-    auto output_schema = passthrough_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    auto schema = passthrough_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     RowRangeClause row_range_clause{0, 5};
-    output_schema = row_range_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    schema = row_range_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     DateRangeClause date_range_clause{{}, {}};
-    output_schema = date_range_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    schema = date_range_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     RemoveColumnPartitioningClause remove_column_partitioning_clause;
-    output_schema = remove_column_partitioning_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    schema = remove_column_partitioning_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     SplitClause split_clause{{}};
-    output_schema = split_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    schema = split_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     SortClause sort_clause{{}, {}};
-    output_schema = sort_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    schema = sort_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     MergeClause merge_clause{stream::EmptyIndex{}, {}, {}, {}, {}};
-    output_schema = merge_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    schema = merge_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     ConcatClause concat_clause{{}};
-    output_schema = concat_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    schema = concat_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 }
 
-TEST(OutputSchema, DateRangeClauseRequiresTimeseries) {
+TEST(FrameSchema, DateRangeClauseRequiresTimeseries) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col");
@@ -83,7 +83,7 @@ TEST(OutputSchema, DateRangeClauseRequiresTimeseries) {
     ASSERT_THROW(date_range_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 }
 
-TEST(OutputSchema, MergeClauseRequiresTimeseries) {
+TEST(FrameSchema, MergeClauseRequiresTimeseries) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col");
@@ -97,7 +97,7 @@ TEST(OutputSchema, MergeClauseRequiresTimeseries) {
     ASSERT_THROW(merge_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 }
 
-TEST(OutputSchema, FilterClauseColumnPresence) {
+TEST(FrameSchema, FilterClauseColumnPresence) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col1");
@@ -113,9 +113,9 @@ TEST(OutputSchema, FilterClauseColumnPresence) {
     ExpressionContext ec;
     ec.root_ = node(col("col1"), col("col3"), OperationType::EQ);
     FilterClause filter_clause{{"col1", "col3"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    auto schema = filter_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     // Some, but not all required columns present in StreamDescriptor
     ec = ExpressionContext();
@@ -130,7 +130,7 @@ TEST(OutputSchema, FilterClauseColumnPresence) {
     ASSERT_THROW(filter_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 }
 
-TEST(OutputSchema, ProjectClauseColumnPresence) {
+TEST(FrameSchema, ProjectClauseColumnPresence) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col1");
@@ -146,10 +146,10 @@ TEST(OutputSchema, ProjectClauseColumnPresence) {
     ExpressionContext ec;
     ec.root_ = node(col("col1"), col("col3"), OperationType::ADD);
     ProjectClause project_clause{{"col1", "col3"}, "root", ec};
-    auto output_schema = project_clause.modify_schema({stream_desc.clone(), norm_meta});
+    auto schema = project_clause.modify_schema({stream_desc.clone(), norm_meta});
     stream_desc.add_scalar_field(DataType::INT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     // Some, but not all required columns present in StreamDescriptor
     ec = ExpressionContext();
@@ -164,7 +164,7 @@ TEST(OutputSchema, ProjectClauseColumnPresence) {
     ASSERT_THROW(project_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 }
 
-TEST(OutputSchema, PartitionClause) {
+TEST(FrameSchema, PartitionClause) {
     using GroupByClause = PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer>;
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
@@ -177,16 +177,16 @@ TEST(OutputSchema, PartitionClause) {
 
     // Grouping column present in StreamDescriptor
     GroupByClause groupby_clause{"col"};
-    auto output_schema = groupby_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+    auto schema = groupby_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(schema.norm_metadata_, norm_meta));
 
     // Grouping column not present in StreamDescriptor
     groupby_clause = GroupByClause{"col1"};
     ASSERT_THROW(groupby_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 }
 
-TEST(OutputSchema, AggregationClauseColumnPresence) {
+TEST(FrameSchema, AggregationClauseColumnPresence) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "to_group");
@@ -207,15 +207,15 @@ TEST(OutputSchema, AggregationClauseColumnPresence) {
 
     // Both columns present in StreamDescriptor
     aggregation_clause = AggregationClause{"to_group", {{"sum", "to_agg", "aggregated"}}};
-    auto output_schema = aggregation_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor().field(0), stream_desc.field(0));
-    ASSERT_EQ(output_schema.stream_descriptor().field(1).name(), "aggregated");
-    ASSERT_EQ(output_schema.norm_metadata_.df().common().index().name(), "to_group");
-    ASSERT_FALSE(output_schema.norm_metadata_.df().common().index().fake_name());
-    ASSERT_TRUE(output_schema.norm_metadata_.df().common().index().is_physically_stored());
+    auto schema = aggregation_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor().field(0), stream_desc.field(0));
+    ASSERT_EQ(schema.stream_descriptor().field(1).name(), "aggregated");
+    ASSERT_EQ(schema.norm_metadata_.df().common().index().name(), "to_group");
+    ASSERT_FALSE(schema.norm_metadata_.df().common().index().fake_name());
+    ASSERT_TRUE(schema.norm_metadata_.df().common().index().is_physically_stored());
 }
 
-TEST(OutputSchema, ResampleClauseRequiresTimeseries) {
+TEST(FrameSchema, ResampleClauseRequiresTimeseries) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "to_agg");
@@ -229,7 +229,7 @@ TEST(OutputSchema, ResampleClauseRequiresTimeseries) {
     ASSERT_THROW(resample_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 }
 
-TEST(OutputSchema, ResampleClauseColumnPresence) {
+TEST(FrameSchema, ResampleClauseColumnPresence) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::TIMESTAMP, 1});
     stream_desc.add_scalar_field(DataType::NANOSECONDS_UTC64, "timestamp");
@@ -245,15 +245,15 @@ TEST(OutputSchema, ResampleClauseColumnPresence) {
 
     // Aggregation column present in StreamDescriptor
     resample_clause = generate_resample_clause({{"sum", "to_agg", "aggregated"}});
-    auto output_schema = resample_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor().field(0), stream_desc.field(0));
-    ASSERT_EQ(output_schema.stream_descriptor().field(1).name(), "aggregated");
-    ASSERT_EQ(output_schema.norm_metadata_.df().common().index().name(), "timestamp");
-    ASSERT_FALSE(output_schema.norm_metadata_.df().common().index().fake_name());
-    ASSERT_TRUE(output_schema.norm_metadata_.df().common().index().is_physically_stored());
+    auto schema = resample_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor().field(0), stream_desc.field(0));
+    ASSERT_EQ(schema.stream_descriptor().field(1).name(), "aggregated");
+    ASSERT_EQ(schema.norm_metadata_.df().common().index().name(), "timestamp");
+    ASSERT_FALSE(schema.norm_metadata_.df().common().index().fake_name());
+    ASSERT_TRUE(schema.norm_metadata_.df().common().index().is_physically_stored());
 }
 
-TEST(OutputSchema, ResampleClauseMultiindex) {
+TEST(FrameSchema, ResampleClauseMultiindex) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
     stream_desc.set_index({IndexDescriptor::Type::TIMESTAMP, 2});
     stream_desc.add_scalar_field(DataType::NANOSECONDS_UTC64, "timestamp");
@@ -266,23 +266,23 @@ TEST(OutputSchema, ResampleClauseMultiindex) {
 
     // Aggregating non-index column
     auto resample_clause = generate_resample_clause({{"sum", "to_agg", "aggregated"}});
-    auto output_schema = resample_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor().index(), IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
-    ASSERT_EQ(output_schema.stream_descriptor().field(0), stream_desc.field(0));
-    ASSERT_EQ(output_schema.stream_descriptor().field(1).name(), "aggregated");
-    ASSERT_TRUE(output_schema.norm_metadata_.df().common().has_index());
-    ASSERT_EQ(output_schema.norm_metadata_.df().common().index().name(), "timestamp");
-    ASSERT_FALSE(output_schema.norm_metadata_.df().common().index().fake_name());
-    ASSERT_TRUE(output_schema.norm_metadata_.df().common().index().is_physically_stored());
+    auto schema = resample_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor().index(), IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
+    ASSERT_EQ(schema.stream_descriptor().field(0), stream_desc.field(0));
+    ASSERT_EQ(schema.stream_descriptor().field(1).name(), "aggregated");
+    ASSERT_TRUE(schema.norm_metadata_.df().common().has_index());
+    ASSERT_EQ(schema.norm_metadata_.df().common().index().name(), "timestamp");
+    ASSERT_FALSE(schema.norm_metadata_.df().common().index().fake_name());
+    ASSERT_TRUE(schema.norm_metadata_.df().common().index().is_physically_stored());
 
     // Aggregating secondary index column
     resample_clause = generate_resample_clause({{"sum", "second_level_index", "aggregated"}});
-    output_schema = resample_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor().index(), IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
-    ASSERT_EQ(output_schema.stream_descriptor().field(0), stream_desc.field(0));
-    ASSERT_EQ(output_schema.stream_descriptor().field(1).name(), "aggregated");
-    ASSERT_TRUE(output_schema.norm_metadata_.df().common().has_index());
-    ASSERT_EQ(output_schema.norm_metadata_.df().common().index().name(), "timestamp");
-    ASSERT_FALSE(output_schema.norm_metadata_.df().common().index().fake_name());
-    ASSERT_TRUE(output_schema.norm_metadata_.df().common().index().is_physically_stored());
+    schema = resample_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(schema.stream_descriptor().index(), IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
+    ASSERT_EQ(schema.stream_descriptor().field(0), stream_desc.field(0));
+    ASSERT_EQ(schema.stream_descriptor().field(1).name(), "aggregated");
+    ASSERT_TRUE(schema.norm_metadata_.df().common().has_index());
+    ASSERT_EQ(schema.norm_metadata_.df().common().index().name(), "timestamp");
+    ASSERT_FALSE(schema.norm_metadata_.df().common().index().fake_name());
+    ASSERT_TRUE(schema.norm_metadata_.df().common().index().is_physically_stored());
 }

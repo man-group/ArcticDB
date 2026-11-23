@@ -240,8 +240,8 @@ template std::vector<std::vector<size_t>> structure_by_time_bucket<ResampleBound
         std::vector<RangesAndEntity>& ranges, const std::vector<timestamp>& bucket_boundaries
 );
 
-static auto first_missing_column(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns) {
-    const auto& column_types = output_schema.column_types();
+static auto first_missing_column(FrameSchema& schema, const std::unordered_set<std::string>& required_columns) {
+    const auto& column_types = schema.column_types();
     for (auto input_column_it = required_columns.begin(); input_column_it != required_columns.end();
          ++input_column_it) {
         if (!column_types.contains(*input_column_it) &&
@@ -253,10 +253,9 @@ static auto first_missing_column(OutputSchema& output_schema, const std::unorder
 }
 
 void check_column_presence(
-        OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
-        std::string_view clause_name
+        FrameSchema& schema, const std::unordered_set<std::string>& required_columns, std::string_view clause_name
 ) {
-    const auto first_missing = first_missing_column(output_schema, required_columns);
+    const auto first_missing = first_missing_column(schema, required_columns);
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
             first_missing == required_columns.end(),
             "{}Clause requires column '{}' to exist in input data",

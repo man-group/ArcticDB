@@ -1092,8 +1092,7 @@ struct HashedSource {
 };
 
 MergeUpdateClause::MergeUpdateClause(
-        std::vector<std::string>&& on, MergeStrategy strategy, OutputSchema source_output_schema,
-        size_t rows_per_segment
+        std::vector<std::string>&& on, MergeStrategy strategy, FrameSchema source_output_schema, size_t rows_per_segment
 ) :
 
     on_(std::move(on)),
@@ -1669,8 +1668,8 @@ void MergeUpdateClause::set_component_manager(std::shared_ptr<ComponentManager> 
     component_manager_ = std::move(component_manager);
 }
 
-OutputSchema MergeUpdateClause::modify_schema(OutputSchema&& output_schema) const {
-    const std::array schemas{std::move(output_schema), source_output_schema_};
+FrameSchema MergeUpdateClause::modify_schema(FrameSchema&& schema) const {
+    const std::array schemas{std::move(schema), source_output_schema_};
     return combine_schema(
             schemas,
             within_symbol_combine_options(
@@ -1679,7 +1678,7 @@ OutputSchema MergeUpdateClause::modify_schema(OutputSchema&& output_schema) cons
     );
 }
 
-OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const {
+FrameSchema MergeUpdateClause::join_schemas(std::vector<FrameSchema>&&) const {
     util::raise_rte("MergeUpdateClause::join_schemas should never be called");
 }
 

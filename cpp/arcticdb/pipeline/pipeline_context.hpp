@@ -268,7 +268,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     void set_on_disk_descriptor(StreamDescriptor&& desc);
     void set_on_disk_descriptor(const StreamDescriptor& desc);
     [[nodiscard]] bool are_string_fields_coerced() const;
-    void set_output_schema(OutputSchema&& output_schema);
+    void set_output_schema(FrameSchema&& output_schema);
 
   private:
     // Carries the normalization metadata and user metadata for the pipeline. On indexed reads it is initialised from
@@ -284,7 +284,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     /// Holds the schema of the output produced by the processing pipeline. This is what will be returned to the user
     /// after the pipeline runs. Computed by applying the modify_schema methods of all clauses in order they appear in
     /// the pipeline.
-    std::optional<OutputSchema> output_schema_;
+    std::optional<FrameSchema> output_schema_;
 };
 
 } // namespace arcticdb::pipelines

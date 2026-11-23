@@ -30,7 +30,7 @@ class AstParsingOutputTypesTest : public testing::Test {
         ec = ExpressionContext();
     }
 
-    OutputSchema initial_schema() { return {initial_stream_desc.clone(), {}}; }
+    FrameSchema initial_schema() { return {initial_stream_desc.clone(), {}}; }
 
     ExpressionChild bitset_node() const { return node(col("int32"), col("uint8"), OperationType::EQ); }
 
@@ -41,15 +41,15 @@ class AstParsingOutputTypesTest : public testing::Test {
 TEST_F(AstParsingOutputTypesTest, FilterNotBitset) {
     ec.root_ = node(bitset_node(), OperationType::NOT);
     FilterClause filter_clause{{"int32", "uint8"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterNotBoolColumn) {
     ec.root_ = node(col("bool"), OperationType::NOT);
     FilterClause filter_clause{{"bool"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterNotNumericColumn) {
@@ -61,15 +61,15 @@ TEST_F(AstParsingOutputTypesTest, FilterNotNumericColumn) {
 TEST_F(AstParsingOutputTypesTest, FilterIsNullStringColumn) {
     ec.root_ = node(col("string"), OperationType::ISNULL);
     FilterClause filter_clause{{"string"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterIsNullNumericColumn) {
     ec.root_ = node(col("int32"), OperationType::ISNULL);
     FilterClause filter_clause{{"int32"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterIsNullBitset) {
@@ -81,16 +81,16 @@ TEST_F(AstParsingOutputTypesTest, FilterIsNullBitset) {
 TEST_F(AstParsingOutputTypesTest, FilterEqNumericCols) {
     ec.root_ = node(col("int32"), col("uint8"), OperationType::EQ);
     FilterClause filter_clause{{"int32", "uint8"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterEqStringColStringVal) {
     auto value = std::make_shared<Value>(construct_string_value("hello"));
     ec.root_ = node(col("string"), val(value), OperationType::EQ);
     FilterClause filter_clause{{"string"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterEqNumericColStringVal) {
@@ -112,8 +112,8 @@ TEST_F(AstParsingOutputTypesTest, FilterLessThanNumericColNumericVal) {
     auto value = std::make_shared<Value>(construct_value<uint16_t>(5));
     ec.root_ = node(col("int32"), val(value), OperationType::LT);
     FilterClause filter_clause{{"int32"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterLessThanStringColStringVal) {
@@ -134,8 +134,8 @@ TEST_F(AstParsingOutputTypesTest, FilterIsInNumericColNumericValueSet) {
     auto value_set = std::make_shared<ValueSet>(std::make_shared<std::unordered_set<uint8_t>>(std::move(raw_set)));
     ec.root_ = node(col("int32"), vset(value_set), OperationType::ISIN);
     FilterClause filter_clause{{"int32"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterIsInStringColStringValueSet) {
@@ -143,48 +143,48 @@ TEST_F(AstParsingOutputTypesTest, FilterIsInStringColStringValueSet) {
     auto value_set = std::make_shared<ValueSet>(std::move(raw_set));
     ec.root_ = node(col("string"), vset(value_set), OperationType::ISIN);
     FilterClause filter_clause{{"string"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionPowUintUintCols) {
     // uint ^ uint -> uint64
     ec.root_ = node(col("uint8"), col("uint8"), OperationType::POW);
     ProjectClause project_clause{{"uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::UINT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionPowIntUintCols) {
     // int ^ uint -> int64
     ec.root_ = node(col("int32"), col("uint8"), OperationType::POW);
     ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::INT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionPowUintIntCols) {
     // uint ^ int -> double (negative exponent can produce fractional results)
     ec.root_ = node(col("uint8"), col("int32"), OperationType::POW);
     ProjectClause project_clause{{"uint8", "int32"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::FLOAT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionPowIntIntCols) {
     // int ^ int -> double (negative exponent can produce fractional results)
     ec.root_ = node(col("int32"), col("int32"), OperationType::POW);
     ProjectClause project_clause{{"int32"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::FLOAT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionPowNumericColVal) {
@@ -192,10 +192,10 @@ TEST_F(AstParsingOutputTypesTest, ProjectionPowNumericColVal) {
     auto value = std::make_shared<Value>(construct_value<uint16_t>(3));
     ec.root_ = node(col("uint8"), val(value), OperationType::POW);
     ProjectClause project_clause{{"uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::UINT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionPowNumericColStringCol) {
@@ -237,8 +237,8 @@ TEST_F(AstParsingOutputTypesTest, FilterIsInNumericColEmptyValueSet) {
     auto value_set = std::make_shared<ValueSet>(std::move(raw_set));
     ec.root_ = node(col("int32"), vset(value_set), OperationType::ISIN);
     FilterClause filter_clause{{"int32"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterIsInBitsetValueSet) {
@@ -259,15 +259,15 @@ TEST_F(AstParsingOutputTypesTest, FilterIsInNumericColNumericValue) {
 TEST_F(AstParsingOutputTypesTest, FilterAndBitsetBitset) {
     ec.root_ = node(bitset_node(), bitset_node(), OperationType::AND);
     FilterClause filter_clause{{"int32", "uint8"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterAndBitsetBoolColumn) {
     ec.root_ = node(bitset_node(), col("bool"), OperationType::AND);
     FilterClause filter_clause{{"int32", "uint8", "bool"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterAndNumericCols) {
@@ -281,8 +281,8 @@ TEST_F(AstParsingOutputTypesTest, FilterComplexExpression) {
     auto bitset_4 = node(bitset_node(), bitset_node(), OperationType::OR);
     ec.root_ = node(bitset_node(), bitset_4, OperationType::AND);
     FilterClause filter_clause{{"int32", "uint8"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterValue) {
@@ -294,10 +294,10 @@ TEST_F(AstParsingOutputTypesTest, FilterValue) {
 TEST_F(AstParsingOutputTypesTest, ProjectionAbsNumeric) {
     ec.root_ = node(col("int32"), OperationType::ABS);
     ProjectClause project_clause{{"int32"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::INT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionAbsString) {
@@ -315,20 +315,20 @@ TEST_F(AstParsingOutputTypesTest, ProjectionAbsBitset) {
 TEST_F(AstParsingOutputTypesTest, ProjectionAddNumericCols) {
     ec.root_ = node(col("int32"), col("uint8"), OperationType::ADD);
     ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::INT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionAddNumericColVal) {
     auto value = std::make_shared<Value>(construct_value<uint16_t>(5));
     ec.root_ = node(col("uint8"), val(value), OperationType::ADD);
     ProjectClause project_clause{{"uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::UINT32, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionAddNumericColStringCol) {
@@ -365,20 +365,20 @@ TEST_F(AstParsingOutputTypesTest, ProjectionComplexExpression) {
     auto value = std::make_shared<Value>(construct_value<uint16_t>(2));
     ec.root_ = node(product, val(value), OperationType::MUL);
     ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::INT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionValue) {
     auto value = std::make_shared<Value>(construct_value<uint16_t>(2));
     ec.root_ = val(value);
     ProjectClause project_clause{{}, "new_col", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::UINT16, "new_col");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, TernaryValueSetCondition) {
@@ -414,29 +414,29 @@ TEST_F(AstParsingOutputTypesTest, TernaryNonBoolColCondition) {
 TEST_F(AstParsingOutputTypesTest, TernaryBitsetCondition) {
     ec.root_ = node(bitset_node(), col("int32"), col("uint8"), OperationType::TERNARY);
     ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::INT32, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, TernaryStringColCol) {
     ec.root_ = node(col("bool"), col("string"), col("string"), OperationType::TERNARY);
     ProjectClause project_clause{{"string"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::UTF_DYNAMIC64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, TernaryNumericColVal) {
     auto value = std::make_shared<Value>(construct_value<uint16_t>(5));
     ec.root_ = node(col("bool"), col("uint8"), val(value), OperationType::TERNARY);
     ProjectClause project_clause{{"uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::UINT16, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_EQ(schema.stream_descriptor(), stream_desc);
 }
 
 TEST_F(AstParsingOutputTypesTest, TernaryNumericColStringCol) {
@@ -454,13 +454,13 @@ TEST_F(AstParsingOutputTypesTest, TernaryNumericColBitset) {
 TEST_F(AstParsingOutputTypesTest, TernaryBitsetBoolCol) {
     ec.root_ = node(col("bool"), bitset_node(), col("bool"), OperationType::TERNARY);
     FilterClause filter_clause{{"int32", "uint8", "bool"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, TernaryBitsetBitset) {
     ec.root_ = node(col("bool"), bitset_node(), bitset_node(), OperationType::TERNARY);
     FilterClause filter_clause{{"int32", "uint8", "bool"}, ec, {}};
-    auto output_schema = filter_clause.modify_schema(initial_schema());
-    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+    auto schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(schema.stream_descriptor(), initial_schema().stream_descriptor());
 }

@@ -395,7 +395,7 @@ R filter_by_regex(const R& results, const std::optional<std::string>& opt_regex)
     return filtered_results;
 }
 
-inline std::vector<std::string> get_index_columns_from_descriptor(const OutputSchema& schema) {
+inline std::vector<std::string> get_index_columns_from_descriptor(const FrameSchema& schema) {
     const auto index_till = pipelines::index::required_fields_info(schema).num_physical_indices;
 
     auto index_columns = util::reserve_vector<std::string>(index_till);

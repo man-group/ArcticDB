@@ -25,12 +25,12 @@ namespace {
 // A descriptor field as the tests describe one: its name and its type.
 using ColumnSpec = std::pair<std::string, DataType>;
 
-OutputSchema written_empty(OutputSchema schema) {
+FrameSchema written_empty(FrameSchema schema) {
     schema.set_inferred_from_empty_frame(true);
     return schema;
 }
 
-OutputSchema timeseries_df(
+FrameSchema timeseries_df(
         const std::string& index_name, const std::vector<ColumnSpec>& columns, const std::string& tz = ""
 ) {
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 1}};
@@ -48,7 +48,7 @@ OutputSchema timeseries_df(
 
 // Levels are named and typed the same way as columns. The norm metadata's field count is one less than the number
 // of levels, as _normalization.py records it.
-OutputSchema multiindex_df(
+FrameSchema multiindex_df(
         const std::vector<ColumnSpec>& levels, const std::vector<ColumnSpec>& columns,
         const std::vector<uint32_t>& unnamed_levels = {}
 ) {
@@ -70,7 +70,7 @@ OutputSchema multiindex_df(
     return {std::move(desc), std::move(norm)};
 }
 
-OutputSchema timeseries_series(const std::string& index_name, const std::string& series_name, DataType value_type) {
+FrameSchema timeseries_series(const std::string& index_name, const std::string& series_name, DataType value_type) {
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 1}};
     desc.add_scalar_field(DataType::NANOSECONDS_UTC64, index_name);
     desc.add_scalar_field(value_type, series_name);
@@ -83,7 +83,7 @@ OutputSchema timeseries_series(const std::string& index_name, const std::string&
     return {std::move(desc), std::move(norm)};
 }
 
-OutputSchema rowcount_series(const std::string& index_name, const std::string& series_name, DataType value_type) {
+FrameSchema rowcount_series(const std::string& index_name, const std::string& series_name, DataType value_type) {
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0}};
     desc.add_scalar_field(value_type, series_name);
     NormalizationMetadata norm;
@@ -98,7 +98,7 @@ OutputSchema rowcount_series(const std::string& index_name, const std::string& s
 }
 
 // Positions of the multiindex levels the output treats as unnamed.
-std::vector<uint32_t> fake_field_pos_of(const OutputSchema& schema) {
+std::vector<uint32_t> fake_field_pos_of(const FrameSchema& schema) {
     const auto& common = schema.norm_metadata_.has_series() ? schema.norm_metadata_.series().common()
                                                             : schema.norm_metadata_.df().common();
     std::vector<uint32_t> positions{
@@ -108,7 +108,7 @@ std::vector<uint32_t> fake_field_pos_of(const OutputSchema& schema) {
     return positions;
 }
 
-OutputSchema empty_index_df(const std::vector<ColumnSpec>& columns) {
+FrameSchema empty_index_df(const std::vector<ColumnSpec>& columns) {
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::EMPTY, 0}};
     for (const auto& [name, type] : columns) {
         desc.add_scalar_field(type, name);
@@ -119,7 +119,7 @@ OutputSchema empty_index_df(const std::vector<ColumnSpec>& columns) {
     return written_empty({std::move(desc), std::move(norm)});
 }
 
-OutputSchema rowcount_df(const std::vector<ColumnSpec>& columns, const std::string& index_name = "") {
+FrameSchema rowcount_df(const std::vector<ColumnSpec>& columns, const std::string& index_name = "") {
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0}};
     for (const auto& [name, type] : columns) {
         desc.add_scalar_field(type, name);
@@ -136,7 +136,7 @@ OutputSchema rowcount_df(const std::vector<ColumnSpec>& columns, const std::stri
 // The shape pandas 2 gives a zero-row frame: the descriptor is rewritten to a DatetimeIndex whatever index the user
 // had, while the normalization metadata still says the index is not physically stored. Neither claim is worth anything,
 // which is why such a schema needs handling of its own.
-OutputSchema written_empty_df(const std::vector<ColumnSpec>& columns, const std::string& index_name = "index") {
+FrameSchema written_empty_df(const std::vector<ColumnSpec>& columns, const std::string& index_name = "index") {
     auto schema = timeseries_df(index_name, columns);
     auto* index = schema.norm_metadata_.mutable_df()->mutable_common()->mutable_index();
     index->set_is_physically_stored(false);
@@ -144,7 +144,7 @@ OutputSchema written_empty_df(const std::vector<ColumnSpec>& columns, const std:
     return written_empty(std::move(schema));
 }
 
-OutputSchema arrow_1d_array(
+FrameSchema arrow_1d_array(
         DataType data_type, bool has_index = false, const std::optional<std::string>& opt_series_name = std::nullopt
 ) {
     auto index_desc = has_index ? IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 1}
@@ -161,11 +161,11 @@ OutputSchema arrow_1d_array(
 }
 
 // Helper to take an `std::vector` so we can pass in an initializer_list like `combine({a, b}, options)`
-OutputSchema combine(std::vector<OutputSchema> schemas, const SchemaCombineOptions& options) {
+FrameSchema combine(std::vector<FrameSchema> schemas, const SchemaCombineOptions& options) {
     return combine_schema(schemas, options);
 }
 
-std::vector<ColumnSpec> columns_of(const OutputSchema& schema) {
+std::vector<ColumnSpec> columns_of(const FrameSchema& schema) {
     std::vector<ColumnSpec> out;
     for (const auto& field : schema.stream_descriptor().fields()) {
         out.emplace_back(std::string(field.name()), field.type().data_type());
@@ -223,13 +223,13 @@ TEST(CombineSchema, ConcatRenamedMultiIndexLevelsReconciledToFake) {
     const auto second_renamed = multiindex_df({dt, level2}, columns);
     const auto both_renamed = multiindex_df({ts, level2}, columns);
 
-    const auto combine_both_ways = [](const OutputSchema& lhs, const OutputSchema& rhs, auto&& assertions) {
+    const auto combine_both_ways = [](const FrameSchema& lhs, const FrameSchema& rhs, auto&& assertions) {
         assertions(combine({lhs, rhs}, concat_options(JoinType::OUTER)));
         assertions(combine({rhs, lhs}, concat_options(JoinType::OUTER)));
     };
 
     // Only level 0 differs: it takes the name "index", level 1 keeps its own.
-    combine_both_ways(both_named, first_renamed, [](const OutputSchema& combined) {
+    combine_both_ways(both_named, first_renamed, [](const FrameSchema& combined) {
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "index");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "lvl");
         ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(0));
@@ -237,19 +237,19 @@ TEST(CombineSchema, ConcatRenamedMultiIndexLevelsReconciledToFake) {
     });
 
     // Only level 1 differs: level 0 keeps its name and level 1 takes the __fkidx__ scheme.
-    combine_both_ways(both_named, second_renamed, [](const OutputSchema& combined) {
+    combine_both_ways(both_named, second_renamed, [](const FrameSchema& combined) {
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "dt");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "__fkidx__1");
         ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(1));
     });
 
-    combine_both_ways(both_named, both_renamed, [](const OutputSchema& combined) {
+    combine_both_ways(both_named, both_renamed, [](const FrameSchema& combined) {
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "index");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "__fkidx__1");
         ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(0, 1));
     });
 
-    combine_both_ways(both_named, both_named, [](const OutputSchema& combined) {
+    combine_both_ways(both_named, both_named, [](const FrameSchema& combined) {
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "dt");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "lvl");
         ASSERT_THAT(fake_field_pos_of(combined), IsEmpty());
@@ -263,7 +263,7 @@ TEST(CombineSchema, ConcatRenamedSeriesValueColumnDropsTheName) {
     const auto series_b = timeseries_series("ts", "b", DataType::FLOAT64);
 
     for (const auto& schemas :
-         {std::vector<OutputSchema>{series_a, series_b}, std::vector<OutputSchema>{series_b, series_a}}) {
+         {std::vector<FrameSchema>{series_a, series_b}, std::vector<FrameSchema>{series_b, series_a}}) {
         auto combined = combine(schemas, concat_options(JoinType::OUTER));
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "ts");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "0");
@@ -336,7 +336,7 @@ TEST(CombineSchema, IncompatibleRequiredFieldShapesRaise) {
     const auto series = timeseries_series("dt", "v", DataType::FLOAT64);
 
     // Every shape disagrees with every other, in either order.
-    const std::vector<std::pair<std::string, OutputSchema>> shapes{
+    const std::vector<std::pair<std::string, FrameSchema>> shapes{
             {"two_levels", two_levels},
             {"three_levels", three_levels},
             {"scalar_index", scalar_index},
@@ -363,7 +363,7 @@ TEST(CombineSchema, ArrowSchemaHasNoShapeToDisagreeAbout) {
     arrow.norm_metadata_.mutable_arrow()->set_has_index(true);
 
     const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"col", DataType::INT64}};
-    for (const auto& schemas : {std::vector<OutputSchema>{series, arrow}, std::vector<OutputSchema>{arrow, series}}) {
+    for (const auto& schemas : {std::vector<FrameSchema>{series, arrow}, std::vector<FrameSchema>{arrow, series}}) {
         auto combined = combine(schemas, concat_options(JoinType::OUTER));
         ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
     }
@@ -788,7 +788,7 @@ TEST(CombineSchema, EmptyFrameSchemaWithADifferentRequiredFieldCountIsDropped) {
     common->set_name("s");
     common->set_has_name(true);
     // Two index fields against the result's one.
-    auto empty_multi_index_series = written_empty(OutputSchema{std::move(desc), std::move(norm)});
+    auto empty_multi_index_series = written_empty(FrameSchema{std::move(desc), std::move(norm)});
 
     const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"s", DataType::FLOAT64}};
     for (const auto& empty : {empty_rowcount_series, empty_multi_index_series}) {
@@ -845,7 +845,7 @@ TEST(CombineSchema, ArrowWithEmptyPandasKeepsTheArrowSchema) {
                                      : rowcount_df({{"a", DataType::FLOAT64}});
         arrow.norm_metadata_.mutable_arrow()->set_has_index(arrow_has_index);
 
-        for (const auto& schemas : {std::vector<OutputSchema>{empty, arrow}, std::vector<OutputSchema>{arrow, empty}}) {
+        for (const auto& schemas : {std::vector<FrameSchema>{empty, arrow}, std::vector<FrameSchema>{arrow, empty}}) {
             auto combined = combine(schemas, append_options(true));
             ASSERT_TRUE(combined.norm_metadata_.has_arrow());
             ASSERT_EQ(combined.norm_metadata_.arrow().has_index(), arrow_has_index);
@@ -911,7 +911,7 @@ TEST(CombineSchema1dArrow, SeriesNameMismatchAppendUpdate) {
     auto array_with_empty_name = arrow_1d_array(DataType::INT64, false, "");
     auto array_with_name_1 = arrow_1d_array(DataType::INT64, false, "name_1");
     auto array_with_name_2 = arrow_1d_array(DataType::INT64, false, "name_2");
-    for (const auto& schemas : std::vector<std::vector<OutputSchema>>{
+    for (const auto& schemas : std::vector<std::vector<FrameSchema>>{
                  {array_without_name, array_with_name_1},
                  {array_with_name_1, array_without_name},
                  {array_with_empty_name, array_with_name_1},
@@ -931,7 +931,7 @@ TEST(CombineSchema1dArrow, SeriesNameMismatchConcat) {
     auto array_with_empty_name = arrow_1d_array(DataType::INT64, false, "");
     auto array_with_name_1 = arrow_1d_array(DataType::INT64, false, "name_1");
     auto array_with_name_2 = arrow_1d_array(DataType::INT64, false, "name_2");
-    std::vector<OutputSchema> schemas{array_without_name, array_with_empty_name, array_with_name_1, array_with_name_2};
+    std::vector<FrameSchema> schemas{array_without_name, array_with_empty_name, array_with_name_1, array_with_name_2};
     for (const auto& first_schema : schemas) {
         for (const auto& second_schema : schemas) {
             for (const auto& options :

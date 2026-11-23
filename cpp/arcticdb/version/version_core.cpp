@@ -227,16 +227,16 @@ folly::Future<AtomKey> async_append_impl(
             });
 }
 
-OutputSchema select_columns(OutputSchema&& output_schema, const std::unordered_set<std::string_view>& columns) {
-    const auto& fields = output_schema.stream_descriptor().fields();
+FrameSchema select_columns(FrameSchema&& schema, const std::unordered_set<std::string_view>& columns) {
+    const auto& fields = schema.stream_descriptor().fields();
     auto fields_to_use = std::make_shared<FieldCollection>(fields.size(), fields.buffer().bytes());
     for (const Field& field : fields) {
         if (columns.contains(field.name())) {
             fields_to_use->add(field.ref());
         }
     }
-    output_schema.mutable_stream_descriptor().set_fields(std::move(fields_to_use));
-    return output_schema;
+    schema.mutable_stream_descriptor().set_fields(std::move(fields_to_use));
+    return schema;
 }
 
 namespace {
@@ -756,7 +756,7 @@ StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext
     // q = QueryBuilder()
     // q = q["col1" < 1]
     // lib.read(columns=["col2", query_builder=q)
-    // We want to read only col2 but the filtering requires col1, thus the OutputSchema must contain both col1 and col2
+    // We want to read only col2 but the filtering requires col1, thus the FrameSchema must contain both col1 and col2
     // in order to satisfy the filter clause.
     if (pipeline_context.overall_column_bitset_) {
         FieldCollection fields_to_use;
@@ -771,7 +771,7 @@ StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext
     return desc;
 }
 
-OutputSchema create_initial_output_schema(PipelineContext& pipeline_context) {
+FrameSchema create_initial_output_schema(PipelineContext& pipeline_context) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             pipeline_context.has_normalization(), "Normalization metadata should not be missing during read_and_process"
     );
@@ -780,14 +780,14 @@ OutputSchema create_initial_output_schema(PipelineContext& pipeline_context) {
     const bool inferred_from_empty_frame =
             (pipeline_context.tsd().total_rows() == 0 && !pipeline_context.incompletes_after_.has_value()) ||
             pipeline_context.tsd().index().type() == IndexDescriptor::Type::EMPTY;
-    return OutputSchema{
+    return FrameSchema{
             generate_initial_output_schema_descriptor(pipeline_context),
             pipeline_context.normalization(),
             inferred_from_empty_frame
     };
 }
 
-OutputSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
+FrameSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
     auto output_schema = modify_schema(create_initial_output_schema(pipeline_context), read_query.clauses_);
     if (read_query.columns) {
         std::unordered_set<std::string_view> selected_columns(read_query.columns->begin(), read_query.columns->end());
@@ -1603,7 +1603,7 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
             });
 }
 
-static void add_index_columns_to_query(const ReadQuery& read_query, const OutputSchema& schema) {
+static void add_index_columns_to_query(const ReadQuery& read_query, const FrameSchema& schema) {
     if (read_query.columns.has_value()) {
         auto index_columns = stream::get_index_columns_from_descriptor(schema);
         if (index_columns.empty())
@@ -1806,7 +1806,7 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         return false;
     }
 
-    std::optional<OutputSchema> existing;
+    std::optional<FrameSchema> existing;
     if (pipeline_context->has_on_disk_descriptor()) {
         arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
         if (pipeline_context->has_normalization()) {
@@ -3325,7 +3325,7 @@ folly::Future<AtomKey> merge_update_impl(
     align_multi_index_names(
             schema_from_tsd(index_information->index_.second.index_descriptor()), source->desc(), source->norm_meta
     );
-    OutputSchema source_output_schema = schema_from_input_frame(*source);
+    FrameSchema source_output_schema = schema_from_input_frame(*source);
     // Pipeline setup needs only the source schema. The source segment is set after the empty target check, because an
     // empty target converts the data to SegmentInMemory before writing it, thus converting it here would make two
     // conversions, one of which is redundant.
@@ -3794,7 +3794,7 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                                 variant_key_type(index_information.index_.first) == KeyType::TABLE_INDEX,
                                 "rename_columns_arrow_compat not supported with recursively normalized data"
                         );
-                        OutputSchema original_schema{original_tsd.as_stream_descriptor(), original_tsd.normalization()};
+                        FrameSchema original_schema{original_tsd.as_stream_descriptor(), original_tsd.normalization()};
                         auto arrow_transformed_schema = make_schema_arrow_compatible(original_schema, index_columns);
                         if (!arrow_transformed_schema.has_value()) {
                             return std::nullopt;
@@ -3921,7 +3921,7 @@ folly::Future<SymbolProcessingResult> read_and_process(
                                 !pipeline_context->is_pickled(), "Cannot perform multi-symbol join on pickled data"
                         );
 
-                        OutputSchema output_schema = generate_output_schema(*pipeline_context, *read_query);
+                        FrameSchema output_schema = generate_output_schema(*pipeline_context, *read_query);
                         ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
                         return read_and_schedule_processing(

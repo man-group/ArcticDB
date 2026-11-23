@@ -280,9 +280,9 @@ void CompactDataClause::set_component_manager(std::shared_ptr<ComponentManager> 
     component_manager_ = std::move(component_manager);
 }
 
-OutputSchema CompactDataClause::modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+FrameSchema CompactDataClause::modify_schema(FrameSchema&& schema) const { return schema; }
 
-OutputSchema CompactDataClause::join_schemas(std::vector<OutputSchema>&&) const {
+FrameSchema CompactDataClause::join_schemas(std::vector<FrameSchema>&&) const {
     util::raise_rte("CompactDataClause::join_schemas should never be called");
 }
 
