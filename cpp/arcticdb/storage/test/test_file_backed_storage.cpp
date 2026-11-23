@@ -35,6 +35,7 @@ using namespace std::literals;
 namespace {
 
 static const std::string STREAM_ID{"symbol"};
+static const std::string TEST_LIBRARY_NAME{"test_lib"};
 
 // TODO: This really needs a good home.
 class TempDir {
@@ -63,7 +64,7 @@ FileBackedStorage get_storage(
 ) {
     proto::file_storage::Config cfg;
     cfg.set_dir_path(dir.generic_string());
-    storage::LibraryPath library_path("test_lib", '.');
+    storage::LibraryPath library_path(TEST_LIBRARY_NAME, '.');
     return FileBackedStorage(library_path, open_mode, cfg, posix);
 }
 
@@ -71,7 +72,7 @@ TEST(FileStorageInit, FileExistsWhereLibraryWouldGo) {
     TempDir temp_dir(*::testing::UnitTest::GetInstance()->current_test_info());
 
     // What if a file exists with the same name as the directory which the library needs?
-    int fd = ::open((temp_dir.get() / "test_lib").c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+    int fd = ::open((temp_dir.get() / TEST_LIBRARY_NAME).c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
     ASSERT_GE(fd, 0);
     int res = ::close(fd);
     ASSERT_EQ(res, 0);
@@ -100,7 +101,7 @@ TEST(FileStorageInit, ReadOnlyMode) {
     BOOST_SCOPE_EXIT(&temp_dir) { ::chmod(temp_dir.get().c_str(), 07777); }
     BOOST_SCOPE_EXIT_END
 
-    auto library_dir = temp_dir.get() / "test_lib"; // TODO: Pull "test_lib" into constant.
+    auto library_dir = temp_dir.get() / TEST_LIBRARY_NAME;
     int res = ::mkdir(library_dir.c_str(), 0500);
     ASSERT_EQ(res, 0);
 
@@ -117,7 +118,7 @@ class FileBackedStorageFixture : public ::testing::Test {
         proto::file_storage::Config cfg;
         cfg.set_dir_path(temp_dir_.get().generic_string());
 
-        storage::LibraryPath library_path("test_lib", '.');
+        storage::LibraryPath library_path(TEST_LIBRARY_NAME, '.');
         storage_dir_ = fs::absolute(temp_dir_.get() / library_path.to_delim_path());
         storage_.emplace(library_path, storage::OpenMode::DELETE, cfg, faulty_posix_);
     }
