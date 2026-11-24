@@ -14,6 +14,7 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 
 using namespace arcticdb;
 

@@ -2,6 +2,7 @@
 
 #include <pybind11/pybind11.h>
 #include <arcticdb/pipeline/output_config.hpp>
+#include <arcticdb/util/type_handler.hpp>
 
 #include <atomic>
 #include <memory>

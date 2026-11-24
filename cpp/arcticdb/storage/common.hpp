@@ -14,7 +14,6 @@
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/s3/s3_settings.hpp>
-#include <sstream>
 
 namespace arcticdb {
 class Segment;
