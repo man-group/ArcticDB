@@ -43,6 +43,10 @@ namespace {
 static const std::string STREAM_ID{"symbol"};
 static const std::string TEST_LIBRARY_NAME{"test_lib"};
 
+// In GitHub actions, the test suite is run as root, which means all expectations about file permissions
+// are overruled. Root is allowed to do anything to files.
+bool permissions_are_enforced() { return ::geteuid() != 0; }
+
 // TODO: This really needs a good home.
 class TempDir {
   public:
@@ -89,21 +93,25 @@ TEST(FileStorageInit, FileExistsWhereLibraryWouldGo) {
 }
 
 TEST(FileStorageInit, NoPermissionToCreateLibrary) {
+    if (!permissions_are_enforced())
+        GTEST_SKIP() << "Running as root, so no PermissionException can be raised.";
     TempDir temp_dir(*::testing::UnitTest::GetInstance()->current_test_info());
     // Make sure the temp directory deletion succeeds.
     BOOST_SCOPE_EXIT(&temp_dir) { ::chmod(temp_dir.get().c_str(), 07777); }
     BOOST_SCOPE_EXIT_END
 
     // Can't even check if the directory exists.
-    ::chmod(temp_dir.get().c_str(), 0);
+    ASSERT_EQ(::chmod(temp_dir.get().c_str(), 0), 0);
     ASSERT_THROW(get_storage(temp_dir.get()), PermissionException);
 
     // Existence check succeeds, but then can't create the library directory.
-    ::chmod(temp_dir.get().c_str(), 0500);
+    ASSERT_EQ(::chmod(temp_dir.get().c_str(), 0500), 0);
     ASSERT_THROW(get_storage(temp_dir.get()), PermissionException);
 }
 
 TEST(FileStorageInit, ReadOnlyMode) {
+    if (!permissions_are_enforced())
+        GTEST_SKIP() << "Running as root makes this test a no-op.";
     TempDir temp_dir(*::testing::UnitTest::GetInstance()->current_test_info());
     // Make sure the temp directory deletion succeeds.
     BOOST_SCOPE_EXIT(&temp_dir) { ::chmod(temp_dir.get().c_str(), 07777); }
@@ -114,7 +122,7 @@ TEST(FileStorageInit, ReadOnlyMode) {
     ASSERT_EQ(res, 0);
 
     // Writing no longer possible, but if the library directory exists, should succeed.
-    ::chmod(temp_dir.get().c_str(), 0500);
+    ASSERT_EQ(::chmod(temp_dir.get().c_str(), 0500), 0);
     get_storage(temp_dir.get(), storage::OpenMode::READ);
 }
 
