@@ -1049,7 +1049,9 @@ if (NOT WIN32)
     endif()
 endif ()
 
-if(ARCTICDB_CUSTOM_ALLOCATOR)
+# On macOS libc++ is a shared library that allocates and frees std::string storage itself, in both directions, so
+# a private operator new/delete in arcticdb_ext would mix heaps. There only arcticdb::Allocator uses the allocator.
+if(ARCTICDB_CUSTOM_ALLOCATOR AND NOT APPLE)
     # Linked only into final binaries, so that arcticdb_core_static does not carry a global operator new/delete
     add_library(arcticdb_allocator_override OBJECT util/allocator_override.cpp)
     set_pdb_name_per_translation_unit(util/allocator_override.cpp)
@@ -1066,7 +1068,7 @@ set(arcticdb_pybind_module_src
 set(arcticdb_pybind_module_headers python/arctic_version.hpp)
 pybind11_add_module(arcticdb_ext MODULE ${arcticdb_pybind_module_src} ${arcticdb_pybind_module_headers})
 set_pdb_name_per_translation_unit(${arcticdb_pybind_module_src})
-if(ARCTICDB_CUSTOM_ALLOCATOR)
+if(TARGET arcticdb_allocator_override)
     target_sources(arcticdb_ext PRIVATE $<TARGET_OBJECTS:arcticdb_allocator_override>)
 endif()
 if(ARCTICDB_STATIC_LIBSTDCXX AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -1284,7 +1286,7 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
-    if(ARCTICDB_CUSTOM_ALLOCATOR)
+    if(TARGET arcticdb_allocator_override)
         target_sources(test_unit_arcticdb PRIVATE $<TARGET_OBJECTS:arcticdb_allocator_override>)
     endif()
     if(ARCTICDB_STATIC_LIBSTDCXX AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
