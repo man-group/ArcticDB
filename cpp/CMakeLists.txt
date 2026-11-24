@@ -127,6 +127,12 @@ if(ARCTICDB_CUSTOM_ALLOCATOR AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(ARCTICDB_STATIC_LIBSTDCXX ON)
 endif()
 
+# The allocator otherwise trims (malloc_trim, or its equivalent) every Allocator.TrimCount frees on Linux with glibc
+option(ARCTICDB_PERIODIC_TRIM "Trim the allocator periodically from arcticdb::Allocator on Linux" OFF)
+if(NOT ARCTICDB_PERIODIC_TRIM)
+    add_compile_definitions(ARCTICDB_NO_PERIODIC_TRIM)
+endif()
+
 if(ARCTICDB_SANITIZER_FLAGS)
     list(APPEND ARCTICDB_SANITIZER_FLAGS "-g;-fno-omit-frame-pointer;-fno-optimize-sibling-calls;")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
