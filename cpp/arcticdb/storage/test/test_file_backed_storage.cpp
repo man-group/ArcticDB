@@ -27,6 +27,11 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <functional>
+#include <map>
+#include <set>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 using namespace arcticdb;
@@ -256,34 +261,63 @@ TEST_F(FileStorageApi, IterateType) {
     ASSERT_FALSE(executed_on_missing);
 }
 
-TEST_F(FileStorageApi, IterateTypeWithPrefix) {
-    for (const std::string stream_id : {"symbol_a", "symbol_b", "other"}) {
-        auto key = storage::get_test_key(stream_id, entity::KeyType::VERSION);
-        storage().write(storage::KeySegmentPair(std::move(key), storage::get_test_segment()));
-    }
+// Both traversal APIs filter the same directory with the same rules, so the tests that differ only in which API they
+// drive are written once and parameterised over the lister.
 
-    std::set<std::string> found;
-    storage().iterate_type(
-            entity::KeyType::VERSION,
-            [&](entity::VariantKey&& found_key) { found.insert(std::get<StringId>(variant_key_id(found_key))); },
-            "symbol"
-    );
-    ASSERT_EQ(found, (std::set<std::string>{"symbol_a", "symbol_b"}));
+using StreamIdLister = std::function<std::set<std::string>(storage::Storage&, entity::KeyType, const std::string&)>;
+
+std::set<std::string> keys_listed(storage::Storage& store, entity::KeyType key_type, const std::string& prefix) {
+    return storage::list_in_store(store, key_type, prefix);
 }
 
-TEST_F(FileStorageApi, IterateTypeWithSpecialNames) {
-    // If the file encoding scheme is careless, users can use symbol names, which look like special files that
-    // would be invisible to iterate_type().
-    for (const std::string stream_id : {".tmp_symbol", ".nfs_symbol"}) {
-        auto key = storage::get_test_key(stream_id, entity::KeyType::VERSION);
-        storage().write(storage::KeySegmentPair(std::move(key), storage::get_test_segment()));
+std::set<std::string> keys_sized(storage::Storage& store, entity::KeyType key_type, const std::string& prefix) {
+    std::set<std::string> keys;
+    for (const auto& [stream_id, size] : storage::sizes_in_store(store, key_type, prefix))
+        keys.insert(stream_id);
+    return keys;
+}
+
+class FileStorageTraversal : public FileBackedStorageFixture, public ::testing::WithParamInterface<StreamIdLister> {
+  public:
+    StreamIdLister lister() const { return GetParam(); }
+};
+
+TEST_P(FileStorageTraversal, FiltersByPrefix) {
+    for (const std::string stream_id : {"symbol_a", "symbol_b", "other"})
+        write_in_store(storage(), stream_id, entity::KeyType::VERSION);
+
+    ASSERT_EQ(lister()(storage(), entity::KeyType::VERSION, "symbol"), (std::set<std::string>{"symbol_a", "symbol_b"}));
+}
+
+TEST_P(FileStorageTraversal, DoesNotSkipSpecialNames) {
+    // If the file encoding scheme is careless, users can use symbol names, which look processed to the traversal's
+    // name filters and would be invisible to it.
+    const std::set<std::string> symbols{".tmp_symbol", ".nfs_symbol"};
+    for (const std::string& stream_id : symbols)
+        write_in_store(storage(), stream_id, entity::KeyType::VERSION);
+
+    ASSERT_EQ(lister()(storage(), entity::KeyType::VERSION, ""), symbols);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FileStorageTraversalMethods, FileStorageTraversal, ::testing::Values(keys_listed, keys_sized),
+        [](const testing::TestParamInfo<StreamIdLister>& info) {
+            return info.index == 0 ? "IterateType" : "VisitObjectSizes";
+        }
+);
+
+TEST_F(FileStorageApi, VisitObjectSizes) {
+    const std::array<std::string, 3> symbols{"symbol_a", "symbol_b", "other"};
+    std::map<std::string, size_t> expected;
+    for (const std::string& stream_id : symbols) {
+        Segment segment{storage::get_test_segment()};
+        expected[stream_id] = segment.calculate_size();
+        storage().write(
+                storage::KeySegmentPair(storage::get_test_key(stream_id, entity::KeyType::VERSION), std::move(segment))
+        );
     }
 
-    std::set<std::string> found;
-    storage().iterate_type(entity::KeyType::VERSION, [&](entity::VariantKey&& found_key) {
-        found.insert(std::get<StringId>(variant_key_id(found_key)));
-    });
-    ASSERT_EQ(found, (std::set<std::string>{".tmp_symbol", ".nfs_symbol"}));
+    ASSERT_EQ(storage::sizes_in_store(storage(), entity::KeyType::VERSION), expected);
 }
 
 TEST_F(FileStorageApi, IterateTypeResilience) {
@@ -300,11 +334,7 @@ TEST_F(FileStorageApi, IterateTypeResilience) {
     BOOST_SCOPE_EXIT(&fd) { ::close(fd); }
     BOOST_SCOPE_EXIT_END
 
-    std::set<std::string> found;
-    storage().iterate_type(entity::KeyType::VERSION, [&](entity::VariantKey&& found_key) {
-        found.insert(std::get<StringId>(variant_key_id(found_key)));
-    });
-    ASSERT_EQ(found, std::set<std::string>{});
+    ASSERT_EQ(storage::list_in_store(storage(), entity::KeyType::VERSION), std::set<std::string>{});
 }
 
 using FaultParam = std::tuple<SyscallId, std::optional<PosixError>, std::string_view>;

@@ -13,6 +13,10 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
+#include <map>
+#include <set>
+#include <string>
+
 namespace arcticdb::storage {
 
 inline VariantKey get_test_key(const std::string& name, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
@@ -81,6 +85,16 @@ inline std::set<std::string> list_in_store(
             prefix
     );
     return keys;
+}
+
+inline std::map<std::string, CompressedSize> sizes_in_store(
+        Storage& store, entity::KeyType key_type, const std::string& prefix = std::string()
+) {
+    auto sizes = std::map<std::string, CompressedSize>();
+    store.visit_object_sizes(key_type, prefix, [&sizes](const VariantKey& key, CompressedSize size) {
+        sizes.emplace(std::get<StringId>(variant_key_id(key)), size);
+    });
+    return sizes;
 }
 
 inline std::set<std::string> populate_store(
