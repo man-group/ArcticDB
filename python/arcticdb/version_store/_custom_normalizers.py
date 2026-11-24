@@ -107,15 +107,22 @@ class CompositeCustomNormalizer(CustomNormalizer):
         return n.denormalize(item, norm_meta)
 
     def __setstate__(self, state):
+        # __setstate__ may be called on an instance built by object.__new__, which has not run
+        # __init__, so these have to be established here rather than assumed to already exist.
+        self._normalizers = []
+        self._normalizer_by_typename = {}
         self._fail_on_missing_type = state["fail_on_missing"]
         for cls in state["class_names"]:
             try:
                 normalizer = _fq_class_name_to_type(cls)()
-                self._normalizer_by_typename[cls] = normalizer
-                self._normalizers.append(normalizer)
             except ImportError:
-                if not self._fail_on_missing_type:
-                    continue
+                log.warning("Could not import custom normalizer type {}".format(cls))
+                if self._fail_on_missing_type:
+                    raise
+                continue
+
+            self._normalizer_by_typename[cls] = normalizer
+            self._normalizers.append(normalizer)
 
     def __getstate__(self):
         return {"class_names": list(self._normalizer_by_typename.keys()), "fail_on_missing": self._fail_on_missing_type}
