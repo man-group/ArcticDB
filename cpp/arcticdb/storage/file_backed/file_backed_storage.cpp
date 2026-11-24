@@ -252,6 +252,8 @@ class Directory : public FdHolder {
         return true;
     }
 
+    int unlinkat(const fs::path& pathname) const { return posix_.unlinkat(fd_, pathname.c_str(), 0); }
+
     // Ignore errors intentionally. This should only be used in exception handlers, where we can't throw any more
     // errors.
     void unlinkat_swallow_errors(const fs::path& pathname) const {
@@ -471,12 +473,17 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
     }
 }
 
-bool remove_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
-    const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
-    if (posix.unlink(dest_path.c_str()) != 0) {
-        // TODO: Special error handling? Retry?
-        return false;
+bool remove_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& key) {
+    const std::string key_file_name = to_tokenized_key(key);
+    const fs::path directory_path = storage_dir / entity::key_type_long_name(variant_key_type(key));
+    Directory dest_dir(posix, storage_dir, directory_path);
+    if (dest_dir.unlinkat(key_file_name.c_str()) != 0) {
+        if (errno == ENOENT)
+            return false;
+        const fs::path full_path = directory_path / key_file_name;
+        raise_io_error(errno, fmt::format("Failed to remove file {}: {}", full_path, std::strerror(errno)));
     }
+    dest_dir.sync();
     return true;
 }
 
