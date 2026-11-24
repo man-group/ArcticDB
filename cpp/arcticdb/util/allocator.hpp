@@ -31,9 +31,29 @@ uint8_t* allocate_detachable_memory(size_t size);
 // Must be used whenever memory was allocated with allocate_detachable_memory
 void free_detachable_memory(uint8_t* ptr, size_t size);
 
+// Allocates through allocate_detachable_memory(). sparrow type-erases the allocator it is given and frees through it.
+template<typename T>
+struct DetachableAllocator {
+    using value_type = T;
+
+    DetachableAllocator() = default;
+
+    template<typename U>
+    DetachableAllocator(const DetachableAllocator<U>&) noexcept {}
+
+    T* allocate(size_t n) { return reinterpret_cast<T*>(allocate_detachable_memory(n * sizeof(T))); }
+
+    void deallocate(T* p, size_t n) { free_detachable_memory(reinterpret_cast<uint8_t*>(p), n * sizeof(T)); }
+
+    template<typename U>
+    bool operator==(const DetachableAllocator<U>&) const noexcept {
+        return true;
+    }
+};
+
 // Returns the allocator used by allocate_detachable_memory(). Must be passed to sparrow when
 // creating buffers from raw pointers to ensure memory can be properly freed.
-std::allocator<uint8_t> get_detachable_allocator();
+DetachableAllocator<uint8_t> get_detachable_allocator();
 
 static constexpr uint64_t BYTES = 1;
 static constexpr uint64_t KILOBYTES = 1024 * BYTES;
