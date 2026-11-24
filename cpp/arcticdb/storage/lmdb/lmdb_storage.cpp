@@ -442,6 +442,22 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     env().set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
     env().set_max_readers(or_else(conf.max_readers(), 1024U));
     env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS | lmdb_extra_env_flags());
+    if (!conf.use_mock_storage_for_testing()) {
+        auto* raw_env = &lmdb_instance_->env_;
+        lmdb_instance_->gauge_handle_ = query_stats::register_lmdb_env_gauge(
+                [raw_env](uint64_t& map_size_bytes, uint64_t& used_bytes, uint64_t& active_readers) {
+                    MDB_envinfo info{};
+                    MDB_stat stat{};
+                    if (::mdb_env_info(raw_env->handle(), &info) == MDB_SUCCESS &&
+                        ::mdb_env_stat(raw_env->handle(), &stat) == MDB_SUCCESS) {
+                        map_size_bytes = static_cast<uint64_t>(info.me_mapsize);
+                        used_bytes = (static_cast<uint64_t>(info.me_last_pgno) + 1ULL) *
+                                     static_cast<uint64_t>(stat.ms_psize);
+                        active_readers = static_cast<uint64_t>(info.me_numreaders);
+                    }
+                }
+        );
+    }
 
     auto txn = ::lmdb::txn::begin(env());
 

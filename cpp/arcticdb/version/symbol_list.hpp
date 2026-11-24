@@ -195,8 +195,12 @@ class SymbolList {
                 return WillAttemptCompaction::NO_INSUFFICIENT_PERMISSIONS;
             return WillAttemptCompaction::YES;
         }();
+        size_t load_attempt = 0;
         LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go(
-                [this, &version_map, &store, will_attempt_compaction]() {
+                [this, &version_map, &store, will_attempt_compaction, &load_attempt]() {
+                    if (load_attempt++ > 0) {
+                        query_stats::record_write_conflict(query_stats::WriteConflictKind::SymbolListLoadRetry);
+                    }
                     return attempt_load(version_map, store, data_, will_attempt_compaction);
                 }
         );

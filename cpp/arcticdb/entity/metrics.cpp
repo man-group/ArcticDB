@@ -83,6 +83,14 @@ void PrometheusInstance::configure(const MetricsConfig& config) {
         gateway_ = std::make_shared<prometheus::Gateway>(cfg_.host, cfg_.port, cfg_.job_name, labels);
         registry_ = std::make_shared<prometheus::Registry>();
         gateway_->RegisterCollectable(registry_);
+        {
+            std::scoped_lock lock{metrics_mutex_};
+            for (const auto& c : extra_collectables_) {
+                if (!c.expired()) {
+                    gateway_->RegisterCollectable(c);
+                }
+            }
+        }
 
         arcticdb::log::version().info("Prometheus Push created with settings {}", cfg_);
 
@@ -104,6 +112,14 @@ void PrometheusInstance::configure(const MetricsConfig& config) {
 
         // 2nd arg defaults to /metrics, make explicit or parameterise
         exposer_->RegisterCollectable(registry_, "/metrics");
+        {
+            std::scoped_lock lock{metrics_mutex_};
+            for (const auto& c : extra_collectables_) {
+                if (!c.expired()) {
+                    exposer_->RegisterCollectable(c, "/metrics");
+                }
+            }
+        }
 
         arcticdb::log::version().info("Prometheus endpoint created on {}/metrics", endpoint);
     } else {
@@ -254,9 +270,51 @@ int PrometheusInstance::push() {
     }
 }
 
+void PrometheusInstance::registerCollectable(const std::weak_ptr<prometheus::Collectable>& collectable) {
+    std::scoped_lock lock{metrics_mutex_};
+    std::erase_if(extra_collectables_, [](const auto& w) { return w.expired(); });
+    for (const auto& existing : extra_collectables_) {
+        if (!existing.owner_before(collectable) && !collectable.owner_before(existing)) {
+            return;
+        }
+    }
+    extra_collectables_.push_back(collectable);
+    if (exposer_) {
+        exposer_->RegisterCollectable(collectable, "/metrics");
+    }
+    if (gateway_) {
+        gateway_->RegisterCollectable(collectable);
+    }
+}
+
+void PrometheusInstance::unregisterCollectable(const std::weak_ptr<prometheus::Collectable>& collectable) {
+    std::scoped_lock lock{metrics_mutex_};
+    std::erase_if(extra_collectables_, [&](const auto& w) {
+        return w.expired() || (!w.owner_before(collectable) && !collectable.owner_before(w));
+    });
+    if (exposer_) {
+        exposer_->RemoveCollectable(collectable, "/metrics");
+    }
+}
+
 std::vector<prometheus::MetricFamily> PrometheusInstance::get_metrics() {
     util::check(registry_, "registry_ not set");
-    return registry_->Collect();
+    auto families = registry_->Collect();
+    std::vector<std::shared_ptr<prometheus::Collectable>> live;
+    {
+        std::scoped_lock lock{metrics_mutex_};
+        live.reserve(extra_collectables_.size());
+        for (const auto& w : extra_collectables_) {
+            if (auto sp = w.lock()) {
+                live.push_back(std::move(sp));
+            }
+        }
+    }
+    for (const auto& c : live) {
+        auto extra = c->Collect();
+        families.insert(families.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+    }
+    return families;
 }
 
 } // Namespace arcticdb

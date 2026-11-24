@@ -10,6 +10,7 @@
 
 #include <aws/core/Aws.h>
 #include <aws/core/utils/logging/LogSystemInterface.h>
+#include <aws/core/utils/threading/DefaultExecutor.h>
 #ifndef WIN32
 #include <aws/core/http/HttpClientFactory.h>
 #include <aws/core/http/curl/CurlHttpClient.h>
@@ -19,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string_view>
 
 namespace arcticdb::storage::s3 {
 
@@ -41,16 +43,31 @@ class SpdlogLogSystem : public Aws::Utils::Logging::LogSystemInterface {
     std::atomic<Aws::Utils::Logging::LogLevel> log_level_;
 };
 
+// Returns the active AWS SDK operation name on the current thread (set by QueryStatsAwsMonitor), or empty.
+std::string_view current_aws_operation() noexcept;
+
+// Wraps DefaultExecutor (no eager background threads) to propagate query_stats RequestContext into async AWS calls.
+class ContextPropagatingAwsExecutor : public Aws::Utils::Threading::DefaultExecutor {
+  protected:
+    bool SubmitToThread(std::function<void()>&& fn) override;
+};
+
 #ifndef WIN32
 // Whether to set CURLOPT_DNS_SHUFFLE_ADDRESSES.
 bool dns_shuffle_addresses_enabled();
 
-// Custom client that allows setting specific cUrl options.
+// Custom client that allows setting specific cUrl options and reporting exact HTTP attempt metrics to query_stats.
 class ArcticCurlHttpClient : public Aws::Http::CurlHttpClient {
   public:
     explicit ArcticCurlHttpClient(const Aws::Client::ClientConfiguration& client_configuration);
 
     bool should_shuffle_dns_addresses() const;
+
+    std::shared_ptr<Aws::Http::HttpResponse> MakeRequest(
+            const std::shared_ptr<Aws::Http::HttpRequest>& request,
+            Aws::Utils::RateLimits::RateLimiterInterface* readLimiter = nullptr,
+            Aws::Utils::RateLimits::RateLimiterInterface* writeLimiter = nullptr
+    ) const override;
 
   protected:
     void OverrideOptionsOnConnectionHandle(CURL* connection_handle) const override;

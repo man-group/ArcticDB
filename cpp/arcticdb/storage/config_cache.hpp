@@ -15,6 +15,7 @@
 #include <arcticdb/storage/protobuf_mappings.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/storages.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <optional>
 
@@ -30,12 +31,21 @@ class ConfigCache {
         refresh_config();
     }
 
+    ~ConfigCache() {
+        query_stats::detail::adjust_config_cache_counts(
+                -static_cast<int64_t>(descriptor_map_.size()), -static_cast<int64_t>(storage_configs_.size())
+        );
+    }
+
     std::optional<LibraryDescriptor> get_descriptor(const LibraryPath& path) {
         std::lock_guard<std::mutex> lock{mutex_};
         auto descriptor = descriptor_map_.find(path);
-        if (descriptor == descriptor_map_.end())
+        if (descriptor == descriptor_map_.end()) {
+            query_stats::record_config_cache(/*hit=*/false);
             return std::nullopt;
+        }
 
+        query_stats::record_config_cache(/*hit=*/true);
         return descriptor->second;
     }
 
@@ -47,7 +57,9 @@ class ConfigCache {
     void add_library(const LibraryPath& path, const LibraryDescriptor& desc) {
         config_resolver_->add_library(environment_name_, encode_library_descriptor(desc));
         std::lock_guard<std::mutex> lock{mutex_};
-        descriptor_map_.emplace(path, desc);
+        if (descriptor_map_.emplace(path, desc).second) {
+            query_stats::detail::adjust_config_cache_counts(1, 0);
+        }
     }
 
     std::vector<LibraryPath> list_libraries(std::string_view prefix) {
@@ -120,6 +132,20 @@ class ConfigCache {
   private:
     void refresh_config() {
         std::lock_guard<std::mutex> lock{mutex_};
+        const int64_t old_libs = static_cast<int64_t>(descriptor_map_.size());
+        const int64_t old_storages = static_cast<int64_t>(storage_configs_.size());
+        struct GaugeSync {
+            const std::unordered_map<LibraryPath, LibraryDescriptor>& libs;
+            const std::unordered_map<StorageName, arcticdb::proto::storage::VariantStorage>& storages;
+            int64_t old_l;
+            int64_t old_s;
+            ~GaugeSync() noexcept {
+                query_stats::detail::adjust_config_cache_counts(
+                        static_cast<int64_t>(libs.size()) - old_l, static_cast<int64_t>(storages.size()) - old_s
+                );
+            }
+        } gauge_sync{descriptor_map_, storage_configs_, old_libs, old_storages};
+
         descriptor_map_.clear();
         storage_configs_.clear();
 

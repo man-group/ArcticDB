@@ -275,3 +275,7 @@ def reader_process(uri, lib_name, symbol, cache_interval_ns):
 | `flush()` | Clears entire cache |
 | `flush_entry()` | Clears cache for one symbol |
 | `get_version_to_read()` | Version lookup with cache bypass retry |
+
+### Query Statistics Instrumentation
+
+When `query_stats::is_active()`, `VersionMapImpl` (`cpp/arcticdb/version/version_map.hpp`) records `hits`, `misses`, `reloads` (in `check_reload`), `chain_hops` (in `follow_version_chain`), and `ref_retries` (in `load_via_ref_key`); `ConfigCache::get_descriptor` (`cpp/arcticdb/storage/config_cache.hpp`) records `hits` and `misses`. See [../python/TOOLBOX.md](../python/TOOLBOX.md).

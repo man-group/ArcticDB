@@ -50,4 +50,43 @@ void ComponentManager::update_entity_fetch_count(EntityId id, EntityFetchCount c
     registry_.get<std::atomic<EntityFetchCount>>(id).store(count);
 }
 
+uint64_t ComponentManager::count_rows(const std::vector<EntityId>& ids) const {
+    if (ids.empty()) {
+        return 0;
+    }
+    std::shared_lock lock(mtx_);
+    size_t min_col_start = std::numeric_limits<size_t>::max();
+    bool has_col_range = false;
+    if (ids.size() > 1) {
+        for (const auto id : ids) {
+            if (!registry_.valid(id)) {
+                continue;
+            }
+            if (const auto* col_range_ptr = registry_.try_get<std::shared_ptr<pipelines::ColRange>>(id);
+                col_range_ptr && *col_range_ptr) {
+                has_col_range = true;
+                min_col_start = std::min(min_col_start, (*col_range_ptr)->start());
+            }
+        }
+    }
+    uint64_t total = 0;
+    for (const auto id : ids) {
+        if (!registry_.valid(id)) {
+            continue;
+        }
+        const auto* seg_ptr = registry_.try_get<std::shared_ptr<SegmentInMemory>>(id);
+        if (!seg_ptr || !(*seg_ptr) || (*seg_ptr)->is_null()) {
+            continue;
+        }
+        if (has_col_range) {
+            if (const auto* col_range_ptr = registry_.try_get<std::shared_ptr<pipelines::ColRange>>(id);
+                col_range_ptr && *col_range_ptr && (*col_range_ptr)->start() != min_col_start) {
+                continue;
+            }
+        }
+        total += (*seg_ptr)->row_count();
+    }
+    return total;
+}
+
 } // namespace arcticdb

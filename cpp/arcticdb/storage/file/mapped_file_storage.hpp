@@ -29,6 +29,8 @@ class MappedFileStorage final : public SingleFileStorage {
 
     std::string name() const final;
 
+    query_stats::StorageBackend backend_type() const noexcept final { return query_stats::StorageBackend::MappedFile; }
+
   private:
     void do_write_raw(const uint8_t* data, size_t bytes) override;
 

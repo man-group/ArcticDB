@@ -23,6 +23,8 @@ namespace arcticdb::storage::lmdb {
 struct LmdbInstance {
     ::lmdb::env env_;
     std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
+    // Declared last so it unregisters the scrape-time gauge callback before env_ is closed.
+    query_stats::LmdbGaugeHandle gauge_handle_{};
 };
 
 /// Extra flags passed to mdb_env_open for every LMDB env, from LMDBStorage.ExtraFlags in ConfigsMap
@@ -41,6 +43,8 @@ class LmdbStorage final : public Storage {
     ~LmdbStorage() override;
 
     std::string name() const final;
+
+    query_stats::StorageBackend backend_type() const noexcept final { return query_stats::StorageBackend::Lmdb; }
 
     LmdbEnvDiagnostics diagnostics() { return lmdb_env_diagnostics(env()); }
 

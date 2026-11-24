@@ -11,6 +11,7 @@
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
@@ -115,7 +116,7 @@ static auto assign_python_strings(
 
     {
         ARCTICDB_SUBSAMPLE(CreatePythonStrings, 0)
-        py::gil_scoped_acquire gil_lock;
+        TimedGilAcquire gil_lock;
         for (const auto& [offset, count] : unique_counts) {
             const auto sv = get_string_from_pool(offset, string_pool);
             auto obj = StringCreator::create(sv, has_type_conversion);
@@ -167,7 +168,7 @@ static void assign_strings_shared(
     auto allocated = get_allocated_strings(unique_counts, shared_data, string_pool);
     auto& shared_map = *shared_data.unique_string_map();
     {
-        py::gil_scoped_acquire acquire_gil;
+        TimedGilAcquire acquire_gil;
         PyObject* obj{};
         for (auto [offset, count] : unique_counts) {
             if (auto it = allocated.find(offset); it == allocated.end()) {

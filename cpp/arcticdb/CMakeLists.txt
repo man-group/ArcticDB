@@ -1176,6 +1176,7 @@ if(${TEST})
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_s3_api.cpp
+            storage/test/test_s3_query_stats.cpp
             storage/test/test_s3_retry_strategy.cpp
             storage/test/test_storage_factory.cpp
             storage/test/common.hpp
@@ -1192,6 +1193,7 @@ if(${TEST})
             stream/test/test_row_builder.cpp
             stream/test/test_segment_aggregator.cpp
             stream/test/test_types.cpp
+            toolbox/test/test_query_stats.cpp
             util/memory_tracing.hpp
             util/test/gtest_main.cpp
             util/test/random_throw.hpp
@@ -1339,6 +1341,7 @@ if(${TEST})
             processing/test/benchmark_common.cpp
             processing/test/benchmark_resample.cpp
             processing/test/benchmark_ternary.cpp
+            toolbox/test/benchmark_query_stats.cpp
             util/test/benchmark_bitset.cpp
             version/test/benchmark_write.cpp
             version/test/benchmark_symbol_list.cpp

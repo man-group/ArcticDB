@@ -18,6 +18,7 @@
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/version/version_constants.hpp>
 #include <arcticdb/version/python_bindings_common.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -113,7 +114,7 @@ std::vector<timestamp> generate_buckets(
         return {};
     }
     const timestamp rule_ns = [](std::string_view rule) {
-        py::gil_scoped_acquire acquire_gil;
+        TimedGilAcquire acquire_gil;
         return python_util::pd_to_offset(rule);
     }(rule);
     const auto [start_with_offset, end_with_offset] =

@@ -21,6 +21,7 @@
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/schema_combine.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 namespace arcticdb {
 
@@ -58,6 +59,10 @@ struct ClauseInfo {
     std::variant<KeepCurrentIndex, KeepCurrentTopLevelIndex, NewIndex> index_{KeepCurrentIndex()};
     // Whether this clause operates on one or multiple symbols
     bool multi_symbol_{false};
+    // Clause category for low-cardinality query_stats attribution
+    query_stats::ClauseKind clause_kind_{query_stats::ClauseKind::Other};
+
+    explicit ClauseInfo(query_stats::ClauseKind kind = query_stats::ClauseKind::Other) noexcept : clause_kind_(kind) {}
 };
 
 // Changes how the clause behaves based on information only available after it is constructed
