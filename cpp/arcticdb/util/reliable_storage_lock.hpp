@@ -100,6 +100,7 @@ class ReliableStorageLockGuard {
   private:
     void cleanup_on_lost_lock();
     const ReliableStorageLock<> lock_;
+    std::mutex state_mutex_;
     std::optional<AcquiredLockId> acquired_lock_;
     std::optional<folly::Func> on_lost_lock_;
     folly::FunctionScheduler extend_lock_heartbeat_;

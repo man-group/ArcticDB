@@ -251,7 +251,7 @@ void add_journal_entry(JournalMapType& update_map, const AtomKey& key) {
 
 void sort_journal_map(JournalMapType& update_map) {
     for (auto& [symbol, keys] : update_map) {
-        std::sort(keys.begin(), keys.end(), [](const JournalEntryData& a, const JournalEntryData& b) {
+        std::stable_sort(keys.begin(), keys.end(), [](const JournalEntryData& a, const JournalEntryData& b) {
             auto a_ver = a.is_new_style ? a.key_version_id : VersionId{0};
             auto b_ver = b.is_new_style ? b.key_version_id : VersionId{0};
             return std::tie(a_ver, a.creation_ts) < std::tie(b_ver, b.creation_ts);
@@ -959,6 +959,115 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
                         .count()
         ));
         query_stats::record_compaction(query_stats::CompactionKind::SymbolList, input_keys, 1ULL, dur_ns);
+    }
+}
+
+bool SymbolList::apply_mutations_and_compact(
+        const std::shared_ptr<Store>& store, const std::vector<Mutation>& mutations
+) {
+    if (mutations.empty()) {
+        return true;
+    }
+
+    // Coalesce multiple mutations for the same symbol in arrival order so the final causal
+    // mutation wins deterministically (even when ADD and DELETE share the same reference_id).
+    ankerl::unordered_dense::map<StreamId, size_t> last_idx_by_symbol;
+    last_idx_by_symbol.reserve(mutations.size());
+    for (size_t idx = 0; idx < mutations.size(); ++idx) {
+        last_idx_by_symbol[mutations[idx].symbol] = idx;
+    }
+
+    auto fallback_write_journals = [&]() {
+        for (size_t idx = 0; idx < mutations.size(); ++idx) {
+            const auto& m = mutations[idx];
+            if (last_idx_by_symbol.at(m.symbol) != idx) {
+                continue;
+            }
+            write_journal(store, m.symbol, m.action, m.reference_id);
+        }
+    };
+
+    if (store->open_mode() < storage::OpenMode::DELETE) {
+        fallback_write_journals();
+        return false;
+    }
+
+    bool committed = false;
+    try {
+        StorageLock lock{StringId{CompactionLockName}};
+        if (!lock.try_lock(store)) {
+            ARCTICDB_RUNTIME_DEBUG(
+                    log::symbol(),
+                    "apply_mutations_and_compact falling back to journal writes: compaction lock busy"
+            );
+            fallback_write_journals();
+            return false;
+        }
+        OnExit x([&lock, &store] { lock.unlock(store); });
+
+        auto version_map = data_.version_map_;
+        size_t load_attempt = 0;
+        LoadResult load_result =
+                ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store, &load_attempt]() {
+                    if (load_attempt++ > 0) {
+                        query_stats::record_write_conflict(query_stats::WriteConflictKind::SymbolListLoadRetry);
+                    }
+                    return attempt_load(version_map, store, data_, WillAttemptCompaction::YES);
+                });
+
+        if (has_recent_compaction(store, load_result.journal_.compaction_key)) {
+            query_stats::record_write_conflict(query_stats::WriteConflictKind::ConcurrentSymbolListCompaction);
+            fallback_write_journals();
+            return false;
+        }
+
+        // Use store->current_timestamp() to match write_journal()'s clock domain and assign
+        // strictly monotonic timestamps per mutation.
+        const timestamp base_ts = store->current_timestamp();
+        JournalMapType batch_map;
+        batch_map.reserve(last_idx_by_symbol.size());
+        for (size_t idx = 0; idx < mutations.size(); ++idx) {
+            const auto& m = mutations[idx];
+            if (last_idx_by_symbol.at(m.symbol) != idx) {
+                continue;
+            }
+            const timestamp ts = base_ts + static_cast<timestamp>(idx);
+            batch_map[m.symbol].emplace_back(m.reference_id, ts, m.action);
+        }
+        sort_journal_map(batch_map);
+
+        auto merged_symbols =
+                merge_existing_with_journal_map(version_map, store, batch_map, std::move(load_result.symbols_));
+
+        const bool qs_active = query_stats::is_active();
+        const auto qs_start = qs_active ? std::chrono::steady_clock::now() : query_stats::TimePoint{};
+        const uint64_t input_keys =
+                static_cast<uint64_t>(load_result.journal_.total_key_count + mutations.size());
+        const StreamId& type_holder = mutations.front().symbol;
+        auto written = write_symbols(store, std::move(merged_symbols), compaction_id, type_holder);
+        committed = true;
+        delete_superseded_keys(store, load_result.journal_, std::get<AtomKey>(written));
+        if (qs_active) {
+            const auto dur_ns = static_cast<uint64_t>(std::max<int64_t>(
+                    0,
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - qs_start)
+                            .count()
+            ));
+            query_stats::record_compaction(query_stats::CompactionKind::SymbolList, input_keys, 1ULL, dur_ns);
+        }
+        return true;
+    } catch (const std::exception& ex) {
+        if (committed) {
+            log::symbol().warn(
+                    "apply_mutations_and_compact succeeded writing compacted symbol list, "
+                    "but cleanup failed (skipping journal fallback): {}",
+                    ex.what()
+            );
+            return true;
+        }
+        log::symbol().warn("apply_mutations_and_compact falling back to journal writes: {}", ex.what());
+        fallback_write_journals();
+        return false;
     }
 }
 

@@ -307,29 +307,42 @@ inline ReliableStorageLockGuard::ReliableStorageLockGuard(
         const ReliableStorageLock<>& lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock
 ) :
     lock_(lock),
-    acquired_lock_(std::nullopt),
+    acquired_lock_(acquired_lock),
     on_lost_lock_(std::move(on_lost_lock)) {
-    acquired_lock_ = acquired_lock;
     // We heartbeat 5 times per lock timeout to extend the lock.
     auto hearbeat_frequency = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::nanoseconds(lock_.timeout() / EXTENDS_PER_TIMEOUT)
     );
     extend_lock_heartbeat_.addFunction(
             [that = this]() {
-                if (that->acquired_lock_.has_value()) {
+                std::optional<AcquiredLockId> current_lock;
+                {
+                    std::lock_guard lock(that->state_mutex_);
+                    current_lock = that->acquired_lock_;
+                }
+                if (current_lock.has_value()) {
                     try {
-                        auto result = that->lock_.try_extend_lock(that->acquired_lock_.value());
+                        auto result = that->lock_.try_extend_lock(current_lock.value());
+                        bool lost = false;
                         util::variant_match(
                                 result,
-                                [&](AcquiredLock& acquired_lock) { that->acquired_lock_ = acquired_lock; },
+                                [&](AcquiredLock& acquired_lock) {
+                                    std::lock_guard lock(that->state_mutex_);
+                                    if (that->acquired_lock_.has_value()) {
+                                        that->acquired_lock_ = acquired_lock;
+                                    }
+                                },
                                 [&](LockInUse&) {
                                     // Clean up if we have lost the lock.
                                     log::lock().error("Unexpectedly lost the lock in heartbeating thread. Maybe lock "
                                                       "timeout is too small.");
-                                    that->cleanup_on_lost_lock();
+                                    lost = true;
                                 }
                         );
-                    } catch (StorageException& e) {
+                        if (lost) {
+                            that->cleanup_on_lost_lock();
+                        }
+                    } catch (const StorageException& e) {
                         // If we get an unexpected storage exception (e.g. network error) we declare the lock as lost
                         // and still need to exit the heartbeating thread gracefully.
                         log::lock().error(
@@ -351,16 +364,30 @@ inline ReliableStorageLockGuard::ReliableStorageLockGuard(
 inline void ReliableStorageLockGuard::cleanup_on_lost_lock() {
     // We do not use shutdown because we don't want to run it from within a FunctionScheduler thread to avoid a deadlock
     extend_lock_heartbeat_.cancelAllFunctions();
-    if (on_lost_lock_.has_value()) {
-        on_lost_lock_.value()();
+    std::optional<folly::Func> callback;
+    {
+        std::lock_guard lock(state_mutex_);
+        acquired_lock_.reset();
+        callback = std::move(on_lost_lock_);
+        on_lost_lock_.reset();
+    }
+    if (callback.has_value() && *callback) {
+        (*callback)();
     }
 }
 
 inline ReliableStorageLockGuard::~ReliableStorageLockGuard() {
     extend_lock_heartbeat_.shutdown();
-    if (acquired_lock_.has_value()) {
+    std::optional<AcquiredLockId> lock_to_free;
+    {
+        std::lock_guard lock(state_mutex_);
+        lock_to_free = acquired_lock_;
+        acquired_lock_.reset();
+        on_lost_lock_.reset();
+    }
+    if (lock_to_free.has_value()) {
         try {
-            lock_.free_lock(acquired_lock_.value());
+            lock_.free_lock(lock_to_free.value());
         } catch (const std::exception& e) {
             log::lock().error("Failed to free lock: {}", e.what());
         }
@@ -368,10 +395,18 @@ inline ReliableStorageLockGuard::~ReliableStorageLockGuard() {
 }
 
 inline void ReliableStorageLockGuard::set_on_lost_lock(folly::Func&& on_lost_lock) {
-    on_lost_lock_ = std::make_optional<folly::Func>(std::move(on_lost_lock));
-    if (!acquired_lock_.has_value()) {
-        // Lock was lost before we set on_lost_lock. Running callback immediately.
-        on_lost_lock_.value()();
+    std::optional<folly::Func> immediate_callback;
+    {
+        std::lock_guard lock(state_mutex_);
+        if (!acquired_lock_.has_value()) {
+            // Lock was lost before we set on_lost_lock. Running callback immediately outside state_mutex_.
+            immediate_callback = std::move(on_lost_lock);
+        } else {
+            on_lost_lock_ = std::move(on_lost_lock);
+        }
+    }
+    if (immediate_callback.has_value() && *immediate_callback) {
+        (*immediate_callback)();
     }
 }
 

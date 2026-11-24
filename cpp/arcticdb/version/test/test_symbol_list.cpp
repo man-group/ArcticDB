@@ -15,7 +15,9 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/version/test/symbol_list_backwards_compat.hpp>
 
+#include <chrono>
 #include <shared_mutex>
+#include <thread>
 
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
@@ -1182,4 +1184,205 @@ TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPathWithTrueDeletes) {
     // Verify new symbols are present
     for (int i = 50; i < 60; ++i)
         EXPECT_EQ(direct_result.count(StreamId{fmt::format("sym_{}", i)}), 1u);
+}
+
+TEST_F(SymbolListSuite, ApplyMutationsAndCompactSameBatchAddDeleteOrdering) {
+    write_initial_compaction_key();
+
+    std::vector<SymbolList::Mutation> mutations;
+    std::set<StreamId> expected;
+
+    // Same-version {ADD, DELETE} must deterministically yield absent; {DELETE, ADD} must yield present.
+    for (int i = 0; i < 16; ++i) {
+        const StreamId add_del{fmt::format("add_del_{}", i)};
+        mutations.push_back(SymbolList::Mutation{add_del, 0, ActionType::ADD});
+        mutations.push_back(SymbolList::Mutation{add_del, 0, ActionType::DELETE});
+
+        const StreamId del_add{fmt::format("del_add_{}", i)};
+        mutations.push_back(SymbolList::Mutation{del_add, 0, ActionType::DELETE});
+        mutations.push_back(SymbolList::Mutation{del_add, 0, ActionType::ADD});
+        expected.insert(del_add);
+    }
+
+    // Multi-step same-batch transitions for a single symbol.
+    mutations.push_back(SymbolList::Mutation{StreamId{"add_del_add"}, 0, ActionType::ADD});
+    mutations.push_back(SymbolList::Mutation{StreamId{"add_del_add"}, 0, ActionType::DELETE});
+    mutations.push_back(SymbolList::Mutation{StreamId{"add_del_add"}, 0, ActionType::ADD});
+    expected.insert(StreamId{"add_del_add"});
+
+    mutations.push_back(SymbolList::Mutation{StreamId{"del_add_del"}, 0, ActionType::DELETE});
+    mutations.push_back(SymbolList::Mutation{StreamId{"del_add_del"}, 0, ActionType::ADD});
+    mutations.push_back(SymbolList::Mutation{StreamId{"del_add_del"}, 0, ActionType::DELETE});
+
+    mutations.push_back(SymbolList::Mutation{StreamId{"add_del_v1"}, 0, ActionType::ADD});
+    mutations.push_back(SymbolList::Mutation{StreamId{"add_del_v1"}, 0, ActionType::DELETE});
+    mutations.push_back(SymbolList::Mutation{StreamId{"add_del_v1"}, 1, ActionType::ADD});
+    expected.insert(StreamId{"add_del_v1"});
+
+    mutations.push_back(SymbolList::Mutation{StreamId{"recreate_reset_v0"}, 2, ActionType::DELETE});
+    mutations.push_back(SymbolList::Mutation{StreamId{"recreate_reset_v0"}, 0, ActionType::ADD});
+    expected.insert(StreamId{"recreate_reset_v0"});
+
+    ASSERT_TRUE(symbol_list_->apply_mutations_and_compact(store_, mutations));
+    EXPECT_TRUE(is_compacted(store_));
+    EXPECT_EQ(symbol_list_->get_symbol_set(store_), expected);
+
+    // Verify the lock-contention journal fallback path also preserves causal final state per symbol.
+    StorageLock lock{StringId{CompactionLockName}};
+    ASSERT_TRUE(lock.try_lock(store_));
+    std::vector<SymbolList::Mutation> fallback_mutations = {
+            SymbolList::Mutation{StreamId{"fb_add_del"}, 0, ActionType::ADD},
+            SymbolList::Mutation{StreamId{"fb_add_del"}, 0, ActionType::DELETE},
+            SymbolList::Mutation{StreamId{"fb_del_add"}, 0, ActionType::DELETE},
+            SymbolList::Mutation{StreamId{"fb_del_add"}, 0, ActionType::ADD},
+    };
+    EXPECT_FALSE(symbol_list_->apply_mutations_and_compact(store_, fallback_mutations));
+    lock.unlock(store_);
+
+    expected.insert(StreamId{"fb_del_add"});
+    auto got_after_fallback = symbol_list_->get_symbols(store_, true);
+    std::set<StreamId> got_after_fallback_set(got_after_fallback.begin(), got_after_fallback.end());
+    EXPECT_EQ(got_after_fallback_set, expected);
+}
+
+TEST_F(SymbolListSuite, ApplyMutationsAndCompactMatchesWriteJournalClockDomain) {
+    // 1. Real AsyncStore<SysClock>: mutating journal-created and previously-compacted symbols after
+    //    MinIntervalNs must not trigger spurious clock-domain conflicts against live VersionMap entries.
+    {
+        ScopedConfig min_interval("SymbolList.MinIntervalNs", 1'000'000); // 1 ms
+        auto version_store = get_test_engine();
+        const auto& store = version_store._test_get_store();
+        auto vm = std::make_shared<VersionMap>();
+        SymbolList sl{vm};
+        sl.compact(store);
+
+        for (const char* name : {"sym_keep", "sym_compacted", "sym_journal"}) {
+            auto key = atom_key_builder()
+                               .version_id(0)
+                               .creation_ts(store->current_timestamp())
+                               .build(StreamId{std::string{name}}, KeyType::TABLE_INDEX);
+            vm->write_version(store, key, std::nullopt);
+        }
+        SymbolList::add_symbol(store, StreamId{"sym_keep"}, 0);
+        SymbolList::add_symbol(store, StreamId{"sym_compacted"}, 0);
+        sl.compact(store);
+        SymbolList::add_symbol(store, StreamId{"sym_journal"}, 0);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+        ASSERT_TRUE(sl.apply_mutations_and_compact(
+                store,
+                {SymbolList::Mutation{StreamId{"sym_compacted"}, 0, ActionType::DELETE},
+                 SymbolList::Mutation{StreamId{"sym_journal"}, 0, ActionType::DELETE}}
+        ));
+        EXPECT_TRUE(is_compacted(store));
+        EXPECT_THAT(sl.get_symbols(store, true), ElementsAre(StreamId{"sym_keep"}));
+    }
+
+    // 2. Store with clock domain far ahead of SysClock::coarse_nanos_since_epoch(): must still match
+    //    store->current_timestamp() and avoid spurious conflict resolution on all platforms.
+    {
+        const timestamp saved_clock = PilotedClock::time_.load();
+        struct ClockGuard {
+            timestamp saved;
+            ~ClockGuard() { PilotedClock::time_.store(saved); }
+        } guard{saved_clock};
+
+        PilotedClock::time_.store(4'000'000'000'000'000'000LL);
+        ScopedConfig min_interval("SymbolList.MinIntervalNs", 10);
+        write_initial_compaction_key();
+
+        for (const char* name : {"shifted_keep", "shifted_del"}) {
+            auto key = atom_key_builder()
+                               .version_id(0)
+                               .creation_ts(store_->current_timestamp())
+                               .build(StreamId{std::string{name}}, KeyType::TABLE_INDEX);
+            version_map_->write_version(store_, key, std::nullopt);
+            SymbolList::add_symbol(store_, StreamId{std::string{name}}, 0);
+        }
+
+        PilotedClock::time_ += 1'000'000;
+        ASSERT_TRUE(symbol_list_->apply_mutations_and_compact(
+                store_, {SymbolList::Mutation{StreamId{"shifted_del"}, 0, ActionType::DELETE}}
+        ));
+        EXPECT_TRUE(is_compacted(store_));
+        EXPECT_THAT(symbol_list_->get_symbols(store_, true), ElementsAre(StreamId{"shifted_keep"}));
+    }
+}
+
+TEST_F(SymbolListSuite, SymbolListCompactNoDuplicateJournalAfterWriteSymbolsFailure) {
+    ScopedConfig lock_wait("StorageLock.WaitMs", 1);
+    const timestamp saved_clock = PilotedClock::time_.load();
+    struct ClockGuard {
+        timestamp saved;
+        ~ClockGuard() { PilotedClock::time_.store(saved); }
+    } guard{saved_clock};
+
+    write_initial_compaction_key();
+    const StreamId pre_existing{"pre_existing"};
+    const StreamId sym_a{"sym_a"};
+    const StreamId sym_b{"sym_b"};
+    const StreamId sym_c{"sym_c"};
+
+    auto pre_key = atom_key_builder()
+                           .version_id(0)
+                           .creation_ts(store_->current_timestamp())
+                           .build(pre_existing, KeyType::TABLE_INDEX);
+    version_map_->write_version(store_, pre_key, std::nullopt);
+    SymbolList::add_symbol(store_, pre_existing, 0);
+
+    // Advance clock so the new compaction key has a distinct timestamp from the initial compaction key.
+    PilotedClock::time_ += 1'000'000;
+
+    // 1. Fail delete_superseded_keys() AFTER write_symbols() commits: must NOT fall back to writing
+    //    duplicate journal keys for sym_a / sym_b.
+    StorageFailureSimulator::instance()->configure({{FailureType::DELETE, RAISE_ONCE}});
+    EXPECT_TRUE(symbol_list_->apply_mutations_and_compact(
+            store_,
+            {SymbolList::Mutation{sym_a, 0, ActionType::ADD}, SymbolList::Mutation{sym_b, 0, ActionType::ADD}}
+    ));
+    StorageFailureSimulator::reset();
+
+    size_t compaction_keys = 0;
+    std::vector<std::string> journal_symbols;
+    for (const auto& vk : get_symbol_list_keys()) {
+        const auto ak = to_atom(vk);
+        if (ak.id() == StreamId{std::string{CompactionId}}) {
+            ++compaction_keys;
+        } else {
+            journal_symbols.push_back(std::get<std::string>(ak.start_index()));
+        }
+    }
+    EXPECT_EQ(compaction_keys, 2u);
+    EXPECT_THAT(journal_symbols, ElementsAre("pre_existing"));
+    EXPECT_THAT(symbol_list_->get_symbols(store_, true), ElementsAre(pre_existing, sym_a, sym_b));
+
+    // A subsequent compaction cleanly removes all superseded keys.
+    PilotedClock::time_ += 1'000'000;
+    symbol_list_->compact(store_);
+    EXPECT_TRUE(is_compacted(store_));
+    EXPECT_THAT(symbol_list_->get_symbols(store_, true), ElementsAre(pre_existing, sym_a, sym_b));
+
+    // 2. Fail write_symbols() BEFORE commit (WRITE #1 = try_lock succeeds, WRITE #2 = write_symbols throws):
+    //    must still fall back to journal write so sym_c is durably persisted.
+    PilotedClock::time_ += 1'000'000;
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE, RAISE_ON_2ND_CALL}});
+    EXPECT_FALSE(symbol_list_->apply_mutations_and_compact(
+            store_, {SymbolList::Mutation{sym_c, 0, ActionType::ADD}}
+    ));
+    StorageFailureSimulator::reset();
+
+    size_t post_fallback_compaction_keys = 0;
+    std::vector<std::string> post_fallback_journals;
+    for (const auto& vk : get_symbol_list_keys()) {
+        const auto ak = to_atom(vk);
+        if (ak.id() == StreamId{std::string{CompactionId}}) {
+            ++post_fallback_compaction_keys;
+        } else {
+            post_fallback_journals.push_back(std::get<std::string>(ak.start_index()));
+        }
+    }
+    EXPECT_EQ(post_fallback_compaction_keys, 1u);
+    EXPECT_THAT(post_fallback_journals, ElementsAre("sym_c"));
+    EXPECT_THAT(symbol_list_->get_symbols(store_, true), ElementsAre(pre_existing, sym_a, sym_b, sym_c));
 }
