@@ -481,7 +481,7 @@ bool remove_impl(PosixInterface& posix, const fs::path& storage_dir, const Varia
         if (errno == ENOENT)
             return false;
         const fs::path full_path = directory_path / key_file_name;
-        raise_io_error(errno, fmt::format("Failed to remove file {}: {}", full_path, std::strerror(errno)));
+        raise_io_error(errno, fmt::format("Failed to remove file {}: {}", full_path.c_str(), std::strerror(errno)));
     }
     dest_dir.sync();
     return true;
