@@ -18,11 +18,29 @@
 
 namespace arcticdb {
 
-uint8_t* allocate_detachable_memory(size_t size) { return get_detachable_allocator().allocate(size); }
+// With a custom allocator, detachable memory comes straight from it. On macOS operator new is not overridden, so
+// going through std::allocator would leave the Arrow and numpy output buffers on the system allocator.
+uint8_t* allocate_detachable_memory(size_t size) {
+#if defined(ARCTICDB_ALLOCATOR_MIMALLOC) || defined(ARCTICDB_ALLOCATOR_JEMALLOC) || defined(ARCTICDB_ALLOCATOR_TCMALLOC)
+    auto* ptr = static_cast<uint8_t*>(allocator_backend::allocate(size == 0 ? 1 : size));
+    if (ptr == nullptr)
+        throw std::bad_alloc();
+    return ptr;
+#else
+    return std::allocator<uint8_t>().allocate(size);
+#endif
+}
 
-void free_detachable_memory(uint8_t* ptr, size_t size) { get_detachable_allocator().deallocate(ptr, size); }
+void free_detachable_memory(uint8_t* ptr, size_t size) {
+#if defined(ARCTICDB_ALLOCATOR_MIMALLOC) || defined(ARCTICDB_ALLOCATOR_JEMALLOC) || defined(ARCTICDB_ALLOCATOR_TCMALLOC)
+    (void)size;
+    allocator_backend::deallocate(ptr);
+#else
+    std::allocator<uint8_t>().deallocate(ptr, size);
+#endif
+}
 
-std::allocator<uint8_t> get_detachable_allocator() { return std::allocator<uint8_t>(); }
+DetachableAllocator<uint8_t> get_detachable_allocator() { return {}; }
 
 bool use_slab_allocator() {
     static const bool use_it = ConfigsMap::instance()->get_int("Allocator.UseSlabAllocator", 1);
