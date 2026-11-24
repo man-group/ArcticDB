@@ -214,7 +214,7 @@ void AllocatorImpl<TracingPolicy, ClockType>::internal_free(uint8_t* p) {
     }
 #else
     allocator_backend::deallocate(p);
-#if defined(__linux__) && defined(__GLIBC__)
+#if defined(__linux__) && defined(__GLIBC__) && !defined(ARCTICDB_NO_PERIODIC_TRIM)
     free_count_.increment(1);
     maybe_trim();
 #endif
