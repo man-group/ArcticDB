@@ -49,6 +49,26 @@ if(${ARCTICDB_ENABLE_PERFORMANCE_SAMPLING})
     find_package(unofficial-perfetto CONFIG REQUIRED)
 endif()
 
+if(ARCTICDB_CUSTOM_ALLOCATOR)
+    add_library(arcticdb_allocator INTERFACE)
+    if(ARCTICDB_ALLOCATOR STREQUAL "mimalloc")
+        find_package(mimalloc CONFIG REQUIRED)
+        target_link_libraries(arcticdb_allocator INTERFACE $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>)
+    else()
+        # The jemalloc and gperftools ports install no CMake package
+        if(ARCTICDB_ALLOCATOR STREQUAL "jemalloc")
+            find_path(ARCTICDB_ALLOCATOR_INCLUDE_DIR jemalloc/jemalloc.h REQUIRED)
+            find_library(ARCTICDB_ALLOCATOR_LIBRARY NAMES libjemalloc_pic.a libjemalloc.a REQUIRED)
+        else()
+            find_path(ARCTICDB_ALLOCATOR_INCLUDE_DIR gperftools/tcmalloc.h REQUIRED)
+            find_library(ARCTICDB_ALLOCATOR_LIBRARY NAMES libtcmalloc_minimal.a REQUIRED)
+        endif()
+        target_include_directories(arcticdb_allocator INTERFACE ${ARCTICDB_ALLOCATOR_INCLUDE_DIR})
+        target_link_libraries(arcticdb_allocator INTERFACE ${ARCTICDB_ALLOCATOR_LIBRARY})
+    endif()
+    message(STATUS "ArcticDB allocator: ${ARCTICDB_ALLOCATOR} ${ARCTICDB_ALLOCATOR_LIBRARY}")
+endif()
+
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -408,6 +428,7 @@ set(arcticdb_srcs
         toolbox/storage_mover.hpp
         toolbox/query_stats.hpp
         util/allocator.hpp
+        util/allocator_backend.hpp
         util/allocation_tracing.hpp
         util/bitset.hpp
         util/buffer.hpp
@@ -835,6 +856,10 @@ if(${ARCTICDB_COUNT_ALLOCATIONS})
     )
 endif()
 
+if(ARCTICDB_CUSTOM_ALLOCATOR)
+    list(APPEND arcticdb_core_libraries arcticdb_allocator)
+endif()
+
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
     # Even though python is transitive dependency MSVS builds fail if we don't link against python explicitly
     # TODO: Figure out why
@@ -1024,6 +1049,16 @@ if (NOT WIN32)
     endif()
 endif ()
 
+# On macOS libc++ is a shared library that allocates and frees std::string storage itself, in both directions, so
+# a private operator new/delete in arcticdb_ext would mix heaps. There only arcticdb::Allocator uses the allocator.
+if(ARCTICDB_CUSTOM_ALLOCATOR AND NOT APPLE)
+    # Linked only into final binaries, so that arcticdb_core_static does not carry a global operator new/delete
+    add_library(arcticdb_allocator_override OBJECT util/allocator_override.cpp)
+    set_pdb_name_per_translation_unit(util/allocator_override.cpp)
+    target_include_directories(arcticdb_allocator_override PRIVATE ${CMAKE_SOURCE_DIR})
+    target_link_libraries(arcticdb_allocator_override PRIVATE arcticdb_allocator)
+endif()
+
 ## arcticdb_ext python module
 # This configures: linking to Python::Module + pybind, output pre-/suf-fix, -fvisibility=hidden, strip release build
 set(arcticdb_pybind_module_src
@@ -1033,6 +1068,16 @@ set(arcticdb_pybind_module_src
 set(arcticdb_pybind_module_headers python/arctic_version.hpp)
 pybind11_add_module(arcticdb_ext MODULE ${arcticdb_pybind_module_src} ${arcticdb_pybind_module_headers})
 set_pdb_name_per_translation_unit(${arcticdb_pybind_module_src})
+if(TARGET arcticdb_allocator_override)
+    target_sources(arcticdb_ext PRIVATE $<TARGET_OBJECTS:arcticdb_allocator_override>)
+endif()
+if(ARCTICDB_STATIC_LIBSTDCXX AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # The version script binds arcticdb_ext's calls to its own operator new/delete and libstdc++ copy at link time,
+    # and keeps them out of the dynamic symbol table, where other extensions could resolve to them.
+    set(_arcticdb_ext_version_script "${CMAKE_CURRENT_BINARY_DIR}/arcticdb_ext.map")
+    file(WRITE "${_arcticdb_ext_version_script}" "{ global: PyInit_arcticdb_ext; local: *; };\n")
+    target_link_options(arcticdb_ext PRIVATE -static-libstdc++ -Wl,--version-script=${_arcticdb_ext_version_script})
+endif()
 
 if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -1241,6 +1286,12 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
+    if(TARGET arcticdb_allocator_override)
+        target_sources(test_unit_arcticdb PRIVATE $<TARGET_OBJECTS:arcticdb_allocator_override>)
+    endif()
+    if(ARCTICDB_STATIC_LIBSTDCXX AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_options(test_unit_arcticdb PRIVATE -static-libstdc++)
+    endif()
 
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
