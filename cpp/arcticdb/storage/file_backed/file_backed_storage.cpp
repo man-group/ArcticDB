@@ -14,6 +14,7 @@
 
 #ifdef __linux__
 
+#include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/log/log.hpp>
@@ -27,13 +28,17 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/error_code.hpp>
 
-#include <cstring>
+#include <boost/iterator/iterator_facade.hpp>
 #include <fmt/format.h>
 
+#include <cstring>
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <random>
-#include <stack>
-#include <stdexcept>
+#include <ranges>
+#include <string_view>
+#include <vector>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -91,7 +96,7 @@ bool is_silly_rename(std::string_view file_name) noexcept { return file_name.sta
 
 bool is_dot_dir(std::string_view file_name) noexcept { return file_name == "." || file_name == ".."; }
 
-bool skip_during_listing(std::string_view file_name) noexcept {
+bool is_skipped_name(std::string_view file_name) noexcept {
     return is_tmp_file_name(file_name) || is_silly_rename(file_name) || is_dot_dir(file_name);
 }
 
@@ -304,17 +309,146 @@ class File : public FdHolder {
     }
 };
 
-// TODO: Delete me
-class DirCloser {
+// Owns a directory stream opened through PosixInterface, so that fault injection sees the closedir.
+class DirHandle {
   public:
-    DirCloser(DIR* dirp) noexcept : dirp_(dirp) {}
-    ~DirCloser() { ::closedir(dirp_); }
+    DirHandle(PosixInterface& posix, DIR* dirp) : posix_(posix), dirp_(dirp) {}
+    ~DirHandle() {
+        if (posix_.closedir(dirp_) != 0)
+            log::storage().warn("Failed to close directory: {}", std::strerror(errno));
+    }
 
-    ARCTICDB_NO_MOVE_OR_COPY(DirCloser);
+    ARCTICDB_NO_MOVE_OR_COPY(DirHandle);
+
+    DIR* get() const noexcept { return dirp_; }
 
   private:
+    PosixInterface& posix_;
     DIR* dirp_;
 };
+
+// Borrowed reference to memory owned by FileTraversal.
+struct FileEntry {
+    std::string_view name;
+    const fs::path& directory;
+
+    FileEntry(std::string_view name, fs::path& directory) : name(name), directory(directory) {}
+    ARCTICDB_NO_MOVE_OR_COPY(FileEntry);
+};
+
+// Traverses all files recursively under the directory root.
+// Satisfies the single pass range concept.
+// Its value type is `FileEntry`.
+// Warning on lifetimes: The yielded `FileEntry` is invalidated if FileTraversal is destroyed
+// or if the iterator is advanced. Entries can be processed within a loop body. Storing one
+// elsewhere is impossible because FileEntry is not copyable or movable.
+class FileTraversal {
+  public:
+    explicit FileTraversal(PosixInterface& posix, const fs::path& root) : posix_(posix) {
+        open_directory(root);
+        advance();
+    }
+
+    ARCTICDB_NO_MOVE_OR_COPY(FileTraversal);
+
+    class Iterator : public boost::iterator_facade<Iterator, FileEntry, boost::single_pass_traversal_tag, FileEntry> {
+      public:
+        // boost::iterator_facade falls back to its own single_pass_traversal_tag category when the value type is not
+        // movable, and the ranges machinery rejects a category that is not a standard tag.
+        using iterator_concept = std::input_iterator_tag;
+
+        Iterator() = default;
+        explicit Iterator(FileTraversal* traversal) : traversal_(traversal) {}
+
+      private:
+        friend class boost::iterator_core_access;
+
+        void increment() {
+            traversal_->advance();
+            if (traversal_->current_name_.empty())
+                traversal_ = nullptr;
+        }
+
+        bool equal(const Iterator& other) const { return traversal_ == other.traversal_; }
+
+        FileEntry dereference() const { return FileEntry{traversal_->current_name_, traversal_->stack_.back().path}; }
+
+        // Null once the traversal is exhausted. Copies share the position, as a single pass stream must.
+        FileTraversal* traversal_ = nullptr;
+    };
+
+    Iterator begin() { return Iterator{current_name_.empty() ? nullptr : this}; }
+    Iterator end() { return Iterator{}; }
+
+  private:
+    struct DirLevel {
+        fs::path path;
+        std::unique_ptr<DirHandle> handle;
+    };
+
+    void advance() {
+        current_name_ = {};
+        while (!stack_.empty()) {
+            DirLevel& level = stack_.back();
+            errno = 0;
+            struct dirent* dir_entry = posix_.readdir(level.handle->get());
+            if (!dir_entry) {
+                if (errno != 0 && errno != ENOENT)
+                    raise_io_error(errno, fmt::format("Failed to list directory {}", level.path.c_str()));
+                stack_.pop_back();
+                continue;
+            }
+
+            std::string_view file_name(dir_entry->d_name);
+            if (is_dot_dir(file_name))
+                continue;
+
+            if (dir_entry->d_type == DT_DIR) {
+                open_directory(level.path / file_name);
+                continue;
+            }
+
+            current_name_ = file_name;
+            return;
+        }
+    }
+
+    void open_directory(const fs::path& path) {
+        DIR* dirp = posix_.opendir(path.c_str());
+        if (!dirp) {
+            if (errno == ENOENT)
+                return;
+            raise_io_error(errno, fmt::format("Failed to open directory {}", path.c_str()));
+        }
+        stack_.push_back(DirLevel{path, std::make_unique<DirHandle>(posix_, dirp)});
+    }
+
+    PosixInterface& posix_;
+    std::vector<DirLevel> stack_;
+    std::string_view current_name_;
+};
+
+std::optional<VariantKey> try_parse_as_key(std::string_view file_name, KeyType key_type) noexcept {
+    try {
+        return variant_key_from_bytes(reinterpret_cast<const uint8_t*>(file_name.data()), file_name.size(), key_type);
+    } catch (const ArcticCategorizedException<ErrorCategory::INTERNAL>& e) {
+        log::storage().info("File name '{}' could not be parsed into a VariantKey: {}", file_name, e.what());
+        return std::nullopt;
+    }
+}
+
+// Names which do not parse are logged and skipped, since the directory may also hold files written by other
+// versions of ArcticDB or by users.
+// Returns single pass range of VariantKey.
+auto as_variant_keys(KeyType key_type) {
+    auto try_parse_with_bound_key = [key_type](const FileEntry& entry) -> std::optional<VariantKey> {
+        return try_parse_as_key(entry.name, key_type);
+    };
+    return std::views::filter([](const FileEntry& entry) { return !is_skipped_name(entry.name); }) |
+           std::views::transform(try_parse_with_bound_key) |
+           std::views::filter([](const std::optional<VariantKey>& key) { return key.has_value(); }) |
+           std::views::transform([](std::optional<VariantKey> key) { return std::move(*key); });
+}
 
 Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
     const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
@@ -496,41 +630,34 @@ bool FileBackedStorage::do_fast_delete() { return false; }
 bool FileBackedStorage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
-    const fs::path keys_dir = storage_dir_ / entity::key_type_long_name(key_type);
-    DIR* dirp = posix_->opendir(keys_dir.c_str());
-    if (!dirp) // TODO: read errno?
-        return false;
-
-    DirCloser close_dir(dirp);
-    struct dirent* dir_entry = nullptr;
-    while ((dir_entry = posix_->readdir(dirp))) {
-        const size_t file_name_length = strlen(dir_entry->d_name);
-        std::string_view file_name(dir_entry->d_name, file_name_length);
-        if (skip_during_listing(file_name))
-            continue;
-
-        const auto prefix_matches = stream_id_prefix_matcher(prefix);
-        try {
-            VariantKey key{
-                    variant_key_from_bytes(reinterpret_cast<uint8_t*>(dir_entry->d_name), file_name_length, key_type)
-            };
-            if (variant_key_type(key) == key_type && prefix_matches(variant_key_id(key)) && visitor(std::move(key)))
-                return true;
-        } catch (const ArcticCategorizedException<ErrorCategory::INTERNAL>& e) {
-            // TODO: The upstream code unconditionally logs, but the message is unhelpful without the file name.
-            log::storage().info("File name '{}' could not be parsed into a VariantKey {}", file_name, e.what());
-        }
+    const auto prefix_matches = stream_id_prefix_matcher(prefix);
+    FileTraversal traversal(*posix_, storage_dir_ / entity::key_type_long_name(key_type));
+    for (VariantKey key : traversal | as_variant_keys(key_type)) {
+        if (prefix_matches(variant_key_id(key)) && visitor(std::move(key)))
+            return true;
     }
-    // TODO: Need to check errno here. read_dir can return NULL on error too.
-
     return false;
 }
 
 void FileBackedStorage::do_visit_object_sizes(
-        [[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
-        [[maybe_unused]] const ObjectSizesVisitor& visitor
+        KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor
 ) {
-    throw std::runtime_error("do_visit_object_sizes() not implemented");
+    const auto prefix_matches = stream_id_prefix_matcher(prefix);
+    for (const FileEntry& entry : FileTraversal(*posix_, storage_dir_ / entity::key_type_long_name(key_type))) {
+        if (is_skipped_name(entry.name))
+            continue;
+        const std::optional<VariantKey> maybe_key = try_parse_as_key(entry.name, key_type);
+        if (!maybe_key)
+            continue;
+        const VariantKey& key = *maybe_key;
+        struct stat st;
+        if (posix_->stat((entry.directory / entry.name).c_str(), &st) != 0) {
+            log::storage().info("Could not stat file {}: {}. Skipping", entry.name, std::strerror(errno));
+            continue;
+        }
+        if (prefix_matches(variant_key_id(key)))
+            visitor(key, st.st_size);
+    }
 }
 
 [[nodiscard]] std::string FileBackedStorage::do_key_path(const VariantKey& key) const { return get_key_subpath(key); }
@@ -571,34 +698,7 @@ void FileBackedStorage::do_visit_object_sizes(
 }
 
 size_t FileBackedStorage::get_num_temporary_files() const {
-    size_t num_temporary_files = 0;
-    std::stack<fs::path> directories_to_scan;
-    directories_to_scan.push(storage_dir_);
-    while (!directories_to_scan.empty()) {
-        fs::path current_dir = directories_to_scan.top();
-        directories_to_scan.pop();
-        DIR* dirp = posix_->opendir(current_dir.c_str());
-        if (!dirp) {
-            // TODO: does this happen when someone deletes the dir?
-            // TODO: Read errno, there
-            continue;
-        }
-
-        DirCloser close_dir(dirp);
-        struct dirent* dir_entry = nullptr;
-        while ((dir_entry = posix_->readdir(dirp))) {
-            std::string_view file_name(dir_entry->d_name);
-            if (is_dot_dir(file_name))
-                continue;
-            else if (is_tmp_file_name(file_name))
-                ++num_temporary_files;
-            else if (dir_entry->d_type == DT_DIR) {
-                directories_to_scan.push(current_dir / file_name);
-            }
-        }
-    }
-
-    return num_temporary_files;
+    return std::ranges::count_if(FileTraversal(*posix_, storage_dir_), is_tmp_file_name, &FileEntry::name);
 }
 
 } // namespace arcticdb::storage::file_backed
