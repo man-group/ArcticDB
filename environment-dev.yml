@@ -71,7 +71,8 @@ dependencies:
   - aioboto3 >=9
   # KeepAliveRequestHandler in storage_fixtures/s3.py relies on werkzeug serving internals
   - werkzeug <4
-  - moto
+  # 5.2.6 returns 500 on HEAD /, breaking test_rate_limit
+  - moto <5.2.6
   - mock
   # msgpack 0.5.0 is required for strict_types argument, needed for correct pickling fallback
   - msgpack-python >=0.5.0
