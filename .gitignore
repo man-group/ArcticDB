@@ -79,3 +79,5 @@ arcticdb_ext-stubs
 
 .clangd
 compile_commands.json
+
+CLAUDE.local.md
