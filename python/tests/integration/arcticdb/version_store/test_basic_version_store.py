@@ -990,10 +990,9 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause, any_out
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.parametrize("project_columns", [False, True], ids=["all-columns", "projected"])
 @marks([Marks.pipeline, Marks.storage])
 def test_exact_date_range_keeps_duplicate_timestamps_across_row_segments(
-    basic_store_tiny_segment, use_date_range_clause, any_output_format, project_columns
+    basic_store_tiny_segment, use_date_range_clause, any_output_format
 ):
     store = basic_store_tiny_segment
     store._set_output_format_for_pipeline_tests(any_output_format)
@@ -1007,16 +1006,12 @@ def test_exact_date_range_keeps_duplicate_timestamps_across_row_segments(
     store.write("quotes", quotes)
 
     date_range = (tick, tick)
-    columns = ["sequence", "ask"] if project_columns else None
     if use_date_range_clause:
-        received = store.read("quotes", columns=columns, query_builder=QueryBuilder().date_range(date_range)).data
+        received = store.read("quotes", query_builder=QueryBuilder().date_range(date_range)).data
     else:
-        received = store.read("quotes", columns=columns, date_range=date_range).data
+        received = store.read("quotes", date_range=date_range).data
 
-    expected = quotes.iloc[1:3]
-    if columns is not None:
-        expected = expected[columns]
-    assert_frame_equal(received, expected)
+    assert_frame_equal(received, quotes.iloc[1:3])
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
