@@ -22,12 +22,6 @@ work complete.
 | C++ modules | [docs/claude/cpp/](docs/claude/cpp/) (CACHING, VERSIONING, STORAGE_BACKENDS, ENTITY, CODEC, COLUMN_STORE, PIPELINE, PROCESSING, STREAM, ASYNC, PYTHON_BINDINGS) |
 | Python modules | [docs/claude/python/](docs/claude/python/) (ARCTIC_CLASS, LIBRARY_API, NATIVE_VERSION_STORE, QUERY_PROCESSING, NORMALIZATION, ADAPTERS, TOOLBOX) |
 
-## User-Specific Settings
-
-Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
-- Python virtual environment paths (Claude should use its own venvs, not user's)
-- Preferred CMake presets for debug/release/profiling builds
-
 ## Build Commands
 
 ### Prerequisites on Man Linux VMs
