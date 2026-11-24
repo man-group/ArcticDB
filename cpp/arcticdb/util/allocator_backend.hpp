@@ -34,16 +34,8 @@
 #include <gperftools/tcmalloc.h>
 #endif
 
-#if defined(__APPLE__) && (defined(ARCTICDB_ALLOCATOR_MIMALLOC) || defined(ARCTICDB_ALLOCATOR_JEMALLOC) ||             \
-                           defined(ARCTICDB_ALLOCATOR_TCMALLOC))
-#include <malloc/malloc.h>
-// libc++ is a shared library on macOS and instantiates parts of std::basic_string itself, so memory allocated by the
-// system operator new can reach arcticdb_ext's operator delete. Frees check ownership first.
-#define ARCTICDB_ALLOCATOR_CHECK_OWNERSHIP
-#endif
-
-// The allocator named by ARCTICDB_ALLOCATOR_*, called by arcticdb::Allocator and by the operator new/delete in
-// allocator_override.cpp. Without one, these are the C runtime functions.
+// The allocator named by ARCTICDB_ALLOCATOR_*, called by arcticdb::Allocator and, except on macOS, by the operator
+// new/delete in allocator_override.cpp. Without one, these are the C runtime functions.
 namespace arcticdb::allocator_backend {
 
 #if defined(ARCTICDB_ALLOCATOR_MIMALLOC)
@@ -60,10 +52,6 @@ inline void* allocate(std::size_t size) { return je_malloc(size); }
 inline void* allocate_aligned(std::size_t size, std::size_t alignment) { return je_aligned_alloc(alignment, size); }
 inline void* reallocate(void* p, std::size_t size) { return je_realloc(p, size); }
 inline void backend_deallocate(void* p) { je_free(p); }
-#if defined(__APPLE__)
-// jemalloc is built without its malloc zone, so only system allocations belong to a zone.
-inline bool owns(const void* p) { return malloc_zone_from_ptr(p) == nullptr; }
-#endif
 static_assert(MALLCTL_ARENAS_ALL == 4096);
 inline void trim() { je_mallctl("arena.4096.purge", nullptr, nullptr, nullptr, 0); }
 #elif defined(ARCTICDB_ALLOCATOR_TCMALLOC)
@@ -86,14 +74,6 @@ inline void trim() {
 }
 #endif
 
-inline void deallocate(void* p) {
-#if defined(ARCTICDB_ALLOCATOR_CHECK_OWNERSHIP)
-    if (p != nullptr && !owns(p)) {
-        std::free(p);
-        return;
-    }
-#endif
-    backend_deallocate(p);
-}
+inline void deallocate(void* p) { backend_deallocate(p); }
 
 } // namespace arcticdb::allocator_backend
