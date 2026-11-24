@@ -428,24 +428,23 @@ class FileTraversal {
     std::string_view current_name_;
 };
 
-std::optional<VariantKey> try_parse_as_key(std::string_view file_name, KeyType key_type) noexcept {
+std::optional<VariantKey> try_parse_as_key(const FileEntry& entry, KeyType key_type) noexcept {
+    if (is_skipped_name(entry.name))
+        return std::nullopt;
     try {
-        return variant_key_from_bytes(reinterpret_cast<const uint8_t*>(file_name.data()), file_name.size(), key_type);
+        return variant_key_from_bytes(reinterpret_cast<const uint8_t*>(entry.name.data()), entry.name.size(), key_type);
     } catch (const ArcticCategorizedException<ErrorCategory::INTERNAL>& e) {
-        log::storage().info("File name '{}' could not be parsed into a VariantKey: {}", file_name, e.what());
+        log::storage().info("File name '{}' could not be parsed into a VariantKey: {}", entry.name, e.what());
         return std::nullopt;
     }
 }
 
 // Names which do not parse are logged and skipped, since the directory may also hold files written by other
 // versions of ArcticDB or by users.
-// Returns single pass range of VariantKey.
+// Returns range of VariantKey.
 auto as_variant_keys(KeyType key_type) {
-    auto try_parse_with_bound_key = [key_type](const FileEntry& entry) -> std::optional<VariantKey> {
-        return try_parse_as_key(entry.name, key_type);
-    };
-    return std::views::filter([](const FileEntry& entry) { return !is_skipped_name(entry.name); }) |
-           std::views::transform(try_parse_with_bound_key) |
+    auto try_parse_with_bound_key = std::bind(try_parse_as_key, std::placeholders::_1, key_type);
+    return std::views::transform(try_parse_with_bound_key) |
            std::views::filter([](const std::optional<VariantKey>& key) { return key.has_value(); }) |
            std::views::transform([](std::optional<VariantKey> key) { return std::move(*key); });
 }
@@ -632,7 +631,7 @@ bool FileBackedStorage::do_iterate_type_until_match(
 ) {
     const auto prefix_matches = stream_id_prefix_matcher(prefix);
     FileTraversal traversal(*posix_, storage_dir_ / entity::key_type_long_name(key_type));
-    for (VariantKey key : traversal | as_variant_keys(key_type)) {
+    for (VariantKey&& key : traversal | as_variant_keys(key_type)) {
         if (prefix_matches(variant_key_id(key)) && visitor(std::move(key)))
             return true;
     }
@@ -644,9 +643,7 @@ void FileBackedStorage::do_visit_object_sizes(
 ) {
     const auto prefix_matches = stream_id_prefix_matcher(prefix);
     for (const FileEntry& entry : FileTraversal(*posix_, storage_dir_ / entity::key_type_long_name(key_type))) {
-        if (is_skipped_name(entry.name))
-            continue;
-        const std::optional<VariantKey> maybe_key = try_parse_as_key(entry.name, key_type);
+        const std::optional<VariantKey> maybe_key = try_parse_as_key(entry, key_type);
         if (!maybe_key)
             continue;
         const VariantKey& key = *maybe_key;
