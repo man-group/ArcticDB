@@ -281,6 +281,36 @@ folly::Future<S3Result<std::monostate>> S3ClientImpl::delete_object(
     return future;
 }
 
+ListObjectsOutput parse_list_objects_v2_result(const Aws::S3::Model::ListObjectsV2Result& result) {
+    auto next_continuation_token = std::optional<std::string>();
+    if (result.GetIsTruncated())
+        next_continuation_token = {result.GetNextContinuationToken()};
+
+    const auto& contents = result.GetContents();
+    std::vector<std::string> s3_object_names;
+    std::vector<uint64_t> s3_object_sizes;
+    std::vector<std::string> s3_object_etags;
+    std::vector<int64_t> s3_object_last_modified_ms;
+    s3_object_names.reserve(contents.size());
+    s3_object_sizes.reserve(contents.size());
+    s3_object_etags.reserve(contents.size());
+    s3_object_last_modified_ms.reserve(contents.size());
+    for (const auto& s3_object : contents) {
+        s3_object_names.emplace_back(s3_object.GetKey());
+        s3_object_sizes.emplace_back(static_cast<uint64_t>(s3_object.GetSize()));
+        s3_object_etags.emplace_back(s3_object.GetETag());
+        s3_object_last_modified_ms.emplace_back(s3_object.GetLastModified().Millis());
+    }
+
+    return ListObjectsOutput{
+            std::move(s3_object_names),
+            std::move(s3_object_sizes),
+            std::move(s3_object_etags),
+            std::move(s3_object_last_modified_ms),
+            next_continuation_token
+    };
+}
+
 S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
         const std::string& name_prefix, const std::string& bucket_name,
         const std::optional<std::string>& continuation_token
@@ -303,19 +333,7 @@ S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
 
-    const auto& result = outcome.GetResult();
-    auto next_continuation_token = std::optional<std::string>();
-    if (result.GetIsTruncated())
-        next_continuation_token = {result.GetNextContinuationToken()};
-
-    auto s3_object_names = std::vector<std::string>();
-    auto s3_object_sizes = std::vector<uint64_t>();
-    for (const auto& s3_object : result.GetContents()) {
-        s3_object_names.emplace_back(s3_object.GetKey());
-        s3_object_sizes.emplace_back(s3_object.GetSize());
-    }
-
-    return {ListObjectsOutput{std::move(s3_object_names), std::move(s3_object_sizes), next_continuation_token}};
+    return {parse_list_objects_v2_result(outcome.GetResult())};
 }
 
 } // namespace s3

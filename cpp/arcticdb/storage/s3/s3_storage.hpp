@@ -41,6 +41,8 @@ class S3Storage : public Storage, AsyncStorage {
 
     bool supports_object_size_calculation() const final;
 
+    bool supports_object_metadata_listing() const final;
+
     std::optional<size_t> max_delete_batch_size() const override;
 
     // These are only public for testing purposes
@@ -68,7 +70,8 @@ class S3Storage : public Storage, AsyncStorage {
 
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) override;
 
-    void do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) final;
+    void do_visit_object_metadata(KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor)
+            final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
             final;

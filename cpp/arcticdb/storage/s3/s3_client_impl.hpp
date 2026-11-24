@@ -13,6 +13,8 @@
 
 namespace arcticdb::storage::s3 {
 
+ListObjectsOutput parse_list_objects_v2_result(const Aws::S3::Model::ListObjectsV2Result& result);
+
 class S3ClientImpl : public S3ClientInterface {
   public:
     template<typename... Args>

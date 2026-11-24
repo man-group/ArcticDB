@@ -150,23 +150,31 @@ bool S3Storage::do_iterate_type_until_match(
     return res;
 }
 
-ObjectSizesVisitor prefix_matching_object_sizes_visitor(const ObjectSizesVisitor& visitor, const std::string& prefix) {
-    return [&](const VariantKey& key, CompressedSize size) {
-        detail::object_sizes_visit_if_prefix_matches(visitor, prefix, key, size);
+namespace {
+
+ObjectMetadataVisitor prefix_matching_object_metadata_visitor(
+        const ObjectMetadataVisitor& visitor, const std::string& prefix
+) {
+    return [&](const VariantKey& key, const ObjectMetadata& metadata) {
+        detail::object_metadata_visit_if_prefix_matches(visitor, prefix, key, metadata);
     };
 }
 
-void S3Storage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+} // namespace
+
+void S3Storage::do_visit_object_metadata(
+        KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor
+) {
     auto path_info = s3::detail::calculate_path_info(
             root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
     );
-    const ObjectSizesVisitor primary_visitor =
-            directory_bucket_ ? prefix_matching_object_sizes_visitor(visitor, prefix) : visitor;
-    const std::optional<ObjectSizesVisitor> fallback_visitor =
-            directory_bucket_ ? std::optional<ObjectSizesVisitor>()
-                              : prefix_matching_object_sizes_visitor(visitor, prefix);
-    detail::Visitor<ObjectSizesVisitor> final_visitor{primary_visitor, fallback_visitor};
-    detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
+    const ObjectMetadataVisitor primary_visitor =
+            directory_bucket_ ? prefix_matching_object_metadata_visitor(visitor, prefix) : visitor;
+    const std::optional<ObjectMetadataVisitor> fallback_visitor =
+            directory_bucket_ ? std::optional<ObjectMetadataVisitor>()
+                              : prefix_matching_object_metadata_visitor(visitor, prefix);
+    detail::Visitor<ObjectMetadataVisitor> final_visitor{primary_visitor, fallback_visitor};
+    detail::do_visit_object_metadata_for_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
     if (final_visitor.directory_bucket_) {
         directory_bucket_ = final_visitor.directory_bucket_;
     }
@@ -277,6 +285,8 @@ S3Storage::S3Storage(const LibraryPath& library_path, OpenMode mode, const S3Set
 }
 
 bool S3Storage::supports_object_size_calculation() const { return true; }
+
+bool S3Storage::supports_object_metadata_listing() const { return true; }
 
 GCPXMLStorage::GCPXMLStorage(
         const arcticdb::storage::LibraryPath& lib, arcticdb::storage::OpenMode mode,

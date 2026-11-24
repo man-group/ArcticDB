@@ -25,6 +25,8 @@ class NfsBackedStorage final : public Storage {
 
     bool supports_object_size_calculation() const final override;
 
+    bool supports_object_metadata_listing() const final override;
+
     std::optional<size_t> max_delete_batch_size() const final override;
 
     s3::S3ClientInterface& client() { return *s3_client_; }
@@ -51,7 +53,8 @@ class NfsBackedStorage final : public Storage {
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
             final;
 
-    void do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) final;
+    void do_visit_object_metadata(KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor)
+            final;
 
     bool do_key_exists(const VariantKey& key) final;
 
