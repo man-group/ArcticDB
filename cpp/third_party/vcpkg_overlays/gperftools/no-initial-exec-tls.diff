@@ -1,0 +1,11 @@
+--- a/src/base/basictypes.h
++++ b/src/base/basictypes.h
+@@ -84,7 +84,7 @@
+ # define ATTRIBUTE_UNUSED
+ #endif
+ 
+-#if defined(HAVE___ATTRIBUTE__)
++#if defined(HAVE___ATTRIBUTE__) && !defined(TCMALLOC_NO_INITIAL_EXEC_TLS)
+ #define ATTR_INITIAL_EXEC __attribute__ ((tls_model ("initial-exec")))
+ #else
+ #define ATTR_INITIAL_EXEC
