@@ -101,6 +101,46 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
             assert cfg_after_use == expected_cfg
 
 
+def test_compat_old_client_reads_pickle_on_failure_of_library_created_with_current(old_venv_and_arctic_uri, lib_name):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    with CompatLibrary(old_venv, arctic_uri, lib_name, create_with_current_version=True) as compat:
+        # Old clients read WriteOptions.pickle_on_failure from the library config in Library.write
+        compat.old_lib.execute(
+            [
+                "assert lib._nvs._lib_cfg.lib_desc.version.write_options.pickle_on_failure is False",
+                "df = pd.DataFrame([[1]], columns=[pd.Timestamp(0)])",
+                "try:",
+                "    lib.write('sym', df)",
+                "except Exception:",
+                "    pass",
+                "else:",
+                "    raise AssertionError('Write must not fall back to pickling')",
+                "assert not lib.has_symbol('sym')",
+            ]
+        )
+
+
+def test_compat_old_client_respects_use_norm_failure_handler_known_types_set_with_current(
+    old_venv_and_arctic_uri, lib_name
+):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    with CompatLibrary(old_venv, arctic_uri, lib_name, create_with_current_version=True) as compat:
+        with compat.current_version() as curr:
+            cfg = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
+            cfg.lib_desc.version.use_norm_failure_handler_known_types = True
+            curr.ac._library_manager.write_library_config(cfg, lib_name)
+
+        # The old client wraps the native normalizers in a pickling fallback when the library option is set
+        compat.old_lib.execute(
+            [
+                "assert lib._nvs._lib_cfg.lib_desc.version.use_norm_failure_handler_known_types is True",
+                "df = pd.DataFrame([[1]], columns=[pd.Timestamp(0)])",
+                "lib.write('sym', df)",
+                "pd.testing.assert_frame_equal(lib.read('sym').data, df)",
+            ]
+        )
+
+
 def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name, any_output_format):
     arctic_uri = s3_ssl_disabled_storage.arctic_uri
     with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:

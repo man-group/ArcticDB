@@ -270,11 +270,9 @@ def test_empty_df():
         pd.DataFrame(columns=[np.nan]),
     ],
 )
-def test_write_empty_df_to_library_is_not_normalized(
-    in_memory_store_factory, use_norm_failure_handler_known_types, api, df
-):
+def test_write_empty_df_is_not_pickled(in_memory_store_factory, use_norm_failure_handler_known_types, api, df):
     lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types)
-    lib = lib if api == "v1" else Library("test_write_empty_df_to_library_is_not_normalized", lib)
+    lib = lib if api == "v1" else Library("test_write_empty_df_is_not_pickled", lib)
     lib.write("test", df)
     is_pickled = lib.is_symbol_pickled("test") if api == "v1" else lib._nvs.is_symbol_pickled("test")
     assert is_pickled == False
@@ -306,13 +304,57 @@ def test_non_normalizable_column_names_require_pickling(
     """
     lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types)
     assert lib.will_item_be_pickled(df)
-    lib = lib if api == "v1" else Library("test_write_empty_df_to_library_is_not_normalized", lib)
+    lib = lib if api == "v1" else Library("test_non_normalizable_column_names_require_pickling", lib)
     is_python_pickling_allowed_on_write = use_norm_failure_handler_known_types and api == "v1"
     if is_python_pickling_allowed_on_write:
         lib.write("test", df)
     else:
         with pytest.raises(ArcticException, match="normalizing"):
             lib.write("test", df)
+
+
+@pytest.mark.parametrize("use_norm_failure_handler_known_types_lib_config", [True, False])
+@pytest.mark.parametrize("use_norm_failure_handler_known_types_env_var", ["1", "0", None])
+@pytest.mark.parametrize("pickle_on_failure_env_var", ["1", "0", None])
+@pytest.mark.parametrize("pickle_on_failure_kwarg", [True, False, None])
+@pytest.mark.parametrize("data_kind", ["dataframe", "recursive_leaf"])
+def test_pickle_on_failure_precedence(
+    in_memory_store_factory,
+    monkeypatch,
+    use_norm_failure_handler_known_types_lib_config,
+    use_norm_failure_handler_known_types_env_var,
+    pickle_on_failure_env_var,
+    pickle_on_failure_kwarg,
+    data_kind,
+):
+    """Precedence is kwarg > PICKLE_ON_FAILURE env var > library's use_norm_failure_handler_known_types."""
+    if use_norm_failure_handler_known_types_env_var is not None:
+        # There is no such env var, setting it must have no effect
+        monkeypatch.setenv("USE_NORM_FAILURE_HANDLER_KNOWN_TYPES", use_norm_failure_handler_known_types_env_var)
+    if pickle_on_failure_env_var is not None:
+        monkeypatch.setenv("PICKLE_ON_FAILURE", pickle_on_failure_env_var)
+    lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types_lib_config)
+
+    if pickle_on_failure_kwarg is not None:
+        expect_pickling = pickle_on_failure_kwarg
+    elif pickle_on_failure_env_var is not None:
+        expect_pickling = pickle_on_failure_env_var == "1"
+    else:
+        expect_pickling = use_norm_failure_handler_known_types_lib_config
+
+    df = pd.DataFrame([[1.0]], columns=[pd.Timestamp("2026-10-10")])
+    if data_kind == "dataframe":
+        data, kwargs, expected_type = df, {}, "pickled"
+    else:
+        data, kwargs, expected_type = {"key": df}, {"recursive_normalizers": True}, "recursive_normalized"
+
+    if expect_pickling:
+        lib.write("sym", data, pickle_on_failure=pickle_on_failure_kwarg, **kwargs)
+        assert lib.get_info("sym")["type"] == expected_type
+    else:
+        with pytest.raises(ArcticException, match="normalizing"):
+            lib.write("sym", data, pickle_on_failure=pickle_on_failure_kwarg, **kwargs)
+        assert not lib.has_symbol("sym")
 
 
 timezone_params = [
