@@ -201,12 +201,12 @@ struct StreamDescriptor {
     const Field& field(size_t pos) { return fields_->at(pos); }
 };
 
-struct OutputSchema {
+struct FrameSchema {
     proto::descriptors::NormalizationMetadata norm_metadata_;
 
-    OutputSchema() = default;
+    FrameSchema() = default;
 
-    OutputSchema(
+    FrameSchema(
             StreamDescriptor stream_descriptor, proto::descriptors::NormalizationMetadata norm_metadata,
             bool inferred_from_empty_frame = false
     ) :

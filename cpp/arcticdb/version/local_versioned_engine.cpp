@@ -1493,7 +1493,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
 }
 
 auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symbol_processing_results) {
-    std::vector<OutputSchema> input_schemas;
+    std::vector<FrameSchema> input_schemas;
     std::vector<std::vector<EntityId>> entity_ids;
     auto res_versioned_items = std::make_shared<std::vector<VersionedItem>>();
     auto res_metadatas = std::make_shared<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>();
@@ -1513,7 +1513,7 @@ auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symb
 }
 
 std::shared_ptr<PipelineContext> setup_join_pipeline_context(
-        std::vector<OutputSchema>&& input_schemas, const std::vector<std::shared_ptr<Clause>>& clauses
+        std::vector<FrameSchema>&& input_schemas, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
     auto output_schema = modify_schema(clauses.front()->join_schemas(std::move(input_schemas)), clauses);
     auto pipeline_context = std::make_shared<PipelineContext>();

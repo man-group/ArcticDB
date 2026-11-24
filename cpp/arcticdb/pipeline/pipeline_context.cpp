@@ -160,7 +160,7 @@ void PipelineContext::set_on_disk_descriptor(const StreamDescriptor& desc) { on_
 
 [[nodiscard]] bool PipelineContext::are_string_fields_coerced() const { return string_coerced_descriptor_.has_value(); }
 
-void PipelineContext::set_output_schema(OutputSchema&& output_schema) { output_schema_ = std::move(output_schema); }
+void PipelineContext::set_output_schema(FrameSchema&& output_schema) { output_schema_ = std::move(output_schema); }
 
 const StreamDescriptor& PipelineContext::output_descriptor() const {
     if (output_schema_) {

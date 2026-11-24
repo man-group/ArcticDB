@@ -327,7 +327,7 @@ void prepare_for_arrow_output(SegmentInMemory& segment, proto::descriptors::Norm
 }
 
 std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
-        const OutputSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns
+        const FrameSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns
 ) {
     const auto& norm = input_schema.norm_metadata_;
     if (norm.has_arrow()) {

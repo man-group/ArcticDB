@@ -80,7 +80,7 @@ namespace version_store {
 struct SymbolProcessingResult {
     VersionedItem versioned_item_;
     proto::descriptors::UserDefinedMetadata metadata_;
-    OutputSchema output_schema_;
+    FrameSchema output_schema_;
     std::vector<EntityId> entity_ids_;
 };
 

@@ -80,11 +80,9 @@ struct IClause {
             folly::poly_call<5>(*this, component_manager);
         }
 
-        OutputSchema modify_schema(OutputSchema&& output_schema) const {
-            return folly::poly_call<6>(*this, std::move(output_schema));
-        }
+        FrameSchema modify_schema(FrameSchema&& schema) const { return folly::poly_call<6>(*this, std::move(schema)); }
 
-        OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const {
+        FrameSchema join_schemas(std::vector<FrameSchema>&& input_schemas) const {
             return folly::poly_call<7>(*this, std::move(input_schemas));
         }
     };
@@ -106,7 +104,7 @@ bool is(const std::shared_ptr<Clause>& clause) {
     return folly::poly_type(*clause) == typeid(ClauseType);
 }
 
-OutputSchema modify_schema(OutputSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses);
+FrameSchema modify_schema(FrameSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses);
 
 struct PassthroughClause {
     ClauseInfo clause_info_;
@@ -133,9 +131,9 @@ struct PassthroughClause {
 
     void set_component_manager(ARCTICDB_UNUSED std::shared_ptr<ComponentManager>) {}
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("PassThroughClause::join_schemas should never be called");
     }
 };
@@ -186,9 +184,9 @@ struct FilterClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("FilterClause::join_schemas should never be called");
     }
 
@@ -246,9 +244,9 @@ struct ProjectClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("ProjectClause::join_schemas should never be called");
     }
 
@@ -310,12 +308,12 @@ struct PartitionClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const {
-        check_column_presence(output_schema, clause_info_.input_columns_, "GroupBy");
-        return output_schema;
+    FrameSchema modify_schema(FrameSchema&& schema) const {
+        check_column_presence(schema, clause_info_.input_columns_, "GroupBy");
+        return schema;
     }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("GroupByClause::join_schemas should never be called");
     }
 
@@ -368,9 +366,9 @@ struct AggregationClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("AggregationClause::join_schemas should never be called");
     }
 
@@ -420,9 +418,9 @@ struct ResampleClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("ResampleClause::join_schemas should never be called");
     }
 
@@ -480,9 +478,9 @@ struct RemoveColumnPartitioningClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("RemoveColumnPartitioningClause::join_schemas should never be called");
     }
 };
@@ -515,9 +513,9 @@ struct SplitClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("SplitClause::join_schemas should never be called");
     }
 };
@@ -554,9 +552,9 @@ struct SortClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("SortClause::join_schemas should never be called");
     }
 };
@@ -593,9 +591,9 @@ struct MergeClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("MergeClause::join_schemas should never be called");
     }
 };
@@ -638,12 +636,12 @@ struct ColumnStatsGenerationClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(ARCTICDB_UNUSED OutputSchema&& output_schema) const {
-        // This clause is not used at the moment. Returning empty output schema so that unit tests can succeed.
-        return OutputSchema{};
+    FrameSchema modify_schema(ARCTICDB_UNUSED FrameSchema&& schema) const {
+        // This clause is not used at the moment. Returning an empty FrameSchema so that unit tests can succeed.
+        return FrameSchema{};
     }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("ColumnStatsGenerationClause::join_schemas should never be called");
     }
 };
@@ -714,9 +712,9 @@ struct RowRangeClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("RowRangeClause::join_schemas should never be called");
     }
 
@@ -758,9 +756,9 @@ struct DateRangeClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const {
         util::raise_rte("DateRangeClause::join_schemas should never be called");
     }
 
@@ -798,9 +796,9 @@ struct ConcatClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const;
+    FrameSchema join_schemas(std::vector<FrameSchema>&& input_schemas) const;
 
     [[nodiscard]] std::string to_string() const;
 };
@@ -833,9 +831,9 @@ struct WriteClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
 
@@ -884,7 +882,7 @@ struct MergeUpdateClause {
     SegmentInMemory source_;
     bool fake_index_name_ = false;
     MergeUpdateClause(
-            std::vector<std::string>&& on, MergeStrategy strategy, OutputSchema source_output_schema,
+            std::vector<std::string>&& on, MergeStrategy strategy, FrameSchema source_output_schema,
             size_t rows_per_segment
     );
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
@@ -911,9 +909,9 @@ struct MergeUpdateClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
 
@@ -975,7 +973,7 @@ struct MergeUpdateClause {
     [[nodiscard]] size_t source_row_count() const;
     [[nodiscard]] const StreamDescriptor* get_source_descriptor() const;
 
-    OutputSchema source_output_schema_;
+    FrameSchema source_output_schema_;
 
     size_t rows_per_segment_;
 
@@ -1023,9 +1021,9 @@ struct CompactDataClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
 
@@ -1063,9 +1061,9 @@ struct RenameColumnsClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+    FrameSchema modify_schema(FrameSchema&& schema) const;
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
 

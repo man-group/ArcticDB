@@ -53,6 +53,7 @@ from arcticdb.version_store._normalization import (
     DataFrameNormalizer,
     NdArrayNormalizer,
     PandasData,
+    get_sample_from_non_empty_arr,
 )
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import (
@@ -61,6 +62,7 @@ from arcticdb.util.test import (
     arrow_string_read,
     assert_frame_equal,
     assert_series_equal,
+    config_context,
 )
 from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 import arcticc.pb2.descriptors_pb2 as descriptors_pb2
@@ -231,6 +233,19 @@ def test_warns_on_large_meta(log):
     meta = {"a": "x" * 9 * 1024 * 1024}  # larger than 8MB
     normalize_metadata(meta)
     assert "User defined metadata is above warning size" in log.warn.call_args[0][0]
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@patch("arcticdb.version_store._normalization.log")
+def test_log_all_null_column(log, enabled):
+    arr = np.array([None, np.nan, pd.NaT], dtype=object)
+    if enabled:
+        assert get_sample_from_non_empty_arr(arr, "col") is None
+        log.info.assert_called_once_with("Column {} does not have non null elements.", "col")
+    else:
+        with config_context("VersionStore.LogAllNullColumns", 0):
+            assert get_sample_from_non_empty_arr(arr, "col") is None
+        log.info.assert_not_called()
 
 
 def test_fails_humongous_meta():

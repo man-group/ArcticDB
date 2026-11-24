@@ -1158,10 +1158,10 @@ if(${TEST})
             processing/test/test_min_max_aggregator_strings.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
-            processing/test/test_output_schema_aggregator_types.cpp
-            processing/test/test_output_schema_ast_validity.cpp
+            processing/test/test_modify_schema_aggregator_types.cpp
+            processing/test/test_modify_schema_ast_validity.cpp
             processing/test/test_query_planner.cpp
-            processing/test/test_output_schema_basic.cpp
+            processing/test/test_modify_schema_basic.cpp
             processing/test/test_parallel_processing.cpp
             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
