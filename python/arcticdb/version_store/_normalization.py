@@ -175,7 +175,8 @@ def get_sample_from_non_empty_arr(arr, arr_name):
 
         return element
 
-    log.info("Column {} does not have non null elements.", arr_name)
+    if get_config_int("VersionStore.LogAllNullColumns") != 0:
+        log.info("Column {} does not have non null elements.", arr_name)
     return None
 
 
