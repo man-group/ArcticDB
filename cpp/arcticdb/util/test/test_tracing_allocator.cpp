@@ -10,6 +10,10 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
+#include <arcticdb/util/allocator_backend.hpp>
+
+#include <memory>
+#include <vector>
 
 TEST(Allocator, Tracing) {
     using AllocType = arcticdb::AllocatorImpl<arcticdb::InMemoryTracingPolicy>;
@@ -62,3 +66,68 @@ TEST(Allocator, PrintMemUsage) {
     ASSERT_GT(summary.data_stack.value_, 0);
 #endif
 }
+
+#if defined(ARCTICDB_ALLOCATOR_MIMALLOC) || defined(ARCTICDB_ALLOCATOR_JEMALLOC) || defined(ARCTICDB_ALLOCATOR_TCMALLOC)
+namespace {
+#if defined(ARCTICDB_ALLOCATOR_JEMALLOC)
+uint64_t jemalloc_thread_allocated() {
+    uint64_t* allocated = nullptr;
+    size_t size = sizeof(allocated);
+    je_mallctl("thread.allocatedp", &allocated, &size, nullptr, 0);
+    return *allocated;
+}
+#endif
+
+// Calls allocate(size), checks that the backend served it, then passes the pointer to release.
+template<typename Allocate, typename Release>
+void expect_from_backend(size_t size, Allocate&& allocate, Release&& release) {
+#if defined(ARCTICDB_ALLOCATOR_JEMALLOC)
+    const auto before = jemalloc_thread_allocated();
+    auto* ptr = allocate(size);
+    EXPECT_GE(jemalloc_thread_allocated() - before, size);
+#else
+    auto* ptr = allocate(size);
+    EXPECT_TRUE(arcticdb::allocator_backend::owns(ptr));
+#endif
+    release(ptr);
+}
+} // namespace
+
+TEST(Allocator, UsesConfiguredBackend) {
+    constexpr size_t size = 1 << 20;
+    // Explicit operator calls, because compilers may elide a new-expression whose result is unused
+    expect_from_backend(
+            size,
+            [](size_t n) { return static_cast<uint8_t*>(::operator new(n)); },
+            [](uint8_t* p) { ::operator delete(p); }
+    );
+
+    std::vector<uint8_t> vec;
+    expect_from_backend(
+            size,
+            [&vec](size_t n) {
+                vec.resize(n);
+                return vec.data();
+            },
+            [&vec](uint8_t*) { std::vector<uint8_t>().swap(vec); }
+    );
+
+    expect_from_backend(
+            size,
+            [](size_t n) { return arcticdb::allocate_detachable_memory(n); },
+            [](uint8_t* p) { arcticdb::free_detachable_memory(p, size); }
+    );
+
+    std::pair<uint8_t*, arcticdb::entity::timestamp> block;
+    expect_from_backend(
+            size,
+            [&block](size_t n) {
+                block = arcticdb::Allocator::alloc(n);
+                block = arcticdb::Allocator::realloc(block, 2 * n);
+                return block.first;
+            },
+            [&block](uint8_t*) { arcticdb::Allocator::free(block); }
+    );
+    arcticdb::Allocator::trim();
+}
+#endif

@@ -57,6 +57,8 @@ vcpkg_cmake_configure(
         -DVCPKG_LOCK_FIND_PACKAGE_Libiberty=OFF
         -DVCPKG_LOCK_FIND_PACKAGE_LibUnwind=OFF
         -DVCPKG_LOCK_FIND_PACKAGE_ZLIB=ON
+        # ArcticDB: the exception tracer defines __cxa_throw and friends, which clash with a static libstdc++
+        -DFOLLY_NO_EXCEPTION_TRACER=ON
         ${FEATURE_OPTIONS}
     MAYBE_UNUSED_VARIABLES
         MSVC_USE_STATIC_RUNTIME

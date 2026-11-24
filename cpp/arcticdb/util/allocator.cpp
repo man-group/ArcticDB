@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/util/allocator.hpp>
+#include <arcticdb/util/allocator_backend.hpp>
 
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -14,11 +15,6 @@
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
-
-#if defined(__linux__) && defined(__GLIBC__)
-// Necessary for `malloc_trim` to be declared.
-#include <malloc.h>
-#endif
 
 namespace arcticdb {
 
@@ -196,10 +192,10 @@ uint8_t* AllocatorImpl<TracingPolicy, ClockType>::internal_alloc(size_t size) {
         ret = reinterpret_cast<uint8_t*>(page_size_slab_allocator_->allocate());
     } else {
         ARCTICDB_TRACE(log::codec(), "Doing normal allocation of size {}", size);
-        ret = static_cast<uint8_t*>(std::malloc(size));
+        ret = static_cast<uint8_t*>(allocator_backend::allocate(size));
     }
 #else
-    ret = static_cast<uint8_t*>(std::malloc(size));
+    ret = static_cast<uint8_t*>(allocator_backend::allocate(size));
 #endif
     return ret;
 }
@@ -214,11 +210,11 @@ void AllocatorImpl<TracingPolicy, ClockType>::internal_free(uint8_t* p) {
         page_size_slab_allocator_->deallocate(raw_pointer);
     } else {
         ARCTICDB_TRACE(log::codec(), "Doing normal free of address {}", uintptr_t(p));
-        std::free(p);
+        allocator_backend::deallocate(p);
     }
 #else
-    std::free(p);
-#if defined(__linux__) && defined(__GLIBC__)
+    allocator_backend::deallocate(p);
+#if defined(__linux__) && defined(__GLIBC__) && !defined(ARCTICDB_NO_PERIODIC_TRIM)
     free_count_.increment(1);
     maybe_trim();
 #endif
@@ -237,19 +233,19 @@ uint8_t* AllocatorImpl<TracingPolicy, ClockType>::internal_realloc(uint8_t* p, s
             return p;
         else {
             page_size_slab_allocator_->deallocate(raw_pointer);
-            ret = static_cast<uint8_t*>(std::malloc(size));
+            ret = static_cast<uint8_t*>(allocator_backend::allocate(size));
         }
     } else {
         ARCTICDB_TRACE(log::codec(), "Doing normal realloc of address {} and size {}", uintptr_t(p), size);
         if (use_slab_allocator() && size == page_size) {
-            std::free(p);
+            allocator_backend::deallocate(p);
             ret = reinterpret_cast<uint8_t*>(page_size_slab_allocator_->allocate());
         } else {
-            ret = static_cast<uint8_t*>(std::realloc(p, size));
+            ret = static_cast<uint8_t*>(allocator_backend::reallocate(p, size));
         }
     }
 #else
-    ret = static_cast<uint8_t*>(std::realloc(p, size));
+    ret = static_cast<uint8_t*>(allocator_backend::reallocate(p, size));
 #endif
     return ret;
 }
@@ -285,13 +281,8 @@ std::pair<uint8_t*, entity::timestamp> AllocatorImpl<TracingPolicy, ClockType>::
 
 template<typename TracingPolicy, typename ClockType>
 void AllocatorImpl<TracingPolicy, ClockType>::trim() {
-    /* malloc_trim is a glibc extension not available on Windows.It is possible
-     * that we will end up with a larger memory footprint for not calling it, but
-     * there are no windows alternatives.
-     */
-#if defined(__linux__) && defined(__GLIBC__)
-    malloc_trim(0);
-#endif
+    // With the system allocator this is malloc_trim on glibc and a no-op elsewhere.
+    allocator_backend::trim();
 }
 
 template<typename TracingPolicy, typename ClockType>

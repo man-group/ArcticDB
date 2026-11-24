@@ -87,6 +87,20 @@
     "perfetto": {
       "description": "Perfetto tracing support",
       "dependencies": [ "perfetto" ]
+    },
+    "allocator-mimalloc": {
+      "description": "Link mimalloc for ARCTICDB_ALLOCATOR=mimalloc",
+      "dependencies": [ "mimalloc" ]
+    },
+    "allocator-jemalloc": {
+      "description": "Link jemalloc for ARCTICDB_ALLOCATOR=jemalloc",
+      "supports": "!windows",
+      "dependencies": [ "jemalloc" ]
+    },
+    "allocator-tcmalloc": {
+      "description": "Link tcmalloc (gperftools) for ARCTICDB_ALLOCATOR=tcmalloc",
+      "supports": "!windows",
+      "dependencies": [ "gperftools" ]
     }
   },
   "overrides": [
@@ -118,6 +132,7 @@
     { "name": "libbson", "version": "1.30.3" },
     { "name": "libevent", "version": "2.1.12#7" },
     { "name": "lz4", "version": "1.9.3#4" },
+    { "name": "mimalloc", "version": "3.3.2" },
     { "name": "mongo-c-driver", "version": "1.28.0" },
     { "name": "mongo-cxx-driver", "version": "3.10.2#1" },
     { "name": "prometheus-cpp", "version": "1.1.0" },
