@@ -227,21 +227,34 @@ std::optional<size_t> NfsBackedStorage::max_delete_batch_size() const {
     );
 }
 
-bool NfsBackedStorage::do_iterate_type_until_match(
-        KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
+namespace {
+
+bool list_nfs_objects(
+        KeyType key_type, const std::string& root_folder, const std::string& bucket_name,
+        const s3::S3ClientInterface& client, const s3::detail::ObjectMetadataPredicate& visitor,
+        const std::string& prefix
 ) {
     auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, false, prefix, NfsBucketizer::bucketize_length(key_type)
+            root_folder, key_type, false, prefix, NfsBucketizer::bucketize_length(key_type)
     );
     // We need this prefix filtering here instead of a regex like in s3/azure
     // because we are doing sharding through subdirectories
     // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
     // so it cannot be hashed to the correct shard
-    const IterateTypePredicate visitor_with_prefix_filtering = [&visitor, &prefix](VariantKey&& key) {
-        return s3::detail::visit_if_prefix_matches(visitor, prefix, unencode_object_id(key));
-    };
-    s3::detail::Visitor<IterateTypePredicate> final_visitor{visitor_with_prefix_filtering};
-    return s3::detail::do_iterate_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
+    s3::detail::Visitor final_visitor{[&visitor, &prefix](VariantKey&& key, const ObjectMetadata& metadata) {
+        return s3::detail::visit_if_prefix_matches(visitor, prefix, unencode_object_id(key), metadata);
+    }};
+    return s3::detail::do_list_objects_impl(key_type, bucket_name, client, path_info, final_visitor);
+}
+
+} // namespace
+
+bool NfsBackedStorage::do_iterate_type_until_match(
+        KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
+) {
+    return list_nfs_objects(
+            key_type, root_folder_, bucket_name_, *s3_client_, s3::detail::adapt_iterate_predicate(visitor), prefix
+    );
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
@@ -249,26 +262,14 @@ bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
     return s3::detail::do_key_exists_impl(encoded_key, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-bool NfsBackedStorage::supports_object_size_calculation() const { return true; }
-
 bool NfsBackedStorage::supports_object_metadata_listing() const { return true; }
 
 void NfsBackedStorage::do_visit_object_metadata(
-        KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor
+        KeyType key_type, const ObjectMetadataVisitor& visitor, const std::string& prefix
 ) {
-    auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, false, prefix, NfsBucketizer::bucketize_length(key_type)
+    list_nfs_objects(
+            key_type, root_folder_, bucket_name_, *s3_client_, s3::detail::adapt_metadata_visitor(visitor), prefix
     );
-    // We need this prefix filtering here instead of a regex like in s3/azure
-    // because we are doing sharding through subdirectories
-    // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
-    // so it cannot be hashed to the correct shard
-    const ObjectMetadataVisitor visitor_with_prefix_filtering =
-            [&visitor, &prefix](const VariantKey& key, const ObjectMetadata& metadata) {
-                s3::detail::object_metadata_visit_if_prefix_matches(visitor, prefix, unencode_object_id(key), metadata);
-            };
-    s3::detail::Visitor<ObjectMetadataVisitor> final_visitor{visitor_with_prefix_filtering};
-    s3::detail::do_visit_object_metadata_for_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
 }
 
 } // namespace arcticdb::storage::nfs_backed

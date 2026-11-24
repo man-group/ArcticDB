@@ -67,9 +67,7 @@ class MockS3Client : public S3ClientInterface {
   private:
     struct MockObject {
         Segment segment;
-        uint64_t size{0};
-        std::string etag;
-        int64_t last_modified_ms{0};
+        ObjectMetadata metadata;
     };
 
     // Deleted entries stay as std::nullopt so continuation tokens stay stable across concurrent writes/deletes.

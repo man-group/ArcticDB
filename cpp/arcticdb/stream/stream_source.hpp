@@ -56,8 +56,8 @@ struct StreamSource {
     [[nodiscard]] virtual bool supports_object_metadata_listing() const { return false; }
 
     [[nodiscard]] virtual folly::Future<folly::Unit> visit_object_metadata(
-            [[maybe_unused]] KeyType type, [[maybe_unused]] const std::optional<StreamId>& stream_id_opt,
-            [[maybe_unused]] const storage::ObjectMetadataVisitor& visitor
+            [[maybe_unused]] KeyType type, [[maybe_unused]] const storage::ObjectMetadataVisitor& visitor,
+            [[maybe_unused]] const std::string& prefix = std::string{}
     ) {
         return folly::makeFutureWith([]() -> folly::Unit {
             util::raise_rte("visit_object_metadata not supported by this StreamSource");

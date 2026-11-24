@@ -104,7 +104,8 @@ S3Result<std::monostate> MockS3Client::put_object(
     // Synthetic per-write quoted ETag (matching AWS S3) and monotonic timestamp (ms) for metadata listing tests.
     const uint64_t seq = ++write_seq_;
     MockObject obj{
-            segment.clone(), size, fmt::format("\"mock-{}-{}\"", bucket_name, seq), static_cast<int64_t>(seq * 1000)
+            segment.clone(),
+            ObjectMetadata{fmt::format("\"mock-{}-{}\"", bucket_name, seq), size, static_cast<int64_t>(seq * 1000)}
     };
     s3_contents_.insert_or_assign({bucket_name, s3_object_name}, std::move(obj));
 
@@ -161,10 +162,7 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
     for (auto i = 0u; it != s3_contents_.end() && i < page_size; ++it, ++i) {
         if (it->first.bucket_name == bucket_name && it->first.s3_object_name.rfind(name_prefix, 0) == 0 &&
             it->second.has_value()) {
-            output.s3_object_names.emplace_back(it->first.s3_object_name);
-            output.s3_object_sizes.emplace_back(it->second->size);
-            output.s3_object_etags.emplace_back(it->second->etag);
-            output.s3_object_last_modified_ms.emplace_back(it->second->last_modified_ms);
+            output.objects.push_back(ListedObject{it->first.s3_object_name, it->second->metadata});
         }
     }
     if (it != s3_contents_.end()) {

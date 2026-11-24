@@ -59,14 +59,8 @@ class Storages {
 
     [[nodiscard]] bool supports_atomic_writes() { return primary().supports_atomic_writes(); }
 
-    [[nodiscard]] bool supports_object_size_calculation() {
-        return std::all_of(storages_.begin(), storages_.end(), [](const auto& storage) {
-            return storage->supports_object_size_calculation();
-        });
-    }
-
     [[nodiscard]] bool supports_object_metadata_listing() const {
-        return std::ranges::all_of(storages_, [](const auto& storage) {
+        return !storages_.empty() && std::ranges::all_of(storages_, [](const auto& storage) {
             return storage->supports_object_metadata_listing();
         });
     }
@@ -182,26 +176,19 @@ class Storages {
             bool primary_only = true
     ) {
         ARCTICDB_SAMPLE(StoragesIterateType, RMTSF_Aggregate)
-        if (primary_only) {
-            primary().iterate_type(key_type, visitor, prefix);
-        } else {
-            for (const auto& storage : storages_) {
-                storage->iterate_type(key_type, visitor, prefix);
-            }
-        }
-    }
-
-    void visit_object_sizes(
-            KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor, bool primary_only = true
-    ) {
-        visit_storages(primary_only, [&](Storage& storage) { storage.visit_object_sizes(key_type, prefix, visitor); });
+        visit_storages(primary_only, [&](Storage& storage) { storage.iterate_type(key_type, visitor, prefix); });
     }
 
     void visit_object_metadata(
-            KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor, bool primary_only = true
+            KeyType key_type, const ObjectMetadataVisitor& visitor, const std::string& prefix = std::string{},
+            bool primary_only = true
     ) {
+        util::check(
+                supports_object_metadata_listing(),
+                "visit_object_metadata called on storages where not all backends support object metadata listing"
+        );
         visit_storages(primary_only, [&](Storage& storage) {
-            storage.visit_object_metadata(key_type, prefix, visitor);
+            storage.visit_object_metadata(key_type, visitor, prefix);
         });
     }
 

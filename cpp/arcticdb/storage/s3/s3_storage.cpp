@@ -129,55 +129,50 @@ void GCPXMLStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_no_batching_impl(keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
-IterateTypePredicate prefix_matching_visitor(const IterateTypePredicate& visitor, const std::string& prefix) {
-    return [&](VariantKey&& key) { return detail::visit_if_prefix_matches(visitor, prefix, std::move(key)); };
-}
+namespace {
 
-bool S3Storage::do_iterate_type_until_match(
-        KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
+bool list_s3_objects(
+        KeyType key_type, const std::string& root_folder, const std::string& bucket_name,
+        const S3ClientInterface& client, bool& directory_bucket, detail::Visitor list_visitor
 ) {
-    auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
+    auto path_info = detail::calculate_path_info(
+            root_folder, key_type, true, std::string{list_visitor.prefix_}, FlatBucketizer::bucketize_length(key_type)
     );
-    const IterateTypePredicate primary_visitor = directory_bucket_ ? prefix_matching_visitor(visitor, prefix) : visitor;
-    const std::optional<IterateTypePredicate> fallback_visitor =
-            directory_bucket_ ? std::optional<IterateTypePredicate>() : prefix_matching_visitor(visitor, prefix);
-    detail::Visitor<IterateTypePredicate> final_visitor{primary_visitor, fallback_visitor};
-    auto res = detail::do_iterate_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
-    if (final_visitor.directory_bucket_) {
-        directory_bucket_ = final_visitor.directory_bucket_;
+    list_visitor.filter_prefix_in_memory_ = directory_bucket;
+    list_visitor.allow_directory_bucket_fallback_ = !directory_bucket;
+    const bool res = detail::do_list_objects_impl(key_type, bucket_name, client, path_info, list_visitor);
+    if (list_visitor.directory_bucket_) {
+        directory_bucket = true;
     }
     return res;
 }
 
-namespace {
-
-ObjectMetadataVisitor prefix_matching_object_metadata_visitor(
-        const ObjectMetadataVisitor& visitor, const std::string& prefix
-) {
-    return [&](const VariantKey& key, const ObjectMetadata& metadata) {
-        detail::object_metadata_visit_if_prefix_matches(visitor, prefix, key, metadata);
-    };
-}
-
 } // namespace
 
-void S3Storage::do_visit_object_metadata(
-        KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor
+bool S3Storage::do_iterate_type_until_match(
+        KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
-    auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
+    return list_s3_objects(
+            key_type,
+            root_folder_,
+            bucket_name_,
+            client(),
+            directory_bucket_,
+            detail::Visitor{detail::adapt_iterate_predicate(visitor), prefix}
     );
-    const ObjectMetadataVisitor primary_visitor =
-            directory_bucket_ ? prefix_matching_object_metadata_visitor(visitor, prefix) : visitor;
-    const std::optional<ObjectMetadataVisitor> fallback_visitor =
-            directory_bucket_ ? std::optional<ObjectMetadataVisitor>()
-                              : prefix_matching_object_metadata_visitor(visitor, prefix);
-    detail::Visitor<ObjectMetadataVisitor> final_visitor{primary_visitor, fallback_visitor};
-    detail::do_visit_object_metadata_for_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
-    if (final_visitor.directory_bucket_) {
-        directory_bucket_ = final_visitor.directory_bucket_;
-    }
+}
+
+void S3Storage::do_visit_object_metadata(
+        KeyType key_type, const ObjectMetadataVisitor& visitor, const std::string& prefix
+) {
+    list_s3_objects(
+            key_type,
+            root_folder_,
+            bucket_name_,
+            client(),
+            directory_bucket_,
+            detail::Visitor{detail::adapt_metadata_visitor(visitor), prefix}
+    );
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
@@ -283,8 +278,6 @@ S3Storage::S3Storage(const LibraryPath& library_path, OpenMode mode, const S3Set
     (void)std::locale::global(locale);
     ARCTICDB_DEBUG(log::storage(), "Opened S3 backed storage at {}", root_folder_);
 }
-
-bool S3Storage::supports_object_size_calculation() const { return true; }
 
 bool S3Storage::supports_object_metadata_listing() const { return true; }
 

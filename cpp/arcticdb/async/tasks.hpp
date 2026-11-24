@@ -685,27 +685,25 @@ struct RemoveBatchTask : BaseTask {
     void operator()() { lib_->remove(std::span(keys_), opts_); }
 };
 
-template<typename Visitor, void (storage::Library::*Method)(KeyType, const std::string&, const Visitor&)>
-struct VisitObjectsTask : BaseTask {
+struct VisitObjectMetadataTask : BaseTask {
     KeyType type_;
+    storage::ObjectMetadataVisitor visitor_;
     std::string prefix_;
-    Visitor visitor_;
     std::shared_ptr<storage::Library> lib_;
 
-    VisitObjectsTask(KeyType type, std::string prefix, Visitor visitor, std::shared_ptr<storage::Library> lib) :
+    VisitObjectMetadataTask(
+            KeyType type, storage::ObjectMetadataVisitor visitor, std::string prefix,
+            std::shared_ptr<storage::Library> lib
+    ) :
         type_(type),
-        prefix_(std::move(prefix)),
         visitor_(std::move(visitor)),
+        prefix_(std::move(prefix)),
         lib_(std::move(lib)) {
-        ARCTICDB_DEBUG(log::storage(), "Creating object visit task for key type {} prefix {}", type_, prefix_);
+        ARCTICDB_DEBUG(log::storage(), "Creating object metadata task for key type {} prefix {}", type_, prefix_);
     }
 
-    ARCTICDB_MOVE_ONLY_DEFAULT(VisitObjectsTask)
+    ARCTICDB_MOVE_ONLY_DEFAULT(VisitObjectMetadataTask)
 
-    void operator()() { (lib_.get()->*Method)(type_, prefix_, visitor_); }
+    void operator()() { lib_->visit_object_metadata(type_, visitor_, prefix_); }
 };
-
-using VisitObjectSizesTask = VisitObjectsTask<storage::ObjectSizesVisitor, &storage::Library::visit_object_sizes>;
-using VisitObjectMetadataTask =
-        VisitObjectsTask<storage::ObjectMetadataVisitor, &storage::Library::visit_object_metadata>;
 } // namespace arcticdb::async

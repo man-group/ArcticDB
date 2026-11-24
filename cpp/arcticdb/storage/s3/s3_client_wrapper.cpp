@@ -225,8 +225,8 @@ S3Result<ListObjectsOutput> S3ClientTestWrapper::list_objects(
     auto result = actual_client_->list_objects(name_prefix, bucket_name, continuation_token);
 
     if (result.is_success()) {
-        for (const auto& s3_object_name : result.get_output().s3_object_names) {
-            if (auto maybe_object_error = has_object_failure_trigger(s3_object_name, StorageOperation::LIST)) {
+        for (const auto& obj : result.get_output().objects) {
+            if (auto maybe_object_error = has_object_failure_trigger(obj.name, StorageOperation::LIST)) {
                 return {*maybe_object_error};
             }
         }

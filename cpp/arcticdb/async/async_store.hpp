@@ -261,9 +261,15 @@ class AsyncStore : public Store {
             prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
         }
 
-        if (library_->supports_object_size_calculation()) {
-            // The library has native support for some kind of clever size calculation, so let it take over
-            return async::submit_io_task(VisitObjectSizesTask{type, prefix, std::move(visitor), library_});
+        if (library_->supports_object_metadata_listing()) {
+            // The library has native support for listing object metadata (including sizes), so let it take over
+            return visit_object_metadata(
+                    type,
+                    [visitor = std::move(visitor)](const VariantKey& key, const storage::ObjectMetadata& metadata) {
+                        visitor(key, metadata.size);
+                    },
+                    prefix
+            );
         }
 
         // No native support for a clever size calculation, so just read keys and sum their sizes
@@ -290,16 +296,10 @@ class AsyncStore : public Store {
         return library_->supports_object_metadata_listing();
     }
 
-    // Matches visit_object_sizes prefix semantics: a StringId filters by string prefix (not exact symbol equality),
-    // while std::nullopt or a NumericId maps to an empty prefix and visits all keys of `type`.
     folly::Future<folly::Unit> visit_object_metadata(
-            KeyType type, const std::optional<StreamId>& stream_id_opt, const storage::ObjectMetadataVisitor& visitor
+            KeyType type, const storage::ObjectMetadataVisitor& visitor, const std::string& prefix = std::string{}
     ) override {
-        std::string prefix;
-        if (stream_id_opt && std::holds_alternative<StringId>(*stream_id_opt)) {
-            prefix = std::get<StringId>(*stream_id_opt);
-        }
-        return async::submit_io_task(VisitObjectMetadataTask{type, std::move(prefix), visitor, library_});
+        return async::submit_io_task(VisitObjectMetadataTask{type, visitor, prefix, library_});
     }
 
     folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(

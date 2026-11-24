@@ -167,34 +167,20 @@ class Storage {
         do_iterate_type_until_match(key_type, predicate_visitor, prefix);
     }
 
-    [[nodiscard]] virtual bool supports_object_size_calculation() const {
-        // TODO remove this default implementation when more storages have special size calculations implemented
-        return false;
-    }
-
-    void visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
-        util::check(
-                supports_object_size_calculation(),
-                "get_object_sizes called on storage {} which does not support "
-                "object size calculation",
-                name()
-        );
-        do_visit_object_sizes(key_type, prefix, visitor);
-    }
-
     [[nodiscard]] virtual bool supports_object_metadata_listing() const { return false; }
 
-    // Visits (key, ObjectMetadata) entries for `key_type` matching string prefix `prefix` (empty visits all keys of
-    // `key_type`). Matches iterate_type pagination semantics on S3: an expected error (NoSuchBucket/NoSuchKey/
-    // ResourceNotFound) after page 1 terminates early with a partial listing rather than throwing, so change-detection
-    // callers should not treat an unexpectedly empty/truncated listing on a missing bucket as individual deletions.
-    void visit_object_metadata(KeyType key_type, const std::string& prefix, const ObjectMetadataVisitor& visitor) {
+    // Visits (key, ObjectMetadata) entries for `key_type` using the same prefix semantics as `iterate_type` (empty
+    // visits all keys of `key_type`). On S3, an expected error (NoSuchBucket/NoSuchKey/ResourceNotFound) on page 1
+    // returns empty, whereas an error on page 2+ raises rather than returning a silently truncated listing.
+    void visit_object_metadata(
+            KeyType key_type, const ObjectMetadataVisitor& visitor, const std::string& prefix = std::string()
+    ) {
         util::check(
                 supports_object_metadata_listing(),
                 "visit_object_metadata called on storage {} which does not support object metadata listing",
                 name()
         );
-        do_visit_object_metadata(key_type, prefix, visitor);
+        do_visit_object_metadata(key_type, visitor, prefix);
     }
 
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
@@ -293,26 +279,9 @@ class Storage {
             KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
     ) = 0;
 
-    virtual void do_visit_object_sizes(
-            KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor
-    ) {
-        if (supports_object_metadata_listing()) {
-            do_visit_object_metadata(
-                    key_type,
-                    prefix,
-                    [&visitor](const VariantKey& key, const ObjectMetadata& metadata) { visitor(key, metadata.size); }
-            );
-            return;
-        }
-        // Must be overridden if you want to use this
-        util::raise_rte(
-                "do_visit_object_sizes called on storage {} that does not support object size calculation {}", name()
-        );
-    }
-
     virtual void do_visit_object_metadata(
-            [[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
-            [[maybe_unused]] const ObjectMetadataVisitor& visitor
+            [[maybe_unused]] KeyType key_type, [[maybe_unused]] const ObjectMetadataVisitor& visitor,
+            [[maybe_unused]] const std::string& prefix
     ) {
         util::raise_rte(
                 "do_visit_object_metadata called on storage {} that does not support object metadata listing", name()

@@ -8,6 +8,7 @@
 
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 
 #include <aws/s3/S3Client.h>
 
@@ -283,32 +284,32 @@ folly::Future<S3Result<std::monostate>> S3ClientImpl::delete_object(
 
 ListObjectsOutput parse_list_objects_v2_result(const Aws::S3::Model::ListObjectsV2Result& result) {
     auto next_continuation_token = std::optional<std::string>();
-    if (result.GetIsTruncated())
-        next_continuation_token = {result.GetNextContinuationToken()};
-
-    const auto& contents = result.GetContents();
-    std::vector<std::string> s3_object_names;
-    std::vector<uint64_t> s3_object_sizes;
-    std::vector<std::string> s3_object_etags;
-    std::vector<int64_t> s3_object_last_modified_ms;
-    s3_object_names.reserve(contents.size());
-    s3_object_sizes.reserve(contents.size());
-    s3_object_etags.reserve(contents.size());
-    s3_object_last_modified_ms.reserve(contents.size());
-    for (const auto& s3_object : contents) {
-        s3_object_names.emplace_back(s3_object.GetKey());
-        s3_object_sizes.emplace_back(static_cast<uint64_t>(s3_object.GetSize()));
-        s3_object_etags.emplace_back(s3_object.GetETag());
-        s3_object_last_modified_ms.emplace_back(s3_object.GetLastModified().Millis());
+    if (result.GetIsTruncated()) {
+        const auto& token = result.GetNextContinuationToken();
+        if (token.empty()) {
+            storage::raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(
+                    "S3 ListObjectsV2 returned IsTruncated=true with an empty NextContinuationToken"
+            );
+        }
+        next_continuation_token = token;
     }
 
-    return ListObjectsOutput{
-            std::move(s3_object_names),
-            std::move(s3_object_sizes),
-            std::move(s3_object_etags),
-            std::move(s3_object_last_modified_ms),
-            next_continuation_token
-    };
+    const auto& contents = result.GetContents();
+    std::vector<ListedObject> objects;
+    objects.reserve(contents.size());
+    for (const auto& s3_object : contents) {
+        const auto raw_size = s3_object.GetSize();
+        objects.push_back(ListedObject{
+                s3_object.GetKey(),
+                ObjectMetadata{
+                        s3_object.GetETag(),
+                        raw_size >= 0 ? static_cast<uint64_t>(raw_size) : 0,
+                        s3_object.GetLastModified().Millis()
+                }
+        });
+    }
+
+    return ListObjectsOutput{std::move(objects), std::move(next_continuation_token)};
 }
 
 S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
