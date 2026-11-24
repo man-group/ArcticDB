@@ -13,6 +13,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/version/de_dup_map.hpp>
+#include <arcticdb/version/enriched_op_log_payload.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 
 #include <folly/synchronization/NativeSemaphore.h>
@@ -143,6 +144,16 @@ struct StreamSink {
     // Largest number of keys the underlying storage will delete in a single request, or nullopt when
     // there is no such limit. Callers can use this to size the key batches they submit for deletion.
     [[nodiscard]] virtual std::optional<size_t> max_delete_batch_size() const { return std::nullopt; }
+
+    // Optional write-capture hooks used to embed already-compressed write artifacts into KeyType::LOG
+    // without issuing extra storage reads. Default no-op for minimal sinks/mocks.
+    [[nodiscard]] virtual std::optional<CapturedVersionWrite> take_captured_version_write(
+            const StreamId& /*stream_id*/, entity::VersionId /*version_id*/
+    ) {
+        return std::nullopt;
+    }
+
+    virtual void discard_captured_version_write(const StreamId& /*stream_id*/, entity::VersionId /*version_id*/) {}
 
     virtual timestamp current_timestamp() = 0;
 };
