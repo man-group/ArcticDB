@@ -95,6 +95,7 @@ void expect_from_backend(size_t size, Allocate&& allocate, Release&& release) {
 
 TEST(Allocator, UsesConfiguredBackend) {
     constexpr size_t size = 1 << 20;
+#if !defined(__APPLE__) // macOS keeps operator new/delete on the system allocator
     // Explicit operator calls, because compilers may elide a new-expression whose result is unused
     expect_from_backend(
             size,
@@ -111,6 +112,7 @@ TEST(Allocator, UsesConfiguredBackend) {
             },
             [&vec](uint8_t*) { std::vector<uint8_t>().swap(vec); }
     );
+#endif
 
     expect_from_backend(
             size,
