@@ -18,6 +18,94 @@ using namespace arcticdb::stream;
 
 namespace arcticdb {
 
+namespace {
+
+const SnapshotId& entry_id(const VariantKey& vk) { return variant_key_id(vk); }
+const SnapshotId& entry_id(const SnapshotEntry& entry) { return variant_key_id(entry.key); }
+
+void validate_snapshot_key(KeyType key_type, const VariantKey& vk) {
+    if (key_type == KeyType::SNAPSHOT_REF) {
+        util::check(
+                std::holds_alternative<RefKey>(vk),
+                "Expected snapshot ref to be reference type, got {}",
+                variant_key_view(vk)
+        );
+    } else if (key_type == KeyType::SNAPSHOT) {
+        util::check(
+                std::holds_alternative<AtomKey>(vk),
+                "Expected legacy snapshot key to be atom type, got {}",
+                variant_key_view(vk)
+        );
+    }
+}
+
+template<typename Entry>
+std::vector<Entry> merge_snapshot_entries(std::vector<Entry>&& refs, std::vector<Entry>&& atoms) {
+    if (atoms.empty()) {
+        return std::move(refs);
+    }
+    if (refs.empty()) {
+        return std::move(atoms);
+    }
+    std::unordered_set<SnapshotId> seen;
+    seen.reserve(refs.size());
+    for (const auto& entry : refs) {
+        seen.insert(entry_id(entry));
+    }
+    refs.reserve(refs.size() + atoms.size());
+    for (auto& entry : atoms) {
+        if (!seen.contains(entry_id(entry))) {
+            refs.emplace_back(std::move(entry));
+        }
+    }
+    return std::move(refs);
+}
+
+std::vector<VariantKey> iterate_snapshot_type(const std::shared_ptr<Store>& store, KeyType key_type) {
+    std::vector<VariantKey> keys;
+    store->iterate_type(key_type, [&keys, key_type](VariantKey&& vk) {
+        validate_snapshot_key(key_type, vk);
+        keys.emplace_back(std::move(vk));
+    });
+    return keys;
+}
+
+folly::Future<std::vector<VariantKey>> iterate_snapshot_type_async(
+        const std::shared_ptr<Store>& store, KeyType key_type
+) {
+    return folly::via(&async::io_executor(), [store, key_type]() { return iterate_snapshot_type(store, key_type); });
+}
+
+folly::Future<std::vector<SnapshotEntry>> visit_snapshot_metadata_async(
+        const std::shared_ptr<Store>& store, KeyType key_type
+) {
+    auto entries = std::make_shared<std::vector<SnapshotEntry>>();
+    return store
+            ->visit_object_metadata(
+                    key_type,
+                    [entries, key_type](const VariantKey& k, const storage::ObjectMetadata& m) {
+                        validate_snapshot_key(key_type, k);
+                        entries->push_back(SnapshotEntry{k, m});
+                    }
+            )
+            .thenValueInline([entries, store](folly::Unit) { return std::move(*entries); });
+}
+
+template<typename Entry>
+folly::SemiFuture<std::vector<Entry>> collect_snapshot_legs(
+        folly::Future<std::vector<Entry>> ref_fut, folly::Future<std::vector<Entry>> atom_fut
+) {
+    return folly::collectAll(std::move(ref_fut), std::move(atom_fut))
+            .deferValue([](std::tuple<folly::Try<std::vector<Entry>>, folly::Try<std::vector<Entry>>>&& res) {
+                auto& [refs_try, atoms_try] = res;
+                refs_try.throwUnlessValue();
+                atoms_try.throwUnlessValue();
+                return merge_snapshot_entries(std::move(refs_try.value()), std::move(atoms_try.value()));
+            });
+}
+
+} // namespace
+
 void write_snapshot_entry(
         std::shared_ptr<StreamSink> store, std::vector<AtomKey>& keys, const SnapshotId& snapshot_id,
         const py::object& user_meta, bool log_changes, KeyType key_type
@@ -89,26 +177,9 @@ void tombstone_snapshot(
 void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor) {
     ARCTICDB_SAMPLE(IterateSnapshots, 0)
 
-    std::vector<VariantKey> snap_variant_keys;
-    std::unordered_set<SnapshotId> seen;
-
-    store->iterate_type(KeyType::SNAPSHOT_REF, [&snap_variant_keys, &seen](VariantKey&& vk) {
-        util::check(
-                std::holds_alternative<RefKey>(vk),
-                "Expected snapshot ref to be reference type, got {}",
-                variant_key_view(vk)
-        );
-        auto ref_key = std::get<RefKey>(std::move(vk));
-        seen.insert(ref_key.id());
-        snap_variant_keys.emplace_back(ref_key);
-    });
-
-    store->iterate_type(KeyType::SNAPSHOT, [&snap_variant_keys, &seen](VariantKey&& vk) {
-        auto key = to_atom(std::move(vk));
-        if (seen.find(key.id()) == seen.end()) {
-            snap_variant_keys.emplace_back(key);
-        }
-    });
+    auto ref_keys = iterate_snapshot_type(store, KeyType::SNAPSHOT_REF);
+    auto legacy_keys = iterate_snapshot_type(store, KeyType::SNAPSHOT);
+    auto snap_variant_keys = merge_snapshot_entries(std::move(ref_keys), std::move(legacy_keys));
 
     for (auto& vk : snap_variant_keys) {
         try {
@@ -268,19 +339,10 @@ std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, 
 
     // Fall back to iteration
     ARCTICDB_DEBUG(log::version(), "Ref key not found for snapshot, falling back to slow path: {}", snap_name);
-    std::optional<std::pair<VariantKey, SegmentInMemory>> opt_segment;
-
-    std::optional<VariantKey> ret;
-    store->iterate_type(
-            KeyType::SNAPSHOT,
-            [&ret, &snap_name](VariantKey&& vk) {
-                if (variant_key_id(vk) == snap_name) {
-                    ret = to_atom(vk);
-                }
-            },
-            fmt::format("{}", snap_name)
-    );
-    return ret;
+    auto legacy_keys = find_legacy_snapshot_keys(store, snap_name);
+    if (legacy_keys.empty())
+        return std::nullopt;
+    return std::move(legacy_keys.back());
 }
 
 std::unordered_map<SnapshotId, std::optional<VariantKey>> all_ref_keys(
@@ -432,6 +494,57 @@ MasterSnapshotMapAndKeys get_master_snapshots_map_and_keys_in_given_snapshot(
         }
     });
     return out;
+}
+
+ankerl::unordered_dense::set<AtomKey> extract_snapshot_index_keys(const SegmentInMemory& snapshot_segment) {
+    ankerl::unordered_dense::set<AtomKey> index_keys;
+    index_keys.reserve(snapshot_segment.row_count());
+    for (size_t idx = 0; idx < snapshot_segment.row_count(); ++idx) {
+        auto key = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
+        if (is_index_key_type(key.type())) {
+            index_keys.emplace(std::move(key));
+        }
+    }
+    return index_keys;
+}
+
+std::vector<VariantKey> find_legacy_snapshot_keys(const std::shared_ptr<Store>& store, const SnapshotId& snap_name) {
+    std::vector<VariantKey> found;
+    store->iterate_type(
+            KeyType::SNAPSHOT,
+            [&found, &snap_name](VariantKey&& vk) {
+                validate_snapshot_key(KeyType::SNAPSHOT, vk);
+                if (variant_key_id(vk) == snap_name) {
+                    found.emplace_back(std::move(vk));
+                }
+            },
+            fmt::format("{}", snap_name)
+    );
+    return found;
+}
+
+folly::SemiFuture<std::vector<VariantKey>> list_snapshot_keys_parallel(const std::shared_ptr<Store>& store) {
+    return collect_snapshot_legs(
+            iterate_snapshot_type_async(store, KeyType::SNAPSHOT_REF),
+            iterate_snapshot_type_async(store, KeyType::SNAPSHOT)
+    );
+}
+
+folly::SemiFuture<std::vector<SnapshotEntry>> list_snapshot_keys_with_metadata(const std::shared_ptr<Store>& store) {
+    if (!store->supports_object_metadata_listing()) {
+        return list_snapshot_keys_parallel(store).deferValue([](std::vector<VariantKey>&& keys) {
+            std::vector<SnapshotEntry> entries;
+            entries.reserve(keys.size());
+            for (auto& key : keys) {
+                entries.push_back(SnapshotEntry{std::move(key), std::nullopt});
+            }
+            return entries;
+        });
+    }
+    return collect_snapshot_legs(
+            visit_snapshot_metadata_async(store, KeyType::SNAPSHOT_REF),
+            visit_snapshot_metadata_async(store, KeyType::SNAPSHOT)
+    );
 }
 
 } // namespace arcticdb
