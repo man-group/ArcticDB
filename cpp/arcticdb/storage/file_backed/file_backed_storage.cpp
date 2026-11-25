@@ -68,6 +68,7 @@ void raise_io_error(int error_code, std::string_view message) {
         storage::raise<ErrorCode::E_QUOTA_EXCEEDED>(message);
         break;
     case ENOENT:
+        // TODO: Consider if this should be FileNotFoundException. Then translate.
         throw storage::KeyNotFoundException(std::string{message});
         break;
     case ESTALE:
@@ -273,11 +274,11 @@ class File : public FdHolder {
 
     ARCTICDB_NO_MOVE_OR_COPY(File);
 
-    void write_all(PosixInterface& posix, std::span<const std::uint8_t> buffer) {
+    void write_all(std::span<const std::uint8_t> buffer) {
         const size_t buffer_size = buffer.size();
         size_t written = 0;
         while (written < buffer_size) {
-            const ssize_t n = posix.write(fd_, buffer.data() + written, buffer_size - written);
+            const ssize_t n = posix_.write(fd_, buffer.data() + written, buffer_size - written);
             if (n < 0) {
                 if (errno == EINTR)
                     continue;
@@ -327,6 +328,49 @@ class DirHandle {
   private:
     PosixInterface& posix_;
     DIR* dirp_;
+};
+
+class TempFile {
+  public:
+    TempFile(PosixInterface& posix, const Directory& dir) :
+        posix_(posix),
+        dir_(dir),
+        file_name_(generate_tmp_file_name()),
+        file_(posix, dir_, file_name_, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE) {}
+
+    ~TempFile() {
+        if (!committed_) {
+            dir_.unlinkat_swallow_errors(file_name_.c_str());
+        }
+    }
+
+    void write_all(std::span<const std::uint8_t> buffer) { file_.write_all(buffer); }
+
+    void commit_as(const char* dest) {
+        file_.sync();
+        file_.close();
+        if (posix_.renameat(dir_.fd(), file_name_.c_str(), dir_.fd(), dest) != 0) {
+            if (errno == ENOENT) {
+                // Could be a lost reply from NFS server and the file was actually moved into place.
+                // TODO: Consider how to construct the check that the file exists.
+                // try {
+                //     File destination_file(posix_, dir_, dest, O_RDONLY | O_CLOEXEC, 0);
+                // } catch (const storage::KeyNotFoundException&) {
+                //     raise_io_error(errno, fmt::format("Failed to move temp file to {}", dest));
+                // }
+            }
+            raise_io_error(errno, fmt::format("Failed to move temp file to {}", dest));
+        }
+        committed_ = true;
+        dir_.sync();
+    }
+
+  private:
+    PosixInterface& posix_;
+    const Directory& dir_;
+    std::string file_name_;
+    File file_;
+    bool committed_ = false;
 };
 
 // Borrowed reference to memory owned by FileTraversal.
@@ -473,17 +517,13 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
     }
 }
 
-bool remove_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& key) {
-    const std::string key_file_name = to_tokenized_key(key);
-    const fs::path directory_path = storage_dir / entity::key_type_long_name(variant_key_type(key));
-    Directory dest_dir(posix, storage_dir, directory_path);
-    if (dest_dir.unlinkat(key_file_name.c_str()) != 0) {
+bool remove_impl(Directory& containing_dir, const fs::path& directory_path, const std::string& key_file_name) {
+    if (containing_dir.unlinkat(key_file_name.c_str()) != 0) {
         if (errno == ENOENT)
             return false;
         const fs::path full_path = directory_path / key_file_name;
         raise_io_error(errno, fmt::format("Failed to remove file {}: {}", full_path.c_str(), std::strerror(errno)));
     }
-    dest_dir.sync();
     return true;
 }
 
@@ -533,7 +573,6 @@ std::string FileBackedStorage::name() const { return fmt::format("file_backed_st
 void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     std::string maybe_safe_file_name_for_key = to_tokenized_key(key_seg.variant_key());
     Segment& seg = *key_seg.segment_ptr();
-    const std::string tmp_file_name = generate_tmp_file_name();
     const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
 
     bool retried_stale = false;
@@ -542,41 +581,21 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
         storage_dir_fd.mkdir(key_name, new_dir_mode_);
         Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name);
         try {
-            File tmp_key_fd(
-                    *posix_, key_type_dir_fd, tmp_file_name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE
-            );
-            size_t segment_size = seg.calculate_size();
+            TempFile tmp_key_fd(*posix_, key_type_dir_fd);
             // TODO: Unnecessary copy
-            std::vector<std::uint8_t> buffer(segment_size);
+            std::vector<std::uint8_t> buffer(seg.calculate_size());
             seg.write_to(buffer.data());
-            tmp_key_fd.write_all(*posix_, buffer);
-            tmp_key_fd.sync();
-            tmp_key_fd.close();
-
-            if (posix_->renameat(
-                        key_type_dir_fd.fd(),
-                        tmp_file_name.c_str(),
-                        key_type_dir_fd.fd(),
-                        maybe_safe_file_name_for_key.c_str()
-                ) != 0) {
-                raise_io_error(errno, fmt::format("Failed to move temp file to {}", maybe_safe_file_name_for_key));
-            }
-
-            // After data is written, and file is closed, fsync on dir makes the file durable for local file systems.
-            // No-op on NFS.
-            key_type_dir_fd.sync();
+            tmp_key_fd.write_all(buffer);
+            // This closes and moves the temp file.
+            tmp_key_fd.commit_as(maybe_safe_file_name_for_key.c_str());
             key_type_dir_fd.close();
             storage_dir_fd.close();
             break;
         } catch (const StaleFileDescriptor& e) {
-            key_type_dir_fd.unlinkat_swallow_errors(tmp_file_name);
             if (!retried_stale) {
                 retried_stale = true;
                 continue;
             }
-            throw;
-        } catch (...) {
-            key_type_dir_fd.unlinkat_swallow_errors(tmp_file_name);
             throw;
         }
     }
@@ -610,19 +629,41 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
     return {std::move(variant_key), read_impl(*posix_, storage_dir_, VariantKey{variant_key})};
 }
 
-void FileBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
-    const bool success = remove_impl(*posix_, storage_dir_, variant_key);
+void FileBackedStorage::do_remove(VariantKey&& key, RemoveOpts opts) {
+    const std::string key_file_name = to_tokenized_key(key);
+    const fs::path directory_path = storage_dir_ / entity::key_type_long_name(variant_key_type(key));
+    Directory directory(*posix_, storage_dir_, directory_path);
+    const bool success = remove_impl(directory, directory_path, key_file_name);
+    directory.sync();
     if (!success && !opts.ignores_missing_key_)
-        throw KeyNotFoundException(variant_key);
+        throw KeyNotFoundException(key);
 }
 
 void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
-    std::vector<VariantKey> failed_deletes;
-    for (const VariantKey& variant_key : variant_keys) {
-        const bool success = remove_impl(*posix_, storage_dir_, variant_key);
-        if (!success && !opts.ignores_missing_key_)
-            failed_deletes.emplace_back(variant_key);
+    // Note that in the near future, keys will be further divided into subdirectories. The bucket will become a tuple.
+    using Bucket = KeyType;
+    std::unordered_map<Bucket, std::vector<VariantKey>> keys_by_directory;
+    for (const VariantKey& key : variant_keys) {
+        keys_by_directory[variant_key_type(key)].emplace_back(key);
     }
+
+    std::vector<VariantKey> failed_deletes;
+    for (const auto& [key_type, keys] : keys_by_directory) {
+        const fs::path directory_path = storage_dir_ / entity::key_type_long_name(key_type);
+        Directory directory(*posix_, storage_dir_, directory_path);
+        for (const VariantKey& key : keys) {
+            const std::string key_file_name = to_tokenized_key(key);
+            bool success = remove_impl(directory, directory_path, key_file_name);
+            if (!success) {
+                // TODO: this is the retry path, and we need to reopen `directory`.
+                success = remove_impl(directory, directory_path, key_file_name);
+                if (!success && !opts.ignores_missing_key_)
+                    failed_deletes.emplace_back(key);
+            }
+        }
+        directory.sync();
+    }
+
     if (!failed_deletes.empty())
         throw KeyNotFoundException(std::move(failed_deletes));
 }
