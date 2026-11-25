@@ -218,6 +218,15 @@ S3Result<ListObjectsOutput> S3ClientTestWrapper::list_objects(
         ))};
     }
 
+    if (directory_bucket_ && !name_prefix.ends_with('/')) {
+        return {Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                Aws::S3::S3Errors::INVALID_REQUEST,
+                "InvalidRequest",
+                "Directory buckets only support prefixes ending in '/'",
+                false
+        ))};
+    }
+
     if (auto maybe_bucket_error = has_bucket_failure_trigger(bucket_name); maybe_bucket_error.has_value()) {
         return {*maybe_bucket_error};
     }

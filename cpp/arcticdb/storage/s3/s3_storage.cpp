@@ -129,6 +129,14 @@ void GCPXMLStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_no_batching_impl(keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
+// Directory buckets only accept listing prefixes ending in '/', so once detected list the whole key type and let the
+// primary visitor match the prefix in memory
+namespace {
+std::string server_side_prefix(bool directory_bucket, const std::string& prefix) {
+    return directory_bucket ? std::string{} : prefix;
+}
+} // namespace
+
 IterateTypePredicate prefix_matching_visitor(const IterateTypePredicate& visitor, const std::string& prefix) {
     return [&](VariantKey&& key) { return detail::visit_if_prefix_matches(visitor, prefix, std::move(key)); };
 }
@@ -137,7 +145,11 @@ bool S3Storage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
     auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
+            root_folder_,
+            key_type,
+            true,
+            server_side_prefix(directory_bucket_, prefix),
+            FlatBucketizer::bucketize_length(key_type)
     );
     const IterateTypePredicate primary_visitor = directory_bucket_ ? prefix_matching_visitor(visitor, prefix) : visitor;
     const std::optional<IterateTypePredicate> fallback_visitor =
@@ -158,7 +170,11 @@ ObjectSizesVisitor prefix_matching_object_sizes_visitor(const ObjectSizesVisitor
 
 void S3Storage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
     auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
+            root_folder_,
+            key_type,
+            true,
+            server_side_prefix(directory_bucket_, prefix),
+            FlatBucketizer::bucketize_length(key_type)
     );
     const ObjectSizesVisitor primary_visitor =
             directory_bucket_ ? prefix_matching_object_sizes_visitor(visitor, prefix) : visitor;
