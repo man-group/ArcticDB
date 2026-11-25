@@ -31,6 +31,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/async/test/scoped_thread_counts.hpp>
 #include <folly/executors/QueuedImmediateExecutor.h>
 
 namespace arcticdb {
@@ -301,21 +302,7 @@ TEST(ProcessingUnitAdmissionHandlerTest, ReadWindowLimitsInFlightReads) {
     EXPECT_EQ(total_fired(), total_segments);
 }
 
-namespace {
-struct ReattachTaskSchedulerOnScopeExit {
-    ~ReattachTaskSchedulerOnScopeExit() { async::TaskScheduler::reattach_instance(); }
-};
-
-struct ScopedThreadCounts {
-    ReattachTaskSchedulerOnScopeExit reattach_guard;
-    ScopedConfig config;
-
-    explicit ScopedThreadCounts(int64_t cpu = 1, int64_t io = 1) :
-        config({{"VersionStore.NumCPUThreads", cpu}, {"VersionStore.NumIOThreads", io}}) {
-        async::TaskScheduler::reattach_instance();
-    }
-};
-} // namespace
+using async::ScopedThreadCounts;
 
 // Overlapping units with a ceiling of 1, and thread pools of size 1. The first unit loads the
 // shared segment, the second is admitted only when the first completes, and it does not reload the shared segment.

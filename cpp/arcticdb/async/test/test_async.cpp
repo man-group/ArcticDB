@@ -11,6 +11,7 @@
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/async/async_store.hpp>
+#include <arcticdb/async/test/scoped_thread_counts.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/config_common.hpp>
@@ -22,7 +23,9 @@
 #include <spdlog/sinks/base_sink.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <string>
 #include <thread>
 #include <vector>
@@ -990,3 +993,55 @@ TEST(Async, FormatTaskStatsLine) {
             "priority=3"
     );
 }
+
+#ifdef __linux__
+namespace {
+size_t open_file_descriptors() {
+    return std::distance(std::filesystem::directory_iterator("/proc/self/fd"), std::filesystem::directory_iterator{});
+}
+
+// Holds `tasks` IO tasks busy at once, so the pool starts that many threads, then releases and drains them.
+// Returns how many were running at the same time.
+size_t occupy_io_threads(size_t tasks) {
+    std::atomic<size_t> started{0};
+    std::atomic<size_t> finished{0};
+    std::atomic_flag release{};
+    for (size_t i = 0; i < tasks; ++i) {
+        async::io_executor().add([&] {
+            ++started;
+            release.wait(false);
+            ++finished;
+        });
+    }
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (started < tasks && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const size_t result = started;
+    release.test_and_set();
+    release.notify_all();
+    // Wait for every task, including any still queued after a timeout, since they reference this frame
+    while (finished < tasks)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    return result;
+}
+} // namespace
+
+TEST(Async, ReplacingTheSchedulerForTestingFreesTheOldPool) {
+    const auto default_cpu_threads = static_cast<size_t>(async::get_default_cpu_count());
+    const auto default_io_threads = static_cast<size_t>(async::get_default_io_count());
+    {
+        async::ScopedThreadCounts threads{/*cpu=*/2, /*io=*/32};
+        ASSERT_EQ(async::TaskScheduler::instance()->cpu_thread_count(), 2);
+        const size_t before = open_file_descriptors();
+
+        ASSERT_EQ(occupy_io_threads(32), 32);
+        ASSERT_GE(open_file_descriptors(), before + 32);
+
+        async::TaskScheduler::replace_instance_for_testing();
+        EXPECT_LE(open_file_descriptors(), before);
+    }
+    // Later tests in this binary must not inherit the resized pools
+    EXPECT_EQ(async::TaskScheduler::instance()->cpu_thread_count(), default_cpu_threads);
+    EXPECT_EQ(async::TaskScheduler::instance()->io_thread_count(), default_io_threads);
+}
+#endif

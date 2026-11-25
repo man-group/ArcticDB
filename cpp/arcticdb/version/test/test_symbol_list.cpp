@@ -21,6 +21,7 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 
 #include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/async/test/scoped_thread_counts.hpp>
 
 using namespace arcticdb;
 using namespace folly;
@@ -258,9 +259,7 @@ TEST_P(SymbolListWithWriteFailures, InitialCompact) {
 // If this test is timing out, it's likely that a deadlock is occurring
 // A call is blocking on the CPU thread pool, which has only one thread in this test
 TEST_F(SymbolListSuite, InitialCompactConcurent) {
-    ConfigsMap::instance()->set_int("VersionStore.NumCPUThreads", 1);
-    ConfigsMap::instance()->set_int("VersionStore.NumIOThreads", 1);
-    async::TaskScheduler::reattach_instance();
+    async::ScopedThreadCounts tiny_pool;
 
     auto version_store = get_test_engine();
     const auto& store = version_store._test_get_store();

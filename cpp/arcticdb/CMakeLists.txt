@@ -1112,6 +1112,7 @@ if(${TEST})
             arrow/test/test_arrow_read.cpp
             arrow/test/test_arrow_write.cpp
             arrow/test/test_arrow_schema_utils.cpp
+            async/test/scoped_thread_counts.hpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
