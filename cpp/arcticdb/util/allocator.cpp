@@ -20,7 +20,43 @@
 #include <malloc.h>
 #endif
 
+#ifdef ARCTICDB_USE_MIMALLOC
+#ifdef _MSC_VER
+#pragma warning(push, 0)
+#endif
+#include <mimalloc.h>
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+#endif
+
 namespace arcticdb {
+
+namespace {
+void* raw_malloc(size_t size) {
+#ifdef ARCTICDB_USE_MIMALLOC
+    return mi_malloc(size);
+#else
+    return std::malloc(size);
+#endif
+}
+
+void raw_free(void* p) {
+#ifdef ARCTICDB_USE_MIMALLOC
+    mi_free(p);
+#else
+    std::free(p);
+#endif
+}
+
+void* raw_realloc(void* p, size_t size) {
+#ifdef ARCTICDB_USE_MIMALLOC
+    return mi_realloc(p, size);
+#else
+    return std::realloc(p, size);
+#endif
+}
+} // namespace
 
 uint8_t* allocate_detachable_memory(size_t size) { return get_detachable_allocator().allocate(size); }
 
@@ -174,7 +210,9 @@ void AllocatorImpl<TracingPolicy, ClockType>::maybe_trim() {
 
 template<class TracingPolicy, class ClockType>
 uint8_t* AllocatorImpl<TracingPolicy, ClockType>::get_alignment(size_t size) {
-#ifdef _WIN32
+#ifdef ARCTICDB_USE_MIMALLOC
+    return static_cast<uint8_t*>(mi_malloc_aligned(size, alignment));
+#elif defined(_WIN32)
     return static_cast<uint8_t*>(_aligned_malloc(size, alignment));
 #else
     return static_cast<uint8_t*>(std::malloc(size));
@@ -196,10 +234,10 @@ uint8_t* AllocatorImpl<TracingPolicy, ClockType>::internal_alloc(size_t size) {
         ret = reinterpret_cast<uint8_t*>(page_size_slab_allocator_->allocate());
     } else {
         ARCTICDB_TRACE(log::codec(), "Doing normal allocation of size {}", size);
-        ret = static_cast<uint8_t*>(std::malloc(size));
+        ret = static_cast<uint8_t*>(raw_malloc(size));
     }
 #else
-    ret = static_cast<uint8_t*>(std::malloc(size));
+    ret = static_cast<uint8_t*>(raw_malloc(size));
 #endif
     return ret;
 }
@@ -214,10 +252,10 @@ void AllocatorImpl<TracingPolicy, ClockType>::internal_free(uint8_t* p) {
         page_size_slab_allocator_->deallocate(raw_pointer);
     } else {
         ARCTICDB_TRACE(log::codec(), "Doing normal free of address {}", uintptr_t(p));
-        std::free(p);
+        raw_free(p);
     }
 #else
-    std::free(p);
+    raw_free(p);
 #if defined(__linux__) && defined(__GLIBC__)
     free_count_.increment(1);
     maybe_trim();
@@ -237,19 +275,19 @@ uint8_t* AllocatorImpl<TracingPolicy, ClockType>::internal_realloc(uint8_t* p, s
             return p;
         else {
             page_size_slab_allocator_->deallocate(raw_pointer);
-            ret = static_cast<uint8_t*>(std::malloc(size));
+            ret = static_cast<uint8_t*>(raw_malloc(size));
         }
     } else {
         ARCTICDB_TRACE(log::codec(), "Doing normal realloc of address {} and size {}", uintptr_t(p), size);
         if (use_slab_allocator() && size == page_size) {
-            std::free(p);
+            raw_free(p);
             ret = reinterpret_cast<uint8_t*>(page_size_slab_allocator_->allocate());
         } else {
-            ret = static_cast<uint8_t*>(std::realloc(p, size));
+            ret = static_cast<uint8_t*>(raw_realloc(p, size));
         }
     }
 #else
-    ret = static_cast<uint8_t*>(std::realloc(p, size));
+    ret = static_cast<uint8_t*>(raw_realloc(p, size));
 #endif
     return ret;
 }
@@ -285,11 +323,12 @@ std::pair<uint8_t*, entity::timestamp> AllocatorImpl<TracingPolicy, ClockType>::
 
 template<typename TracingPolicy, typename ClockType>
 void AllocatorImpl<TracingPolicy, ClockType>::trim() {
-    /* malloc_trim is a glibc extension not available on Windows.It is possible
-     * that we will end up with a larger memory footprint for not calling it, but
-     * there are no windows alternatives.
+    /* malloc_trim is a glibc extension not available on Windows. When mimalloc is linked
+     * on Windows static builds we delegate to mi_collect; otherwise this is a no-op.
      */
-#if defined(__linux__) && defined(__GLIBC__)
+#if defined(ARCTICDB_USE_MIMALLOC)
+    mi_collect(false);
+#elif defined(__linux__) && defined(__GLIBC__)
     malloc_trim(0);
 #endif
 }

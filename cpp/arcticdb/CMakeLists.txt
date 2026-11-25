@@ -45,6 +45,10 @@ find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
 find_package(PCRE2 REQUIRED COMPONENTS 8BIT 32BIT)
 
+if(ARCTICDB_MIMALLOC_ENABLED)
+    find_package(mimalloc CONFIG REQUIRED)
+endif()
+
 if(${ARCTICDB_ENABLE_PERFORMANCE_SAMPLING})
     find_package(unofficial-perfetto CONFIG REQUIRED)
 endif()
@@ -835,6 +839,12 @@ if(${ARCTICDB_COUNT_ALLOCATIONS})
     )
 endif()
 
+if(ARCTICDB_MIMALLOC_ENABLED)
+    list(APPEND arcticdb_core_libraries
+            $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>
+    )
+endif()
+
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
     # Even though python is transitive dependency MSVS builds fail if we don't link against python explicitly
     # TODO: Figure out why
@@ -1024,6 +1034,15 @@ if (NOT WIN32)
     endif()
 endif ()
 
+if(ARCTICDB_MIMALLOC_ENABLED)
+    set_pdb_name_per_translation_unit(util/mimalloc_override.cpp)
+    add_library(arcticdb_mimalloc_override OBJECT util/mimalloc_override.cpp)
+    target_link_libraries(
+            arcticdb_mimalloc_override
+            PRIVATE $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>
+    )
+endif()
+
 ## arcticdb_ext python module
 # This configures: linking to Python::Module + pybind, output pre-/suf-fix, -fvisibility=hidden, strip release build
 set(arcticdb_pybind_module_src
@@ -1033,6 +1052,9 @@ set(arcticdb_pybind_module_src
 set(arcticdb_pybind_module_headers python/arctic_version.hpp)
 pybind11_add_module(arcticdb_ext MODULE ${arcticdb_pybind_module_src} ${arcticdb_pybind_module_headers})
 set_pdb_name_per_translation_unit(${arcticdb_pybind_module_src})
+if(ARCTICDB_MIMALLOC_ENABLED)
+    target_sources(arcticdb_ext PRIVATE $<TARGET_OBJECTS:arcticdb_mimalloc_override>)
+endif()
 
 if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -1241,6 +1263,9 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
+    if(ARCTICDB_MIMALLOC_ENABLED)
+        target_sources(test_unit_arcticdb PRIVATE $<TARGET_OBJECTS:arcticdb_mimalloc_override>)
+    endif()
 
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .

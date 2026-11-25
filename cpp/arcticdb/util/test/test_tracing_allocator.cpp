@@ -11,6 +11,16 @@
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 
+#ifdef ARCTICDB_USE_MIMALLOC
+#ifdef _MSC_VER
+#pragma warning(push, 0)
+#endif
+#include <mimalloc.h>
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+#endif
+
 TEST(Allocator, Tracing) {
     using AllocType = arcticdb::AllocatorImpl<arcticdb::InMemoryTracingPolicy>;
     AllocType::clear();
@@ -62,3 +72,24 @@ TEST(Allocator, PrintMemUsage) {
     ASSERT_GT(summary.data_stack.value_, 0);
 #endif
 }
+
+#ifdef ARCTICDB_USE_MIMALLOC
+TEST(Allocator, UsesMimalloc) {
+    auto cpp_obj = std::make_unique<uint64_t>(42);
+    EXPECT_TRUE(mi_is_in_heap_region(cpp_obj.get()));
+
+    std::vector<uint8_t> vec(4096, 1);
+    EXPECT_TRUE(mi_is_in_heap_region(vec.data()));
+
+    uint8_t* detachable = arcticdb::allocate_detachable_memory(8192);
+    EXPECT_TRUE(mi_is_in_heap_region(detachable));
+    arcticdb::free_detachable_memory(detachable, 8192);
+
+    auto block = arcticdb::Allocator::alloc(4096);
+    EXPECT_TRUE(mi_is_in_heap_region(block.first));
+    block = arcticdb::Allocator::realloc(block, 16384);
+    EXPECT_TRUE(mi_is_in_heap_region(block.first));
+    arcticdb::Allocator::free(block);
+    arcticdb::Allocator::trim();
+}
+#endif
