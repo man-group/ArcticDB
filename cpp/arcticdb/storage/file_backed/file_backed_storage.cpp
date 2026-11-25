@@ -310,7 +310,7 @@ int openat_fd(PosixInterface& posix, Directory& dir, const fs::path& pathname, i
         return fd;
 
     if (errno == ENOENT) {
-        // Only occurs without O_CREAT
+        // Either the file doesn't exist, or the directory was deleted.
         dir.reopen();
         fd = posix.openat(dir.fd(), pathname.c_str(), flags, mode);
         if (fd >= 0)
@@ -580,9 +580,14 @@ bool remove_impl(Directory& containing_dir, const fs::path& directory_path, cons
         return true;
 
     if (errno == ENOENT) {
-        containing_dir.reopen();
-        if (containing_dir.unlinkat(key_file_name.c_str()) == 0)
-            return true;
+        try {
+            containing_dir.reopen();
+            if (containing_dir.unlinkat(key_file_name.c_str()) == 0)
+                return true;
+        } catch (const FileNotFoundException& e) {
+            // reopen() failed. Someone deleted the containing directory.
+            return false;
+        }
 
         if (errno == ENOENT)
             return false;
@@ -615,17 +620,22 @@ FileBackedStorage::FileBackedStorage(
                 "Could not fstat root directory {}: {}", root_path.c_str(), std::strerror(errno)
         );
 
-    Directory root_path_fd(*posix_, root_path, root_path);
-    if (mode > OpenMode::READ) {
-        // TODO: It's important to set sensible permissions on these directories, so that group users have read access.
-        bool created = root_path_fd.mkdir(lib_path_str, new_dir_mode_);
-        if (created)
-            root_path_fd.sync();
+    try {
+        Directory root_path_fd(*posix_, root_path, root_path);
+        if (mode > OpenMode::READ) {
+            // TODO: It's important to set sensible permissions on these directories, so that group users have read
+            // access.
+            bool created = root_path_fd.mkdir(lib_path_str, new_dir_mode_);
+            if (created)
+                root_path_fd.sync();
+        }
+        // Ensure we can open the path as a directory.
+        Directory storage_dir_fd(*posix_, root_path, storage_dir_);
+        storage_dir_fd.close();
+        root_path_fd.close();
+    } catch (const FileNotFoundException& e) {
+        storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>(e.what());
     }
-    // Ensure we can open the path as a directory.
-    Directory storage_dir_fd(*posix_, root_path, storage_dir_);
-    storage_dir_fd.close();
-    root_path_fd.close();
 }
 
 FileBackedStorage::FileBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
@@ -638,18 +648,22 @@ std::string FileBackedStorage::name() const { return fmt::format("file_backed_st
 void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     std::string maybe_safe_file_name_for_key = to_tokenized_key(key_seg.variant_key());
     Segment& seg = *key_seg.segment_ptr();
-    const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
+    const fs::path key_dir = storage_dir_ / entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
 
-    return retry_on_estale([&]() {
-        Directory key_type_dir_fd(*posix_, storage_dir_, storage_dir_ / key_name, new_dir_mode_);
-        TempFile tmp_key_fd(*posix_, key_type_dir_fd);
-        // TODO: Unnecessary copy
-        std::vector<std::uint8_t> buffer(seg.calculate_size());
-        seg.write_to(buffer.data());
-        tmp_key_fd.write_all(buffer);
-        tmp_key_fd.commit_as(maybe_safe_file_name_for_key.c_str());
-        key_type_dir_fd.close();
-    });
+    try {
+        return retry_on_estale([&]() {
+            Directory key_type_dir_fd(*posix_, storage_dir_, key_dir, new_dir_mode_);
+            TempFile tmp_key_fd(*posix_, key_type_dir_fd);
+            // TODO: Unnecessary copy
+            std::vector<std::uint8_t> buffer(seg.calculate_size());
+            seg.write_to(buffer.data());
+            tmp_key_fd.write_all(buffer);
+            tmp_key_fd.commit_as(maybe_safe_file_name_for_key.c_str());
+            key_type_dir_fd.close();
+        });
+    } catch (const FileNotFoundException& e) {
+        storage::raise<ErrorCode::E_UNEXPECTED_FILE_STORAGE_ERROR>(e.what());
+    }
 }
 
 void FileBackedStorage::do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) {

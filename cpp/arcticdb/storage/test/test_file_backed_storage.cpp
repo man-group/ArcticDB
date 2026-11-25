@@ -6,6 +6,13 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+// TODO: Rapidcheck properties:
+//  * regardless of syscall faults, only ever raise KeyNotFoundException and
+//    ArcticCategoryException<ErrorCategory::Storage>.
+//  * No dangling tmp files.
+//  * write() propertie: snapshot a file's contents, then execute an overwrite. If any exception is raised,
+//    the contents on disk should be the same.
+
 #ifdef __linux__
 
 #include <cerrno>
@@ -124,6 +131,11 @@ TEST(FileStorageInit, ReadOnlyMode) {
     // Writing no longer possible, but if the library directory exists, should succeed.
     ASSERT_EQ(::chmod(temp_dir.get().c_str(), 0500), 0);
     get_storage(temp_dir.get(), storage::OpenMode::READ);
+}
+
+TEST(FileStorageInit, ReadOnlyModeNoDirectory) {
+    TempDir temp_dir(*::testing::UnitTest::GetInstance()->current_test_info());
+    ASSERT_THROW(get_storage(temp_dir.get(), storage::OpenMode::READ), UnexpectedFileStorageException);
 }
 
 class FileBackedStorageFixture : public ::testing::Test {
