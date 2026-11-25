@@ -456,9 +456,49 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(
                 FaultParam(SyscallId::READ, ESTALE, "StaleFdOnRead"sv),
                 FaultParam(SyscallId::WRITE, ESTALE, "StaleFdOnWrite"sv),
+                FaultParam(SyscallId::OPEN, ESTALE, "StaleOnKeyDirOpen"sv),
                 // mkdir doesn't even need to be retried, we just need resilience.
                 FaultParam(SyscallId::MKDIR, EEXIST, "KeyDirExistsOnWrite"sv)
                 // FaultParam(SyscallId::OPEN, EEXIST, "TmpAlreadyExistsOnWrite"sv)
+        ),
+        [](const testing::TestParamInfo<FaultInjection::ParamType>& info) {
+            return std::string(std::get<2>(info.param));
+        }
+);
+
+using DirectoryOpenDenied = FaultInjection;
+
+TEST_P(DirectoryOpenDenied, WriteRaisesPermission) {
+    ASSERT_THROW(
+            storage().write(storage::KeySegmentPair(storage::get_test_key(STREAM_ID), storage::get_test_segment())),
+            PermissionException
+    );
+    ASSERT_FALSE(exists_in_store(storage(), STREAM_ID));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FileStorageResilience, DirectoryOpenDenied,
+        testing::Values(FaultParam(SyscallId::OPEN, EACCES, "OpenKeyDirDenied"sv)),
+        [](const testing::TestParamInfo<FaultInjection::ParamType>& info) {
+            return std::string(std::get<2>(info.param));
+        }
+);
+
+using UnexpectedEnoent = FaultInjection;
+
+TEST_P(UnexpectedEnoent, WriteRaisesUnexpected) {
+    ASSERT_THROW(
+            storage().write(storage::KeySegmentPair(storage::get_test_key(STREAM_ID), storage::get_test_segment())),
+            UnexpectedFileStorageException
+    );
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FileStorageResilience, UnexpectedEnoent,
+        testing::Values(
+                FaultParam(SyscallId::MKDIR, ENOENT, "StorageDirGoneOnMkdir"sv),
+                // TODO: Move to RetryableFault once commit_as() recovers from a lost rename reply.
+                FaultParam(SyscallId::RENAME, ENOENT, "LostRenameReply"sv)
         ),
         [](const testing::TestParamInfo<FaultInjection::ParamType>& info) {
             return std::string(std::get<2>(info.param));

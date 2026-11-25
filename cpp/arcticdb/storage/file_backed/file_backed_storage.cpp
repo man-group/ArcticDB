@@ -190,7 +190,7 @@ int open_dir(
     const int flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
     try {
         return open_fd(posix, storage_dir, pathname, flags, 0);
-    } catch (...) {
+    } catch (const FileNotFoundException&) {
         // TODO: The need to create a directory is not that exceptional. There should be an exception-free
         // fallback.
         if (!mode_if_not_exist)
@@ -574,20 +574,16 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
     });
 }
 
-// Must not throw FileNotFoundException. Report missing by return value.
+// Returns true if deletion succeeded and false otherwise. Can throw FileNotFoundException if `containing_dir` gets
+// deleted.
 bool remove_impl(Directory& containing_dir, const fs::path& directory_path, const std::string& key_file_name) {
     if (containing_dir.unlinkat(key_file_name.c_str()) == 0)
         return true;
 
     if (errno == ENOENT) {
-        try {
-            containing_dir.reopen();
-            if (containing_dir.unlinkat(key_file_name.c_str()) == 0)
-                return true;
-        } catch (const FileNotFoundException& e) {
-            // reopen() failed. Someone deleted the containing directory.
-            return false;
-        }
+        containing_dir.reopen();
+        if (containing_dir.unlinkat(key_file_name.c_str()) == 0)
+            return true;
 
         if (errno == ENOENT)
             return false;
@@ -723,19 +719,21 @@ void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts
     std::vector<VariantKey> failed_deletes;
     for (const auto& [key_type, keys] : keys_by_directory) {
         const fs::path directory_path = storage_dir_ / entity::key_type_long_name(key_type);
+        auto cur_key = keys.begin();
         try {
             Directory directory(*posix_, storage_dir_, directory_path);
-            for (const VariantKey& key : keys) {
-                const std::string key_file_name = to_tokenized_key(key);
-                bool success = remove_impl(directory, directory_path, key_file_name);
+            for (; cur_key != keys.end(); ++cur_key) {
+                const std::string key_file_name = to_tokenized_key(*cur_key);
+                const bool success = remove_impl(directory, directory_path, key_file_name);
                 if (!success && !opts.ignores_missing_key_)
-                    failed_deletes.emplace_back(key);
+                    failed_deletes.emplace_back(*cur_key);
             }
             directory.sync();
         } catch (const FileNotFoundException&) {
-            // Directory doesn't exist, which is okay. It implies all the keys are missing.
+            // Directory doesn't exist or stopped existing while we were iterating, which is okay.
+            // It implies all remaining keys are missing.
             if (!opts.ignores_missing_key_)
-                std::ranges::move(keys, std::back_inserter(failed_deletes));
+                std::move(cur_key, keys.end(), std::back_inserter(failed_deletes));
         }
     }
 
