@@ -16,23 +16,94 @@
 
 using namespace arcticdb;
 
-auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
-    return [bucket_boundaries = std::move(bucket_boundaries)](
-                   timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin
-           ) { return bucket_boundaries; };
-}
+namespace {
 
 template<ResampleBoundary resample_boundary>
 ResampleClause<resample_boundary> generate_resample_clause(
-        ResampleBoundary label_boundary, std::vector<timestamp>&& bucket_boundaries,
-        ResampleOrigin origin = timestamp{0}
+        ResampleBoundary label_boundary, timestamp rule_ns, timestamp offset = 0, ResampleOrigin origin = timestamp{0}
 ) {
-    ResampleClause<resample_boundary> res{
-            "dummy", label_boundary, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, std::move(origin)
-    };
+    ResampleClause<resample_boundary> res{"dummy", rule_ns, label_boundary, offset, std::move(origin)};
     ProcessingConfig processing_config{false, 0, IndexDescriptor::Type::TIMESTAMP};
     res.set_processing_config(processing_config);
     return res;
+}
+
+template<ResampleBoundary resample_boundary>
+ResampleClause<resample_boundary> generate_resample_clause_with_boundaries(
+        ResampleBoundary label_boundary, std::vector<timestamp> bucket_boundaries, ResampleOrigin origin = timestamp{0}
+) {
+    auto res = generate_resample_clause<resample_boundary>(label_boundary, 1, 0, std::move(origin));
+    res.bucket_boundaries_ = std::move(bucket_boundaries);
+    return res;
+}
+
+} // namespace
+
+TEST(Resample, RejectsNonPositiveRuleNs) {
+    EXPECT_THROW(
+            (ResampleClause<ResampleBoundary::LEFT>{"0s", 0, ResampleBoundary::LEFT, 0, timestamp{0}}),
+            UserInputException
+    );
+    EXPECT_THROW(
+            (ResampleClause<ResampleBoundary::RIGHT>{
+                    "-1h", -3600'000'000'000LL, ResampleBoundary::RIGHT, 0, timestamp{0}
+            }),
+            UserInputException
+    );
+}
+
+TEST(Resample, LargeRuleDoesNotOverflow) {
+    constexpr timestamp one_day_ns = timestamp{24} * 60 * 60 * 1'000'000'000;
+    constexpr timestamp start_2024 = timestamp{1'704'067'200} * 1'000'000'000;
+    constexpr timestamp end_2024 = start_2024 + one_day_ns;
+    StreamId sym{"sym"};
+    auto key = AtomKeyBuilder().start_index(start_2024).end_index(end_2024).build<KeyType::TABLE_DATA>(sym);
+
+    // 60000D = 5.184e18 ns: advancing past the end boundary (5.184e18 + 5.184e18) would overflow int64_t.
+    // 100000D = 8.64e18 ns: (a % b + b) in python_mod would also overflow int64_t.
+    for (timestamp rule_ns : {60'000 * one_day_ns, 100'000 * one_day_ns}) {
+        std::vector<RangesAndKey> ranges_left{RangesAndKey(RowRange{0, 10}, ColRange{1, 2}, key)};
+        auto clause_left = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, rule_ns);
+        auto units_left = clause_left.structure_for_processing(ranges_left);
+        ASSERT_EQ(units_left, (std::vector<std::vector<size_t>>{{0}}));
+        ASSERT_EQ(clause_left.bucket_boundaries_, (std::vector<timestamp>{0, rule_ns}));
+
+        std::vector<RangesAndKey> ranges_right{RangesAndKey(RowRange{0, 10}, ColRange{1, 2}, key)};
+        auto clause_right = generate_resample_clause<ResampleBoundary::RIGHT>(ResampleBoundary::RIGHT, rule_ns);
+        auto units_right = clause_right.structure_for_processing(ranges_right);
+        ASSERT_EQ(units_right, (std::vector<std::vector<size_t>>{{0}}));
+        ASSERT_EQ(clause_right.bucket_boundaries_, (std::vector<timestamp>{0, rule_ns}));
+    }
+}
+
+TEST(Resample, LargeRuleSpanExceedingInt64Max) {
+    // Boundaries {-6e18, 0, 6e18} span 12e18 ns > INT64_MAX while every boundary fits in int64_t.
+    constexpr timestamp rule_ns = 6'000'000'000'000'000'000LL;
+    constexpr timestamp start = -5'000'000'000'000'000'000LL;
+    constexpr timestamp end = 5'000'000'000'000'000'000LL;
+    StreamId sym{"sym"};
+    auto key = AtomKeyBuilder().start_index(start).end_index(end).build<KeyType::TABLE_DATA>(sym);
+    std::vector<RangesAndKey> ranges{RangesAndKey(RowRange{0, 10}, ColRange{1, 2}, key)};
+
+    auto clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, rule_ns);
+    auto units = clause.structure_for_processing(ranges);
+    ASSERT_EQ(units, (std::vector<std::vector<size_t>>{{0}}));
+    ASSERT_EQ(clause.bucket_boundaries_, (std::vector<timestamp>{-rule_ns, 0, rule_ns}));
+}
+
+TEST(Resample, BoundaryOverflowThrowsUserInputException) {
+    constexpr timestamp one_day_ns = timestamp{24} * 60 * 60 * 1'000'000'000;
+    constexpr timestamp start_2024 = timestamp{1'704'067'200} * 1'000'000'000;
+    constexpr timestamp end_2024 = start_2024 + one_day_ns;
+    StreamId sym{"sym"};
+    auto key = AtomKeyBuilder().start_index(start_2024).end_index(end_2024).build<KeyType::TABLE_DATA>(sym);
+    std::vector<RangesAndKey> ranges{RangesAndKey(RowRange{0, 10}, ColRange{1, 2}, key)};
+
+    // origin="start" + 100000D (~1.704e18 + 8.64e18) overflows 64-bit nanosecond timestamps.
+    auto clause = generate_resample_clause<ResampleBoundary::LEFT>(
+            ResampleBoundary::LEFT, 100'000 * one_day_ns, 0, ResampleOrigin{std::string{"start"}}
+    );
+    EXPECT_THROW((void)clause.structure_for_processing(ranges), UserInputException);
 }
 
 TEST(Resample, StructureForProcessingBasic) {
@@ -49,8 +120,8 @@ TEST(Resample, StructureForProcessingBasic) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
-    auto resample_clause =
-            generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 1500, 2500, 2999});
+    // Produces boundaries {-500, 500, 1500, 2500, 3500}
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, 1000, 500);
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -78,8 +149,8 @@ TEST(Resample, StructureForProcessingColumnSlicing) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{top_right, bottom_left, bottom_right, top_left};
 
-    auto resample_clause =
-            generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 1500, 2500, 2999});
+    // Produces boundaries {-500, 500, 1500, 2500, 3500}
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, 1000, 500);
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 4);
     ASSERT_EQ(ranges_and_keys[0], top_left);
@@ -104,8 +175,8 @@ TEST(Resample, StructureForProcessingOverlap) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
-    auto resample_clause =
-            generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 2500, 2999});
+    // Produces boundaries {-1500, 500, 2500, 4500}
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, 2000, 500);
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -132,7 +203,8 @@ TEST(Resample, StructureForProcessingSubsumed) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, middle, top};
 
-    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 4500});
+    // Produces boundaries {-3500, 500, 4500}
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, 4000, 500);
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 3);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -157,8 +229,8 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
-    auto resample_clause_left =
-            generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 2000, 2500, 2999});
+    // Produces boundaries {-1000, 500, 2000, 3500}
+    auto resample_clause_left = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, 1500, 500);
     auto proc_unit_ids = resample_clause_left.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -166,8 +238,7 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     std::vector<std::vector<size_t>> expected_proc_unit_ids_left{{0}, {1}};
     ASSERT_EQ(expected_proc_unit_ids_left, proc_unit_ids);
 
-    auto resample_clause_right =
-            generate_resample_clause<ResampleBoundary::RIGHT>(ResampleBoundary::LEFT, {1, 500, 2000, 2500, 2999});
+    auto resample_clause_right = generate_resample_clause<ResampleBoundary::RIGHT>(ResampleBoundary::LEFT, 1500, 500);
     proc_unit_ids = resample_clause_right.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -187,7 +258,7 @@ TEST(Resample, StructureForProcessingRaisesForUnsupportedOriginWithFoldedDateRan
     std::vector<RangesAndKey> ranges_and_keys{RangesAndKey(row_range, col_range, key)};
 
     auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(
-            ResampleBoundary::LEFT, {1, 500}, ResampleOrigin{std::string{"start"}}
+            ResampleBoundary::LEFT, 500, 0, ResampleOrigin{std::string{"start"}}
     );
     resample_clause.date_range_ = {50, 200};
     EXPECT_THROW((void)resample_clause.structure_for_processing(ranges_and_keys), UserInputException);
@@ -203,21 +274,19 @@ TEST(Resample, StructureForProcessingAllowsUnsupportedOriginWithoutFoldedDateRan
     std::vector<RangesAndKey> ranges_and_keys{RangesAndKey(row_range, col_range, key)};
 
     auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(
-            ResampleBoundary::LEFT, {1, 500}, ResampleOrigin{std::string{"start"}}
+            ResampleBoundary::LEFT, 500, 0, ResampleOrigin{std::string{"start"}}
     );
     EXPECT_NO_THROW((void)resample_clause.structure_for_processing(ranges_and_keys));
 }
 
 TEST(Resample, FindBuckets) {
     // Enough bucket boundaries to test all the interesting cases
-    auto resample_left = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {0, 10, 20, 30, 40});
-    auto resample_right =
-            generate_resample_clause<ResampleBoundary::RIGHT>(ResampleBoundary::RIGHT, {0, 10, 20, 30, 40});
-
-    resample_left.bucket_boundaries_ =
-            resample_left.generate_bucket_boundaries_(0, 0, "dummy", ResampleBoundary::LEFT, 0, 0);
-    resample_right.bucket_boundaries_ =
-            resample_right.generate_bucket_boundaries_(0, 0, "dummy", ResampleBoundary::RIGHT, 0, 0);
+    auto resample_left = generate_resample_clause_with_boundaries<ResampleBoundary::LEFT>(
+            ResampleBoundary::LEFT, {0, 10, 20, 30, 40}
+    );
+    auto resample_right = generate_resample_clause_with_boundaries<ResampleBoundary::RIGHT>(
+            ResampleBoundary::RIGHT, {0, 10, 20, 30, 40}
+    );
 
     std::vector<timestamp> res;
 
@@ -277,8 +346,8 @@ TEST(Resample, FindBuckets) {
 TEST(Resample, ProcessOneSegment) {
     auto component_manager = std::make_shared<ComponentManager>();
 
-    auto resample = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {-1, 2, 5});
-    resample.bucket_boundaries_ = resample.generate_bucket_boundaries_(0, 0, "dummy", ResampleBoundary::LEFT, 0, 0);
+    auto resample =
+            generate_resample_clause_with_boundaries<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {-1, 2, 5});
     resample.date_range_ = {0, 5};
     resample.set_component_manager(component_manager);
     resample.set_aggregations({{"sum", "sum_column", "sum_column"}});
@@ -329,10 +398,9 @@ TEST(Resample, ProcessOneSegment) {
 TEST(Resample, ProcessMultipleSegments) {
     auto component_manager = std::make_shared<ComponentManager>();
 
-    auto resample = generate_resample_clause<ResampleBoundary::LEFT>(
+    auto resample = generate_resample_clause_with_boundaries<ResampleBoundary::LEFT>(
             ResampleBoundary::LEFT, {-15, -5, 5, 6, 25, 35, 45, 46, 55, 65}
     );
-    resample.bucket_boundaries_ = resample.generate_bucket_boundaries_(0, 0, "dummy", ResampleBoundary::LEFT, 0, 0);
     resample.date_range_ = {0, 51};
     resample.set_component_manager(component_manager);
     resample.set_aggregations({{"sum", "sum_column", "sum_column"}});

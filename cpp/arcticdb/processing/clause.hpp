@@ -377,18 +377,15 @@ struct AggregationClause {
 
 template<ResampleBoundary closed_boundary>
 struct ResampleClause {
-    using BucketGeneratorT = std::function<std::vector<
-            timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, const ResampleOrigin&)>;
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string rule_;
+    timestamp rule_ns_;
     ResampleBoundary label_boundary_;
     // This will contain the data range specified by the user (if any) intersected with the range of timestamps for the
     // symbol
     std::optional<TimestampRange> date_range_;
-    // Inject this as a callback in the ctor to avoid language-specific dependencies this low down in the codebase
-    BucketGeneratorT generate_bucket_boundaries_;
     std::vector<timestamp> bucket_boundaries_;
     std::vector<SortedAggregatorInterface> aggregators_;
     std::string str_;
@@ -400,8 +397,8 @@ struct ResampleClause {
     ARCTICDB_MOVE_COPY_DEFAULT(ResampleClause)
 
     ResampleClause(
-            std::string rule, ResampleBoundary label_boundary, BucketGeneratorT&& generate_bucket_boundaries,
-            timestamp offset, ResampleOrigin origin
+            std::string rule, timestamp rule_ns, ResampleBoundary label_boundary, timestamp offset,
+            ResampleOrigin origin
     );
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
@@ -437,6 +434,9 @@ struct ResampleClause {
     std::vector<timestamp> generate_bucket_boundaries(
             timestamp first_ts, timestamp last_ts, bool responsible_for_first_overlapping_bucket
     ) const;
+
+  private:
+    [[nodiscard]] std::vector<timestamp> generate_buckets(timestamp start, timestamp end) const;
 };
 
 template<typename T>

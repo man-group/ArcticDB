@@ -41,12 +41,6 @@ namespace {
 constexpr DataType kValueDataType = DataType::INT64;
 const std::string kValuePrefix = "col_";
 
-ResampleClause<ResampleBoundary::LEFT>::BucketGeneratorT make_bucket_generator(std::vector<timestamp> boundaries) {
-    return [boundaries = std::move(boundaries)](
-                   timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin
-           ) { return boundaries; };
-}
-
 StreamDescriptor make_descriptor(size_t num_value_cols) {
     std::vector<FieldRef> fields;
     fields.reserve(num_value_cols);
@@ -81,9 +75,7 @@ ResampleClause<ResampleBoundary::LEFT> make_resample_clause(
         std::vector<timestamp> bucket_boundaries, timestamp date_range_start, timestamp date_range_end,
         const std::shared_ptr<ComponentManager>& component_manager, size_t num_value_cols
 ) {
-    ResampleClause<ResampleBoundary::LEFT> clause{
-            "dummy", ResampleBoundary::LEFT, make_bucket_generator(bucket_boundaries), 0, 0
-    };
+    ResampleClause<ResampleBoundary::LEFT> clause{"dummy", 1, ResampleBoundary::LEFT, 0, 0};
     clause.bucket_boundaries_ = std::move(bucket_boundaries);
     clause.date_range_ = TimestampRange{date_range_start, date_range_end};
     clause.set_component_manager(component_manager);

@@ -57,12 +57,8 @@ std::shared_ptr<Clause> make_group(const std::string& column) {
 }
 
 std::shared_ptr<Clause> make_resample(ResampleOrigin origin = ResampleOrigin{std::string{"epoch"}}) {
-    ResampleClause<ResampleBoundary::LEFT>::BucketGeneratorT generate_bucket_boundaries =
-            [](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, const ResampleOrigin&) {
-                return std::vector<timestamp>{};
-            };
     return std::make_shared<Clause>(ResampleClause<ResampleBoundary::LEFT>(
-            "dummy", ResampleBoundary::LEFT, std::move(generate_bucket_boundaries), timestamp{0}, std::move(origin)
+            "dummy", timestamp{1}, ResampleBoundary::LEFT, timestamp{0}, std::move(origin)
     ));
 }
 
