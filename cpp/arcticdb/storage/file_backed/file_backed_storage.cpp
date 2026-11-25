@@ -31,6 +31,7 @@
 #include <boost/iterator/iterator_facade.hpp>
 #include <fmt/format.h>
 
+#include <cerrno>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -101,11 +102,11 @@ bool is_skipped_name(std::string_view file_name) noexcept {
     return is_tmp_file_name(file_name) || is_silly_rename(file_name) || is_dot_dir(file_name);
 }
 
-// Try to open the directory and report success.
-bool refresh_directory(PosixInterface& posix, const fs::path& dir) {
-    int fd = posix.open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+// Try to open the directory and report success. Don't want to inject faults here.
+bool refresh_directory(const fs::path& dir) {
+    int fd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
     if (fd >= 0) {
-        (void)posix.close(fd);
+        (void)::close(fd);
         return true;
     }
     return false;
@@ -116,7 +117,7 @@ bool refresh_directory(PosixInterface& posix, const fs::path& dir) {
  * eliminates spurious ENOENT responses for files, which actually exist.
  * The first successful directory re-open is a sufficient stopping condition.
  */
-void refresh_ancestors(PosixInterface& posix, const fs::path& dir, const fs::path& subpath) {
+void refresh_ancestors(const fs::path& dir, const fs::path& subpath) {
     fs::path to_check = subpath;
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE,
@@ -127,7 +128,7 @@ void refresh_ancestors(PosixInterface& posix, const fs::path& dir, const fs::pat
     );
     while (to_check != dir) {
         to_check = to_check.parent_path();
-        if (refresh_directory(posix, to_check))
+        if (refresh_directory(to_check))
             break;
     }
 }
@@ -142,44 +143,63 @@ bool exists(PosixInterface& posix, const fs::path& dir, const fs::path& subpath,
         raise_io_error(errno, fmt::format("do_key_exists() failed to stat {}", to_check.c_str()));
 
     if (allow_refresh) {
-        refresh_ancestors(posix, dir, to_check);
+        refresh_ancestors(dir, to_check);
         return exists(posix, dir, subpath, false);
     }
 
     return false;
 }
 
+int open_fd(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) {
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            (flags & O_CLOEXEC) != 0,
+            "For fork safety, mode O_CLOEXEC should always be set"
+    );
+    int fd = posix.open(pathname.c_str(), flags, mode);
+    if (fd < 0) {
+        if (errno == ENOENT) {
+            // Only occurs without O_CREAT
+            refresh_ancestors(storage_dir, pathname);
+            fd = posix.open(pathname.c_str(), flags, mode);
+        }
+    }
+    if (fd < 0) {
+        raise_io_error(errno, fmt::format("Failed to open {}", pathname.c_str()));
+    }
+    return fd;
+}
+
+void create_directories(PosixInterface& posix, const fs::path& pathname, mode_t mode) {
+    // TODO: Allow recursive mkdir to support bucketization
+    // TODO: Need to sync the parent directory.
+    if (posix.mkdir(pathname.c_str(), mode) == 0 || errno == EEXIST)
+        return;
+
+    raise_io_error(errno, fmt::format("Failed to create directory {}", pathname.c_str()));
+}
+
+int open_dir(
+        PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname,
+        std::optional<mode_t> mode_if_not_exist
+) {
+    const int flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+    try {
+        return open_fd(posix, storage_dir, pathname, flags, 0);
+    } catch (...) {
+        // TODO: The need to create a directory is not that exceptional. There should be an exception-free
+        // fallback.
+        if (!mode_if_not_exist)
+            throw;
+        create_directories(posix, pathname, *mode_if_not_exist);
+        return open_fd(posix, storage_dir, pathname, flags, 0);
+    }
+}
+
 class FdHolder {
   protected:
     // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
-    FdHolder(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
-        posix_(posix) {
-        ARCTICDB_DEBUG_CHECK(
-                ErrorCode::E_ASSERTION_FAILURE,
-                (flags & O_CLOEXEC) != 0,
-                "For fork safety, mode O_CLOEXEC should always be set"
-        );
-        fd_ = posix.open(pathname.c_str(), flags, mode);
-        if (fd_ < 0) {
-            if (errno == ENOENT) {
-                // Only occurs without O_CREAT
-                refresh_ancestors(posix, storage_dir, pathname);
-                fd_ = posix.open(pathname.c_str(), flags, mode);
-            }
-        }
-        if (fd_ < 0) {
-            raise_io_error(errno, fmt::format("Failed to open {}", pathname.c_str()));
-        }
-    }
-
-    FdHolder(PosixInterface& posix, const FdHolder& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
-        posix_(posix) {
-        fd_ = posix.openat(dir_fd.fd_, pathname.c_str(), flags, mode);
-        // TODO Note that there is no retry here on ENOENT. It's awkward to refresh the ancestor directories, since we'd
-        // have to close the fd and reopen it. Technically doable from within here. Do it later.
-        if (fd_ < 0)
-            raise_io_error(errno, fmt::format("Failed to openat {}", pathname.c_str()));
-    }
+    FdHolder(PosixInterface& posix, int fd) : posix_(posix), fd_(fd) {}
 
     ~FdHolder() {
         if (fd_ >= 0)
@@ -187,6 +207,12 @@ class FdHolder {
     }
 
     ARCTICDB_NO_MOVE_OR_COPY(FdHolder);
+
+    void swap(FdHolder& other) noexcept {
+        int other_fd = other.fd_;
+        other.fd_ = fd_;
+        fd_ = other_fd;
+    }
 
   public:
     int fd() const noexcept { return fd_; }
@@ -214,7 +240,6 @@ class FdHolder {
         int res = posix_.fsync(fd_);
         if (res != 0) {
             if (errno == EINTR) {
-                // Try one more time? TODO: Quick retries should be wrapped in a retry() that takes a lambda.
                 res = posix_.fsync(fd_);
             }
         }
@@ -232,15 +257,11 @@ class Directory : public FdHolder {
   public:
     Directory(
             PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname,
-            int flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC, mode_t mode = 0
+            std::optional<mode_t> mode_if_not_exist = std::nullopt
     ) :
-        FdHolder(posix, storage_dir, pathname, flags, mode) {}
-
-    Directory(
-            PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname,
-            int flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC, mode_t mode = 0
-    ) :
-        FdHolder(posix, dir_fd, pathname, flags, mode) {}
+        FdHolder(posix, open_dir(posix, storage_dir, pathname, mode_if_not_exist)),
+        storage_dir_(storage_dir),
+        pathname_(pathname) {}
 
     ARCTICDB_NO_MOVE_OR_COPY(Directory);
 
@@ -264,15 +285,44 @@ class Directory : public FdHolder {
         if (res != 0)
             log::storage().warn("Failed to delete file {}: {}", pathname.c_str(), std::strerror(errno));
     }
+
+    void reopen() {
+        Directory fresh(posix_, storage_dir_, pathname_, std::nullopt);
+        swap(fresh);
+    }
+
+  private:
+    const fs::path& storage_dir_;
+    const fs::path& pathname_;
 };
+
+int openat_fd(PosixInterface& posix, Directory& dir, const fs::path& pathname, int flags, mode_t mode) {
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            (flags & O_CLOEXEC) != 0,
+            "For fork safety, mode O_CLOEXEC should always be set"
+    );
+    int fd = posix.openat(dir.fd(), pathname.c_str(), flags, mode);
+    if (fd < 0) {
+        if (errno == ENOENT) {
+            // Only occurs without O_CREAT
+            dir.reopen();
+            fd = posix.openat(dir.fd(), pathname.c_str(), flags, mode);
+        }
+    }
+    if (fd < 0) {
+        raise_io_error(errno, fmt::format("Failed to open {}", pathname.c_str()));
+    }
+    return fd;
+}
 
 class File : public FdHolder {
   public:
     File(PosixInterface& posix, const fs::path& storage_dir, const fs::path& pathname, int flags, mode_t mode) :
-        FdHolder(posix, storage_dir, pathname, flags, mode) {}
+        FdHolder(posix, open_fd(posix, storage_dir, pathname, flags, mode)) {}
 
-    File(PosixInterface& posix, const Directory& dir_fd, const fs::path& pathname, int flags, mode_t mode) :
-        FdHolder(posix, dir_fd, pathname, flags, mode) {}
+    File(PosixInterface& posix, Directory& dir, const fs::path& pathname, int flags, mode_t mode) :
+        FdHolder(posix, openat_fd(posix, dir, pathname, flags, mode)) {}
 
     ARCTICDB_NO_MOVE_OR_COPY(File);
 
@@ -314,31 +364,13 @@ class File : public FdHolder {
     }
 };
 
-// Owns a directory stream opened through PosixInterface, so that fault injection sees the closedir.
-class DirHandle {
-  public:
-    DirHandle(PosixInterface& posix, DIR* dirp) : posix_(posix), dirp_(dirp) {}
-    ~DirHandle() {
-        if (posix_.closedir(dirp_) != 0)
-            log::storage().warn("Failed to close directory: {}", std::strerror(errno));
-    }
-
-    ARCTICDB_NO_MOVE_OR_COPY(DirHandle);
-
-    DIR* get() const noexcept { return dirp_; }
-
-  private:
-    PosixInterface& posix_;
-    DIR* dirp_;
-};
-
 class TempFile {
   public:
-    TempFile(PosixInterface& posix, const Directory& dir) :
+    TempFile(PosixInterface& posix, Directory& dir) :
         posix_(posix),
         dir_(dir),
         file_name_(generate_tmp_file_name()),
-        file_(posix, dir_, file_name_, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE) {}
+        file_(posix, dir, file_name_, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE) {}
 
     ~TempFile() {
         if (!committed_) {
@@ -373,6 +405,24 @@ class TempFile {
     std::string file_name_;
     File file_;
     bool committed_ = false;
+};
+
+// Owns a directory stream opened through PosixInterface, so that fault injection sees the closedir.
+class DirHandle {
+  public:
+    DirHandle(PosixInterface& posix, DIR* dirp) : posix_(posix), dirp_(dirp) {}
+    ~DirHandle() {
+        if (posix_.closedir(dirp_) != 0)
+            log::storage().warn("Failed to close directory: {}", std::strerror(errno));
+    }
+
+    ARCTICDB_NO_MOVE_OR_COPY(DirHandle);
+
+    DIR* get() const noexcept { return dirp_; }
+
+  private:
+    PosixInterface& posix_;
+    DIR* dirp_;
 };
 
 // Borrowed reference to memory owned by FileTraversal.
@@ -545,8 +595,8 @@ FileBackedStorage::FileBackedStorage(
     Storage(library_path, mode),
     posix_(posix_interface) {
     const std::string lib_path_str = library_path.to_delim_path();
-    const fs::path root_path = conf.dir_path();
-    storage_dir_ = fs::absolute(root_path / lib_path_str);
+    const fs::path root_path = fs::absolute(conf.dir_path());
+    storage_dir_ = root_path / lib_path_str;
 
     struct stat st;
     // TODO: Root path is assumed to exist.
@@ -565,7 +615,7 @@ FileBackedStorage::FileBackedStorage(
             root_path_fd.sync();
     }
     // Ensure we can open the path as a directory.
-    Directory storage_dir_fd(*posix_, root_path_fd, lib_path_str);
+    Directory storage_dir_fd(*posix_, root_path, storage_dir_);
     storage_dir_fd.close();
     root_path_fd.close();
 }
@@ -583,18 +633,14 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
 
     return retry_on_estale([&]() {
-        Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_);
-        storage_dir_fd.mkdir(key_name, new_dir_mode_);
-        Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name);
+        Directory key_type_dir_fd(*posix_, storage_dir_, storage_dir_ / key_name, new_dir_mode_);
         TempFile tmp_key_fd(*posix_, key_type_dir_fd);
         // TODO: Unnecessary copy
         std::vector<std::uint8_t> buffer(seg.calculate_size());
         seg.write_to(buffer.data());
         tmp_key_fd.write_all(buffer);
-        // This closes and moves the temp file.
         tmp_key_fd.commit_as(maybe_safe_file_name_for_key.c_str());
         key_type_dir_fd.close();
-        storage_dir_fd.close();
     });
 }
 
