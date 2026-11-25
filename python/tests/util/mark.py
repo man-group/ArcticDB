@@ -80,6 +80,9 @@ STORAGE_MONGO = getenv_strip("ARCTICDB_STORAGE_MONGO") == "1" or (
 STORAGE_MEM = getenv_strip("ARCTICDB_STORAGE_MEM") == "1" or (
     LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_MEM") != "0"
 )
+STORAGE_FILE = getenv_strip("ARCTICDB_STORAGE_FILE") == "1" or (
+    LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_FILE") != "0"
+)
 STORAGE_NFS = getenv_strip("ARCTICDB_STORAGE_NFS") == "1" or (
     LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_NFS") != "0"
 )
@@ -118,6 +121,7 @@ if not SHORTER_LOGS:
     logger.info(f"LOCAL_STORAGE_TESTS_ENABLED      ={LOCAL_STORAGE_TESTS_ENABLED}")
     logger.info(f"STORAGE_LMDB                     ={STORAGE_LMDB}")
     logger.info(f"STORAGE_MEM                      ={STORAGE_MEM}")
+    logger.info(f"STORAGE_FILE                     ={STORAGE_FILE}")
     logger.info(f"STORAGE_S3  (SIMULATED)          ={STORAGE_SIM_S3}")
     logger.info(f"STORAGE_GCP (SIMULATED)          ={STORAGE_SIM_GCP}")
     logger.info(f"STORAGE_AZURITE                  ={STORAGE_AZURITE}")
@@ -189,6 +193,12 @@ SIM_GCP_TESTS_MARK = pytest.mark.skipif(
 LMDB_TESTS_MARK = pytest.mark.skipif(
     not STORAGE_LMDB,
     reason="Ability to disable local storages - lmdb storage is disabled",
+)
+"""Mark on tests using the file backed storage, which is only built on Linux.
+"""
+FILE_TESTS_MARK = pytest.mark.skipif(
+    not (LINUX and STORAGE_FILE),
+    reason="File backed storage is disabled or the platform is not Linux",
 )
 """Mark on tests using the MEM storage.
 """

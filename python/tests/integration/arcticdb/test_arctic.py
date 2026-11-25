@@ -1816,7 +1816,18 @@ def test_empty_snapshot_name_never_ok(arctic_library_v1):
     assert not arctic_library.list_snapshots()
 
 
-@pytest.mark.parametrize("snap", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254])
+# The file backend rejects some characters and cannot fit long names within NAME_MAX.
+@pytest.mark.parametrize(
+    "snap",
+    [
+        chr(32),
+        pytest.param(chr(33), marks=pytest.mark.skip_fixture_params(["file"])),
+        chr(125),
+        chr(126),
+        "fine",
+        pytest.param("l" * 254, marks=pytest.mark.skip_fixture_params(["file"])),
+    ],
+)
 def test_ok_chars_snapshots(arctic_library_v1, snap):
     arctic_library = arctic_library_v1
     df = sample_dataframe()
