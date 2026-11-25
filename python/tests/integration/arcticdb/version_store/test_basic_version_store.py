@@ -3571,3 +3571,23 @@ def test_duplicate_symbols_in_modification_methods(in_memory_version_store, meth
     assert "sym2" in msg
     assert "sym3" not in msg
     assert not lib.list_symbols()
+
+
+# Equivalent V2 API test in test_arctic_batch.py
+@pytest.mark.parametrize("method", ["batch_delete_versions", "batch_delete_symbols"])
+def test_duplicate_symbols_in_batch_deletes(in_memory_version_store, method):
+    lib = in_memory_version_store
+    for sym in ["sym1", "sym2"]:
+        for v in range(2):
+            lib.write(sym, pd.DataFrame({"x": [v]}), prune_previous_version=False)
+    symbols = ["sym1", "sym2", "sym1"]
+    args = [[[0], [0], [1]]] if method == "batch_delete_versions" else []
+    with pytest.raises(ArcticDuplicateSymbolsInBatchException) as e:
+        getattr(lib, method)(symbols, *args)
+    assert "sym1" in str(e.value)
+    assert "sym2" not in str(e.value)
+    # The C++ layer rejects duplicates too, for callers that skip the Python check
+    with pytest.raises(UserInputException, match="Duplicate symbols in delete request"):
+        lib.version_store.batch_delete(symbols, [[0], [0], [1]])
+    for sym in ["sym1", "sym2"]:
+        assert sorted(v["version"] for v in lib.list_versions(sym)) == [0, 1]

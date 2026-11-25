@@ -1975,6 +1975,8 @@ std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> Loca
             stream_ids.size() == version_ids.size(),
             "when calling batch_delete_internal, stream_ids and version_ids must have the same size"
     );
+    // Each delete loads its entry before taking the symbol lock, so two deletes of one symbol could lose a tombstone
+    check_for_duplicated_symbols(stream_ids, "delete");
 
     if (stream_ids.empty()) {
         return {};

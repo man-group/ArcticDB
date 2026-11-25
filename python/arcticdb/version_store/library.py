@@ -2804,11 +2804,19 @@ class Library:
             - String symbols (delete all versions of the symbol)
             - DeleteRequest objects (delete specific versions of the symbol, must have at least one version)
 
+            There must not be any duplicate symbols in `delete_requests`. To delete several versions of one symbol,
+            put them all in one DeleteRequest.
+
         Returns
         -------
         List[DataError]
             List of DataError objects, one for each symbol that was not deleted due to an error.
             If the symbol was already deleted, there will be no error, just a warning.
+
+        Raises
+        ------
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in delete_requests.
         """
         symbols = []
         versions = []
@@ -2828,6 +2836,7 @@ class Library:
                     "Only [str] and [DeleteRequest] are supported."
                 )
 
+        self._nvs._raise_if_duplicate_symbols_in_batch(symbols)
         return self._nvs.version_store.batch_delete(symbols, versions)
 
     def prune_previous_versions(self, symbol) -> None:
