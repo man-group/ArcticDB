@@ -505,6 +505,58 @@ INSTANTIATE_TEST_SUITE_P(
         }
 );
 
+using NamedSyscall = std::pair<SyscallId, std::string_view>;
+using NamedErrno = std::pair<PosixError, std::string_view>;
+
+class AtomicOverwrite : public FileBackedStorageFixture,
+                        public ::testing::WithParamInterface<std::tuple<NamedSyscall, NamedErrno>> {};
+
+// Overwrites must be atomic. A reader sees the old segment or the new one, never a mixture. A well meaning optimizer
+// might write into the existing file in place, which fails here once a fault interrupts it. Crashes and concurrent
+// readers would expose the same torn file without any reported error, and this test cannot model them.
+TEST_P(AtomicOverwrite, SurvivesFault) {
+    const entity::VariantKey key{atom_key_builder().build(STREAM_ID, entity::KeyType::VERSION_REF)};
+    // The replacement is smaller, so leftover bytes from the original are detected.
+    const Segment original = storage::get_test_segment(20);
+    const Segment replacement = storage::get_test_segment(10);
+    storage().write(storage::KeySegmentPair(entity::VariantKey{key}, original.clone()));
+
+    const auto& [syscall, error] = GetParam();
+    posix().inject_fault(syscall.first, error.first);
+    bool raised = false;
+    try {
+        storage().write(storage::KeySegmentPair(entity::VariantKey{key}, replacement.clone()));
+    } catch (const ArcticCategorizedException<ErrorCategory::STORAGE>&) {
+        raised = true;
+    }
+    ASSERT_FALSE(posix().uncosumed_faults());
+
+    // A retried fault may let the overwrite succeed.
+    const storage::KeySegmentPair on_disk = storage().read(entity::VariantKey{key}, {});
+    ASSERT_TRUE(segments_are_identical(raised ? original : replacement, on_disk.segment()));
+}
+
+// RENAME is absent because FaultyPosix performs the rename before reporting the error, so the replacement is
+// already committed. EINTR is absent because FaultyPosix performs the write before reporting it, whereas a real
+// write() interrupted with EINTR has transferred nothing.
+INSTANTIATE_TEST_SUITE_P(
+        FileStorageResilience, AtomicOverwrite,
+        testing::Combine(
+                testing::Values(
+                        NamedSyscall{SyscallId::OPEN, "Open"}, NamedSyscall{SyscallId::WRITE, "Write"},
+                        NamedSyscall{SyscallId::SYNC, "Sync"}, NamedSyscall{SyscallId::CLOSE, "Close"}
+                ),
+                testing::Values(
+                        NamedErrno{EIO, "EIO"}, NamedErrno{ENOSPC, "ENOSPC"}, NamedErrno{EDQUOT, "EDQUOT"},
+                        NamedErrno{EACCES, "EACCES"}, NamedErrno{EROFS, "EROFS"}, NamedErrno{ENOENT, "ENOENT"},
+                        NamedErrno{ESTALE, "ESTALE"}
+                )
+        ),
+        [](const testing::TestParamInfo<AtomicOverwrite::ParamType>& info) {
+            return fmt::format("{}{}", std::get<0>(info.param).second, std::get<1>(info.param).second);
+        }
+);
+
 } // namespace
 
 #endif
