@@ -8,10 +8,19 @@
 
 #pragma once
 
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/library_path.hpp>
+#include <arcticdb/util/error_code.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 
 #include <boost/container/small_vector.hpp>
+#include <fmt/ranges.h>
+
+#include <memory>
+#include <optional>
+#include <vector>
 
 namespace arcticdb::storage {
 
@@ -20,14 +29,14 @@ class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLIC
     explicit DuplicateKeyException(const std::string& message) :
         ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(message) {}
 
-    explicit DuplicateKeyException(VariantKey key) :
-        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(std::string(variant_key_view(key))),
+    explicit DuplicateKeyException(entity::VariantKey key) :
+        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(std::string(entity::variant_key_view(key))),
         key_(std::move(key)) {}
 
-    [[nodiscard]] const VariantKey& key() const { return key_; }
+    [[nodiscard]] const entity::VariantKey& key() const { return key_; }
 
   private:
-    VariantKey key_;
+    entity::VariantKey key_;
 };
 
 class NoDataFoundException : public ArcticCategorizedException<ErrorCategory::MISSING_DATA> {
@@ -58,46 +67,48 @@ class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT
     explicit KeyNotFoundException(const std::string& message) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {}
 
-    explicit KeyNotFoundException(std::vector<VariantKey>&& keys) :
+    explicit KeyNotFoundException(std::vector<entity::VariantKey>&& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
-        keys_(std::make_shared<std::vector<VariantKey>>(std::move(keys))) {}
+        keys_(std::make_shared<std::vector<entity::VariantKey>>(std::move(keys))) {}
 
-    explicit KeyNotFoundException(std::vector<VariantKey>&& keys, const std::string& err_output) :
+    explicit KeyNotFoundException(std::vector<entity::VariantKey>&& keys, const std::string& err_output) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
-        keys_(std::make_shared<std::vector<VariantKey>>(std::move(keys))) {}
+        keys_(std::make_shared<std::vector<entity::VariantKey>>(std::move(keys))) {}
 
-    explicit KeyNotFoundException(const VariantKey& single_key) :
-        KeyNotFoundException(std::vector<VariantKey>{single_key}) {}
+    explicit KeyNotFoundException(const entity::VariantKey& single_key) :
+        KeyNotFoundException(std::vector<entity::VariantKey>{single_key}) {}
 
-    explicit KeyNotFoundException(const VariantKey& single_key, const std::string& err_output) :
-        KeyNotFoundException(std::vector<VariantKey>{single_key}, err_output) {}
+    explicit KeyNotFoundException(const entity::VariantKey& single_key, const std::string& err_output) :
+        KeyNotFoundException(std::vector<entity::VariantKey>{single_key}, err_output) {}
 
-    explicit KeyNotFoundException(boost::container::small_vector<VariantKey, 1>& keys) :
+    explicit KeyNotFoundException(boost::container::small_vector<entity::VariantKey, 1>& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
-        keys_(std::make_shared<std::vector<VariantKey>>(
+        keys_(std::make_shared<std::vector<entity::VariantKey>>(
                 std::make_move_iterator(keys.begin()), std::make_move_iterator(keys.end())
         )) {}
 
-    explicit KeyNotFoundException(boost::container::small_vector<VariantKey, 1>& keys, const std::string& err_output) :
+    explicit KeyNotFoundException(
+            boost::container::small_vector<entity::VariantKey, 1>& keys, const std::string& err_output
+    ) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
-        keys_(std::make_shared<std::vector<VariantKey>>(
+        keys_(std::make_shared<std::vector<entity::VariantKey>>(
                 std::make_move_iterator(keys.begin()), std::make_move_iterator(keys.end())
         )) {}
 
-    std::vector<VariantKey>& keys() { return *keys_; }
+    std::vector<entity::VariantKey>& keys() { return *keys_; }
 
   private:
-    std::shared_ptr<std::vector<VariantKey>> keys_;
+    std::shared_ptr<std::vector<entity::VariantKey>> keys_ = std::make_shared<std::vector<entity::VariantKey>>();
     mutable std::string msg_;
 };
 
 struct KeyNotFoundInStageResultInfo {
     uint64_t stage_result_index_;
-    VariantKey missing_key_;
+    entity::VariantKey missing_key_;
 
     [[nodiscard]] uint64_t stage_result_index() const { return stage_result_index_; }
 
-    [[nodiscard]] VariantKey missing_key() const { return missing_key_; }
+    [[nodiscard]] entity::VariantKey missing_key() const { return missing_key_; }
 
     [[nodiscard]] std::string to_string() const {
         return fmt::format("stage_result_index=[{}] missing_key=[{}]", stage_result_index_, missing_key_);
@@ -130,7 +141,7 @@ struct formatter<KeyNotFoundInStageResultInfo> {
                 ctx.out(),
                 "stage_result_index={}, missing_key={}",
                 k.stage_result_index(),
-                variant_key_view(k.missing_key())
+                arcticdb::entity::variant_key_view(k.missing_key())
         );
     };
 };
