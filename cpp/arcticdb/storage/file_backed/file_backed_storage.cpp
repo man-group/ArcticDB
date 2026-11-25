@@ -57,7 +57,7 @@ using namespace arcticdb;
 using storage::file_backed::PosixInterface;
 
 // TODO: Now that everything in here is built on raise<>, it makes sense for arguments to be Args...&&
-void raise_io_error(int error_code, std::string_view message) {
+[[noreturn]] void raise_io_error(int error_code, std::string_view message) {
     switch (error_code) {
     case EACCES:
     case EPERM:
@@ -171,12 +171,13 @@ int open_fd(PosixInterface& posix, const fs::path& storage_dir, const fs::path& 
 }
 
 void create_directories(PosixInterface& posix, const fs::path& pathname, mode_t mode) {
-    // TODO: Allow recursive mkdir to support bucketization
-    // TODO: Need to sync the parent directory.
-    if (posix.mkdir(pathname.c_str(), mode) == 0 || errno == EEXIST)
+    // TODO: Allow recursive mkdir to support bucketization, not important right now.
+    if (posix.mkdir(pathname.c_str(), mode) == 0) {
+        // TODO: Need to sync the parent directory.
         return;
-
-    raise_io_error(errno, fmt::format("Failed to create directory {}", pathname.c_str()));
+    }
+    if (errno != EEXIST)
+        raise_io_error(errno, fmt::format("Failed to create directory {}", pathname.c_str()));
 }
 
 int open_dir(
@@ -575,13 +576,20 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
 }
 
 bool remove_impl(Directory& containing_dir, const fs::path& directory_path, const std::string& key_file_name) {
-    if (containing_dir.unlinkat(key_file_name.c_str()) != 0) {
+    if (containing_dir.unlinkat(key_file_name.c_str()) == 0)
+        return true;
+
+    if (errno == ENOENT) {
+        containing_dir.reopen();
+        if (containing_dir.unlinkat(key_file_name.c_str()) == 0)
+            return true;
+
         if (errno == ENOENT)
             return false;
-        const fs::path full_path = directory_path / key_file_name;
-        raise_io_error(errno, fmt::format("Failed to remove file {}: {}", full_path.c_str(), std::strerror(errno)));
     }
-    return true;
+
+    const fs::path full_path = directory_path / key_file_name;
+    raise_io_error(errno, fmt::format("Failed to remove file {}: {}", full_path.c_str(), std::strerror(errno)));
 }
 
 } // namespace
@@ -684,6 +692,8 @@ void FileBackedStorage::do_remove(VariantKey&& key, RemoveOpts opts) {
 
 void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
     // Note that in the near future, keys will be further divided into subdirectories. The bucket will become a tuple.
+    // Group keys into buckets, so that we can cache the directory fd. This avoids path resolution
+    // on potentially thousands of files, while also calling sync() once we're done.
     using Bucket = KeyType;
     std::unordered_map<Bucket, std::vector<VariantKey>> keys_by_directory;
     for (const VariantKey& key : variant_keys) {
@@ -697,12 +707,8 @@ void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts
         for (const VariantKey& key : keys) {
             const std::string key_file_name = to_tokenized_key(key);
             bool success = remove_impl(directory, directory_path, key_file_name);
-            if (!success) {
-                // TODO: this is the retry path, and we need to reopen `directory`.
-                success = remove_impl(directory, directory_path, key_file_name);
-                if (!success && !opts.ignores_missing_key_)
-                    failed_deletes.emplace_back(key);
-            }
+            if (!success && !opts.ignores_missing_key_)
+                failed_deletes.emplace_back(key);
         }
         directory.sync();
     }
