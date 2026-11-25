@@ -16,6 +16,7 @@
 #include <arcticdb/util/buffer_pool.hpp>
 
 #include <arcticdb/storage/object_store_utils.hpp>
+#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
@@ -42,9 +43,15 @@ struct StorageResult {
 template<class Output>
 using S3Result = StorageResult<Output, Aws::S3::S3Error>;
 
+struct ListedObject {
+    std::string name;
+    ObjectMetadata metadata;
+
+    bool operator==(const ListedObject&) const = default;
+};
+
 struct ListObjectsOutput {
-    std::vector<std::string> s3_object_names;
-    std::vector<uint64_t> s3_object_sizes;
+    std::vector<ListedObject> objects;
     // next_continuation_token indicates there are more s3_objects to be listed because they didn't fit in one response.
     // If set can be used to get the remaining s3_objects.
     std::optional<std::string> next_continuation_token;

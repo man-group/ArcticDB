@@ -65,11 +65,14 @@ class MockS3Client : public S3ClientInterface {
     ) const override;
 
   private:
-    // We store a std::nullopt for deleted segments.
-    // We need to preserve the deleted keys in the map to ensure a correct thread-safe list_objects operation.
-    // Between two calls to list_objects() part of the same query via a continuation_token there might have been
-    // new writes or deletes and we still need to return a consistent list of symbols.
-    std::map<S3Key, std::optional<Segment>> s3_contents_;
+    struct MockObject {
+        Segment segment;
+        ObjectMetadata metadata;
+    };
+
+    // Deleted entries stay as std::nullopt so continuation tokens stay stable across concurrent writes/deletes.
+    std::map<S3Key, std::optional<MockObject>> s3_contents_;
+    uint64_t write_seq_{0};
     mutable std::mutex mutex_; // Used to guard the map.
 };
 

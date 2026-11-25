@@ -53,6 +53,17 @@ struct StreamSource {
             KeyType type, const std::optional<StreamId>& stream_id_opt, storage::ObjectSizesVisitor visitor
     ) = 0;
 
+    [[nodiscard]] virtual bool supports_object_metadata_listing() const { return false; }
+
+    [[nodiscard]] virtual folly::Future<folly::Unit> visit_object_metadata(
+            [[maybe_unused]] KeyType type, [[maybe_unused]] const storage::ObjectMetadataVisitor& visitor,
+            [[maybe_unused]] const std::string& prefix = std::string{}
+    ) {
+        return folly::makeFutureWith([]() -> folly::Unit {
+            util::raise_rte("visit_object_metadata not supported by this StreamSource");
+        });
+    }
+
     virtual bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) = 0;
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey& key) = 0;

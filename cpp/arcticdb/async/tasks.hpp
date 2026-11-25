@@ -685,31 +685,25 @@ struct RemoveBatchTask : BaseTask {
     void operator()() { lib_->remove(std::span(keys_), opts_); }
 };
 
-struct VisitObjectSizesTask : BaseTask {
+struct VisitObjectMetadataTask : BaseTask {
     KeyType type_;
+    storage::ObjectMetadataVisitor visitor_;
     std::string prefix_;
-    storage::ObjectSizesVisitor visitor_;
     std::shared_ptr<storage::Library> lib_;
 
-    VisitObjectSizesTask(
-            KeyType type, std::string prefix, storage::ObjectSizesVisitor visitor, std::shared_ptr<storage::Library> lib
+    VisitObjectMetadataTask(
+            KeyType type, storage::ObjectMetadataVisitor visitor, std::string prefix,
+            std::shared_ptr<storage::Library> lib
     ) :
         type_(type),
-        prefix_(std::move(prefix)),
         visitor_(std::move(visitor)),
+        prefix_(std::move(prefix)),
         lib_(std::move(lib)) {
-        ARCTICDB_DEBUG(log::storage(), "Creating object sizes task for key type {} prefix {}", type_, prefix_);
+        ARCTICDB_DEBUG(log::storage(), "Creating object metadata task for key type {} prefix {}", type_, prefix_);
     }
 
-    ARCTICDB_MOVE_ONLY_DEFAULT(VisitObjectSizesTask)
+    ARCTICDB_MOVE_ONLY_DEFAULT(VisitObjectMetadataTask)
 
-    void operator()() {
-        util::check(
-                lib_->supports_object_size_calculation(),
-                "ObjectSizesBytesTask should only be used with storages"
-                " that natively support size calculation"
-        );
-        lib_->visit_object_sizes(type_, prefix_, visitor_);
-    }
+    void operator()() { lib_->visit_object_metadata(type_, visitor_, prefix_); }
 };
 } // namespace arcticdb::async

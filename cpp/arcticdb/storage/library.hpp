@@ -66,11 +66,15 @@ class Library {
         storages_->iterate_type(key_type, visitor, prefix);
     }
 
-    bool supports_object_size_calculation() { return storages_->supports_object_size_calculation(); }
+    [[nodiscard]] bool supports_object_metadata_listing() const {
+        return storages_->supports_object_metadata_listing();
+    }
 
-    void visit_object_sizes(KeyType type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
-        ARCTICDB_SAMPLE(VisitObjectSizes, 0)
-        storages_->visit_object_sizes(type, prefix, visitor);
+    void visit_object_metadata(
+            KeyType key_type, const ObjectMetadataVisitor& visitor, const std::string& prefix = std::string{}
+    ) {
+        ARCTICDB_SAMPLE(VisitObjectMetadata, 0)
+        storages_->visit_object_metadata(key_type, visitor, prefix);
     }
 
     /**

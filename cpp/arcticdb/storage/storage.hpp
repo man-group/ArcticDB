@@ -24,6 +24,17 @@ namespace arcticdb::storage {
 using CompressedSize = uint64_t;
 using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)>;
 
+struct ObjectMetadata {
+    // Raw ETag as returned by the backend (e.g. quoted string from S3 ListObjectsV2).
+    std::string etag;
+    CompressedSize size{0};
+    // Epoch milliseconds. Note that S3 ListObjectsV2 reports LastModified at 1-second granularity.
+    int64_t last_modified_ms{0};
+
+    bool operator==(const ObjectMetadata&) const = default;
+};
+using ObjectMetadataVisitor = std::function<void(const VariantKey&, const ObjectMetadata&)>;
+
 // '*', '<' and '>' are problematic for S3 and are rejected by every backend, so they form the default set of
 // characters disallowed in names. Backends extend this set by overriding Storage::do_unsupported_*_chars().
 inline const std::set<char> GLOBALLY_UNSUPPORTED_CHARS{'*', '<', '>'};
@@ -156,19 +167,20 @@ class Storage {
         do_iterate_type_until_match(key_type, predicate_visitor, prefix);
     }
 
-    [[nodiscard]] virtual bool supports_object_size_calculation() const {
-        // TODO remove this default implementation when more storages have special size calculations implemented
-        return false;
-    }
+    [[nodiscard]] virtual bool supports_object_metadata_listing() const { return false; }
 
-    void visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+    // Visits (key, ObjectMetadata) entries for `key_type` using the same prefix semantics as `iterate_type` (empty
+    // visits all keys of `key_type`). On S3, an expected error (NoSuchBucket/NoSuchKey/ResourceNotFound) on page 1
+    // returns empty, whereas an error on page 2+ raises rather than returning a silently truncated listing.
+    void visit_object_metadata(
+            KeyType key_type, const ObjectMetadataVisitor& visitor, const std::string& prefix = std::string()
+    ) {
         util::check(
-                supports_object_size_calculation(),
-                "get_object_sizes called on storage {} which does not support "
-                "object size calculation",
+                supports_object_metadata_listing(),
+                "visit_object_metadata called on storage {} which does not support object metadata listing",
                 name()
         );
-        do_visit_object_sizes(key_type, prefix, visitor);
+        do_visit_object_metadata(key_type, visitor, prefix);
     }
 
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
@@ -267,13 +279,12 @@ class Storage {
             KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
     ) = 0;
 
-    virtual void do_visit_object_sizes(
-            [[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
-            [[maybe_unused]] const ObjectSizesVisitor& visitor
+    virtual void do_visit_object_metadata(
+            [[maybe_unused]] KeyType key_type, [[maybe_unused]] const ObjectMetadataVisitor& visitor,
+            [[maybe_unused]] const std::string& prefix
     ) {
-        // Must be overridden if you want to use this
         util::raise_rte(
-                "do_visit_object_sizes called on storage {} that does not support object size calculation {}", name()
+                "do_visit_object_metadata called on storage {} that does not support object metadata listing", name()
         );
     }
 

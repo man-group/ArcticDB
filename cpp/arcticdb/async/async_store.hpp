@@ -261,9 +261,15 @@ class AsyncStore : public Store {
             prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
         }
 
-        if (library_->supports_object_size_calculation()) {
-            // The library has native support for some kind of clever size calculation, so let it take over
-            return async::submit_io_task(VisitObjectSizesTask{type, prefix, std::move(visitor), library_});
+        if (library_->supports_object_metadata_listing()) {
+            // The library has native support for listing object metadata (including sizes), so let it take over
+            return visit_object_metadata(
+                    type,
+                    [visitor = std::move(visitor)](const VariantKey& key, const storage::ObjectMetadata& metadata) {
+                        visitor(key, metadata.size);
+                    },
+                    prefix
+            );
         }
 
         // No native support for a clever size calculation, so just read keys and sum their sizes
@@ -284,6 +290,16 @@ class AsyncStore : public Store {
 
         read_ignoring_key_not_found(std::move(key_size_calculators));
         return folly::makeFuture();
+    }
+
+    [[nodiscard]] bool supports_object_metadata_listing() const override {
+        return library_->supports_object_metadata_listing();
+    }
+
+    folly::Future<folly::Unit> visit_object_metadata(
+            KeyType type, const storage::ObjectMetadataVisitor& visitor, const std::string& prefix = std::string{}
+    ) override {
+        return async::submit_io_task(VisitObjectMetadataTask{type, visitor, prefix, library_});
     }
 
     folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(

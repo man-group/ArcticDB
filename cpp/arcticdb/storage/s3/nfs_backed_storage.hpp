@@ -23,7 +23,7 @@ class NfsBackedStorage final : public Storage {
 
     std::string name() const final;
 
-    bool supports_object_size_calculation() const final override;
+    bool supports_object_metadata_listing() const final;
 
     std::optional<size_t> max_delete_batch_size() const final override;
 
@@ -51,7 +51,8 @@ class NfsBackedStorage final : public Storage {
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
             final;
 
-    void do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) final;
+    void do_visit_object_metadata(KeyType key_type, const ObjectMetadataVisitor& visitor, const std::string& prefix)
+            final;
 
     bool do_key_exists(const VariantKey& key) final;
 
