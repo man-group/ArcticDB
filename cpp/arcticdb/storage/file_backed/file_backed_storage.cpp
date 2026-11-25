@@ -61,7 +61,6 @@ struct FileNotFoundException : public std::runtime_error {
     FileNotFoundException(const std::string& msg) : std::runtime_error(msg) {}
 };
 
-// TODO: Now that everything in here is built on raise<>, it makes sense for arguments to be Args...&&
 [[noreturn]] void raise_io_error(int error_code, std::string_view message) {
     switch (error_code) {
     case EACCES:
