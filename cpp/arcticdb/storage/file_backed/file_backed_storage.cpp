@@ -406,7 +406,6 @@ class TempFile {
     bool committed_ = false;
 };
 
-// Owns a directory stream opened through PosixInterface, so that fault injection sees the closedir.
 class DirHandle {
   public:
     DirHandle(PosixInterface& posix, DIR* dirp) : posix_(posix), dirp_(dirp) {}
