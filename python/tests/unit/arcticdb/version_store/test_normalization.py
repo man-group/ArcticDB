@@ -41,6 +41,7 @@ from arcticdb.version_store._custom_normalizers import (
     get_custom_normalizer,
     clear_registered_normalizers,
     CompositeCustomNormalizer,
+    CustomNormalizer,
 )
 from arcticdb.version_store._normalization import (
     BlockManagerUnconsolidated,
@@ -355,6 +356,82 @@ def test_pickle_on_failure_precedence(
         with pytest.raises(ArcticException, match="normalizing"):
             lib.write("sym", data, pickle_on_failure=pickle_on_failure_kwarg, **kwargs)
         assert not lib.has_symbol("sym")
+
+
+class _UnnormalizableDfThing:
+    def __init__(self, value):
+        self.value = value
+
+
+class _UnnormalizableDfNormalizer(CustomNormalizer):
+    """Converts to a DataFrame which the native DataFrameNormalizer rejects (Timestamp column name)."""
+
+    def normalize(self, item, **kwargs):
+        if isinstance(item, _UnnormalizableDfThing):
+            df = pd.DataFrame([[item.value]], columns=[pd.Timestamp("2026-10-10")])
+            return df, descriptors_pb2.NormalizationMetadata.CustomNormalizerMeta()
+
+    def denormalize(self, item, norm_meta):
+        return _UnnormalizableDfThing(item.iloc[0, 0])
+
+
+@pytest.fixture
+def unnormalizable_df_custom_normalizer():
+    register_normalizer(_UnnormalizableDfNormalizer())
+    try:
+        yield
+    finally:
+        clear_registered_normalizers()
+
+
+@pytest.mark.parametrize("use_norm_failure_handler_known_types_lib_config", [True, False])
+@pytest.mark.parametrize("pickle_on_failure_env_var", ["1", "0", None])
+@pytest.mark.parametrize("pickle_on_failure_kwarg", [True, False, None])
+def test_custom_normalizer_pickle_on_failure_precedence(
+    unnormalizable_df_custom_normalizer,
+    in_memory_store_factory,
+    monkeypatch,
+    use_norm_failure_handler_known_types_lib_config,
+    pickle_on_failure_env_var,
+    pickle_on_failure_kwarg,
+):
+    """The output of a custom normalizer goes through the native normalizers, so it is subject to pickle_on_failure."""
+    if pickle_on_failure_env_var is not None:
+        monkeypatch.setenv("PICKLE_ON_FAILURE", pickle_on_failure_env_var)
+    lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types_lib_config)
+
+    if pickle_on_failure_kwarg is not None:
+        expect_pickling = pickle_on_failure_kwarg
+    elif pickle_on_failure_env_var is not None:
+        expect_pickling = pickle_on_failure_env_var == "1"
+    else:
+        expect_pickling = use_norm_failure_handler_known_types_lib_config
+
+    if expect_pickling:
+        lib.write("sym", _UnnormalizableDfThing(1.0), pickle_on_failure=pickle_on_failure_kwarg)
+        assert lib.is_symbol_pickled("sym")
+    else:
+        with pytest.raises(ArcticException, match="normalizing"):
+            lib.write("sym", _UnnormalizableDfThing(1.0), pickle_on_failure=pickle_on_failure_kwarg)
+        assert not lib.has_symbol("sym")
+
+
+@pytest.mark.parametrize("enable_python_native_pickling", [True, False, None])
+def test_custom_normalizer_pickle_on_failure_respects_enable_python_native_pickling(
+    unnormalizable_df_custom_normalizer, in_memory_store_factory, enable_python_native_pickling
+):
+    lib = in_memory_store_factory()
+    kwargs = {}
+    if enable_python_native_pickling is not None:
+        kwargs["enable_python_native_pickling"] = enable_python_native_pickling
+    # A DataFrame is not msgpack serializable, so the MsgPack fallback needs Python native pickling
+    if enable_python_native_pickling is False:
+        with pytest.raises(ArcticException):
+            lib.write("sym", _UnnormalizableDfThing(1.0), pickle_on_failure=True, **kwargs)
+        assert not lib.has_symbol("sym")
+    else:
+        lib.write("sym", _UnnormalizableDfThing(1.0), pickle_on_failure=True, **kwargs)
+        assert lib.is_symbol_pickled("sym")
 
 
 timezone_params = [

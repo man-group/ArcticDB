@@ -601,7 +601,11 @@ class NativeVersionStore:
             opt_custom = self._custom_normalizer.normalize(dataframe)
             if opt_custom is not None:
                 item, custom_norm_meta = opt_custom
-                item, norm_meta = self._normalizer.normalize(item)
+                item, norm_meta = self._normalizer.normalize(
+                    item,
+                    pickle_on_failure=pickle_on_failure,
+                    enable_python_native_pickling=enable_python_native_pickling,
+                )
                 norm_meta.custom.CopyFrom(custom_norm_meta)
             else:
                 item, norm_meta = self._normalizer.normalize(
