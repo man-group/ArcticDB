@@ -196,20 +196,39 @@ TEST_F(FileStorageApi, KeyNotFoundException) {
     ASSERT_THROW(storage().read(entity::VariantKey{key}, {}), storage::KeyNotFoundException);
 }
 
-TEST_F(FileStorageApi, KeyDeletion) {
+class FileStorageDeletion : public FileBackedStorageFixture, public ::testing::WithParamInterface<storage::RemoveOpts> {
+  protected:
+    const storage::RemoveOpts& remove_opts() const noexcept { return GetParam(); }
+};
+
+TEST_P(FileStorageDeletion, SingleKey) {
     auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
     storage().write(storage::KeySegmentPair(entity::VariantKey{key}, storage::get_test_segment()));
     ASSERT_TRUE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
 
-    storage().remove(entity::VariantKey{key}, {});
+    storage().remove(entity::VariantKey{key}, remove_opts());
     ASSERT_FALSE(exists_in_store(storage(), STREAM_ID, entity::KeyType::VERSION));
-    ASSERT_THROW(storage().remove(entity::VariantKey{key}, {}), storage::KeyNotFoundException);
+    if (remove_opts().ignores_missing_key_)
+        ASSERT_NO_THROW(storage().remove(entity::VariantKey{key}, remove_opts()));
+    else
+        ASSERT_THROW(storage().remove(entity::VariantKey{key}, remove_opts()), storage::KeyNotFoundException);
 }
 
-TEST_F(FileStorageApi, MultiKeyDeletion) {
+TEST_P(FileStorageDeletion, SingleKeyNeverExisted) {
+    // If the key never existed, its subdirectory wouldn't exist, which triggers distinct code paths.
+    auto key = storage::get_test_key(STREAM_ID, entity::KeyType::VERSION);
+    if (remove_opts().ignores_missing_key_)
+        ASSERT_NO_THROW(storage().remove(entity::VariantKey{key}, remove_opts()));
+    else
+        ASSERT_THROW(storage().remove(entity::VariantKey{key}, remove_opts()), storage::KeyNotFoundException);
+}
+
+TEST_P(FileStorageDeletion, MultiKey) {
     auto nonexistent1 = storage::get_test_key("nonexistent1", entity::KeyType::VERSION);
     auto nonexistent2 = storage::get_test_key("nonexistent2", entity::KeyType::VERSION);
-    std::vector<entity::VariantKey> to_remove{nonexistent1, nonexistent2};
+    auto nonexistent3 = storage::get_test_key("nonexistent3", entity::KeyType::TABLE_DATA);
+    std::set<entity::VariantKey> nonexistent_keys{nonexistent1, nonexistent2, nonexistent3};
+    std::vector<entity::VariantKey> to_remove(nonexistent_keys.begin(), nonexistent_keys.end());
     for (size_t i = 0; i < 3; ++i) {
         const std::string stream_id = fmt::format("symbol{}", i);
         auto key = storage::get_test_key(stream_id, entity::KeyType::VERSION);
@@ -218,10 +237,30 @@ TEST_F(FileStorageApi, MultiKeyDeletion) {
         ASSERT_TRUE(exists_in_store(storage(), stream_id, entity::KeyType::VERSION));
     }
 
-    ASSERT_THROW(storage().remove(to_remove, {}), storage::KeyNotFoundException);
+    if (remove_opts().ignores_missing_key_)
+        ASSERT_NO_THROW(storage().remove(to_remove, remove_opts()));
+    else {
+        try {
+            storage().remove(to_remove, remove_opts());
+            FAIL() << "Should have thrown a KeyNotFoundException but threw nothing.";
+        } catch (storage::KeyNotFoundException& e) {
+            std::set<entity::VariantKey> could_not_delete(e.keys().begin(), e.keys().end());
+            ASSERT_EQ(could_not_delete, nonexistent_keys);
+        }
+    }
     for (const entity::VariantKey& key : to_remove)
         ASSERT_FALSE(storage().key_exists(key));
 }
+
+INSTANTIATE_TEST_SUITE_P(
+        FileStorageDeletion, FileStorageDeletion,
+        ::testing::Values(
+                storage::RemoveOpts{.ignores_missing_key_ = false}, storage::RemoveOpts{.ignores_missing_key_ = true}
+        ),
+        [](const testing::TestParamInfo<storage::RemoveOpts>& info) {
+            return info.param.ignores_missing_key_ ? "IgnoreMissing" : "DoNotIgnoreMissing";
+        }
+);
 
 // An early bug in file path generation led to files being overwritten. Write a few different segments
 // to four files and then try to reread them and match them to original data.
@@ -286,7 +325,7 @@ std::set<std::string> keys_sized(storage::Storage& store, entity::KeyType key_ty
 }
 
 class FileStorageTraversal : public FileBackedStorageFixture, public ::testing::WithParamInterface<StreamIdLister> {
-  public:
+  protected:
     StreamIdLister lister() const { return GetParam(); }
 };
 

@@ -56,6 +56,11 @@ static constexpr std::string_view SILLY_RENAME_FILE_PREFIX(".nfs");
 using namespace arcticdb;
 using storage::file_backed::PosixInterface;
 
+// This exception should never escape the TU. It will get translated.
+struct FileNotFoundException : public std::runtime_error {
+    FileNotFoundException(const std::string& msg) : std::runtime_error(msg) {}
+};
+
 // TODO: Now that everything in here is built on raise<>, it makes sense for arguments to be Args...&&
 [[noreturn]] void raise_io_error(int error_code, std::string_view message) {
     switch (error_code) {
@@ -69,8 +74,7 @@ using storage::file_backed::PosixInterface;
         storage::raise<ErrorCode::E_QUOTA_EXCEEDED>(message);
         break;
     case ENOENT:
-        // TODO: Consider if this should be FileNotFoundException. Then translate.
-        throw storage::KeyNotFoundException(std::string{message});
+        throw FileNotFoundException(std::string{message});
         break;
     case ESTALE:
         storage::raise<ErrorCode::E_STALE_FILE_DESCRIPTOR>(message);
@@ -565,13 +569,13 @@ Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const Vari
             Segment result = Segment::from_buffer(file.read_all());
             file.close();
             return result;
-        } catch (const storage::KeyNotFoundException&) {
-            // TODO: Somewhat silly exception handler, but attaching variant_key here is important.
+        } catch (const FileNotFoundException&) {
             throw storage::KeyNotFoundException(variant_key);
         }
     });
 }
 
+// Must not throw FileNotFoundException. Report missing by return value.
 bool remove_impl(Directory& containing_dir, const fs::path& directory_path, const std::string& key_file_name) {
     if (containing_dir.unlinkat(key_file_name.c_str()) == 0)
         return true;
@@ -680,11 +684,17 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
 void FileBackedStorage::do_remove(VariantKey&& key, RemoveOpts opts) {
     const std::string key_file_name = to_tokenized_key(key);
     const fs::path directory_path = storage_dir_ / entity::key_type_long_name(variant_key_type(key));
-    Directory directory(*posix_, storage_dir_, directory_path);
-    const bool success = remove_impl(directory, directory_path, key_file_name);
-    directory.sync();
-    if (!success && !opts.ignores_missing_key_)
-        throw KeyNotFoundException(key);
+    try {
+        Directory directory(*posix_, storage_dir_, directory_path);
+        const bool success = remove_impl(directory, directory_path, key_file_name);
+        directory.sync();
+        if (!success && !opts.ignores_missing_key_)
+            throw KeyNotFoundException(key);
+    } catch (const FileNotFoundException&) {
+        // Directory doesn't exist, which is okay. It implies the key is missing.
+        if (!opts.ignores_missing_key_)
+            throw KeyNotFoundException(key);
+    }
 }
 
 void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
@@ -700,14 +710,20 @@ void FileBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts
     std::vector<VariantKey> failed_deletes;
     for (const auto& [key_type, keys] : keys_by_directory) {
         const fs::path directory_path = storage_dir_ / entity::key_type_long_name(key_type);
-        Directory directory(*posix_, storage_dir_, directory_path);
-        for (const VariantKey& key : keys) {
-            const std::string key_file_name = to_tokenized_key(key);
-            bool success = remove_impl(directory, directory_path, key_file_name);
-            if (!success && !opts.ignores_missing_key_)
-                failed_deletes.emplace_back(key);
+        try {
+            Directory directory(*posix_, storage_dir_, directory_path);
+            for (const VariantKey& key : keys) {
+                const std::string key_file_name = to_tokenized_key(key);
+                bool success = remove_impl(directory, directory_path, key_file_name);
+                if (!success && !opts.ignores_missing_key_)
+                    failed_deletes.emplace_back(key);
+            }
+            directory.sync();
+        } catch (const FileNotFoundException&) {
+            // Directory doesn't exist, which is okay. It implies all the keys are missing.
+            if (!opts.ignores_missing_key_)
+                std::ranges::move(keys, std::back_inserter(failed_deletes));
         }
-        directory.sync();
     }
 
     if (!failed_deletes.empty())
