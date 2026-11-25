@@ -150,8 +150,11 @@ struct PassthroughEncoderV2 {
 struct PassthroughDecoder {
     template<typename T>
     static void decode_block(const std::uint8_t* in, std::size_t in_bytes, T* t_out, std::size_t out_bytes) {
-        arcticdb::util::check_arg(
-                in_bytes == out_bytes, "expected  in_bytes==out_bytes, actual {} != {}", in_bytes, out_bytes
+        codec::check<ErrorCode::E_DECODE_ERROR>(
+                in_bytes == out_bytes,
+                "Size mismatch in uncompressed block: {} encoded bytes, expected {} decoded bytes",
+                in_bytes,
+                out_bytes
         );
         memcpy(t_out, in, in_bytes);
     }

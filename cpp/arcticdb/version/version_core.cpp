@@ -8,6 +8,7 @@
 
 #include <arcticdb/arrow/arrow_schema_utils.hpp>
 #include <arcticdb/version/version_core.hpp>
+#include <arcticdb/codec/decode_error_context.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
 #include <column_stats.pb.h>
@@ -2260,6 +2261,7 @@ folly::Future<IndexInformation> read_index_key_without_column_stats(
             auto column_stats = std::nullopt;
             return IndexInformation{std::move(key_seg_pair_try.value()), column_stats};
         } else {
+            rethrow_if_data_integrity_error(key_seg_pair_try.exception());
             throw storage::NoDataFoundException(fmt::format(
                     "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
                     key.version_id(),
@@ -2276,6 +2278,7 @@ IndexInformation read_index_key_without_column_stats_sync(const std::shared_ptr<
         auto column_stats = std::nullopt;
         return IndexInformation{store->read_sync(key), column_stats};
     } catch (const std::exception& ex) {
+        rethrow_if_data_integrity_error(folly::exception_wrapper{std::current_exception()});
         throw storage::NoDataFoundException(fmt::format(
                 "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
                 key.version_id(),
@@ -2314,6 +2317,7 @@ void create_column_stats_impl(
     auto index_try = std::move(index_future).getTry();
 
     if (index_try.hasException()) {
+        rethrow_if_data_integrity_error(index_try.exception());
         throw storage::NoDataFoundException(fmt::format(
                 "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
                 versioned_item.key_.version_id(),
@@ -2414,7 +2418,9 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
         auto segment = store->read_compressed(column_stats_key).get().segment_ptr();
-        auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
+        auto segment_in_memory = with_key_decode_context(column_stats_key, [&] {
+            return decode_segment(*segment, AllocationType::DETACHABLE);
+        });
         const auto num_rows = segment_in_memory.row_count();
         for (auto i = 0u; i < segment_in_memory.num_columns(); ++i) {
             auto& column = segment_in_memory.column(static_cast<position_t>(i));
@@ -2430,6 +2436,7 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
         return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}};
     } catch (const std::exception& e) {
+        rethrow_if_data_integrity_error(folly::exception_wrapper{std::current_exception()});
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
     }
 }
@@ -2452,6 +2459,7 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
         util::check(unpacked, "Failed to unpack column stats header while getting column stats info");
         return ColumnStats{column_stats_header, tsd};
     } catch (const std::exception& e) {
+        rethrow_if_data_integrity_error(folly::exception_wrapper{std::current_exception()});
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
     }
 }
@@ -3050,6 +3058,7 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
                             vi.key_,
                             index_try.exception().what()
                     );
+                    rethrow_if_data_integrity_error(index_try.exception());
                     throw storage::NoDataFoundException(fmt::format(
                             "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
                             vi.version(),

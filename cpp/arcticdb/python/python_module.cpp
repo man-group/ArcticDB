@@ -201,6 +201,9 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
             m, "KeyNotFoundException", storage_exception.get_stored().ptr()
     );
     py::register_local_exception<PermissionException>(m, "PermissionException", storage_exception.get_stored().ptr());
+    py::register_local_exception<DataIntegrityException>(
+            m, "DataIntegrityException", storage_exception.get_stored().ptr()
+    );
 
     auto schema_exception = py::register_local_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_local_exception<StreamDescriptorMismatch>(m, "StreamDescriptorMismatch", schema_exception.ptr());

@@ -78,7 +78,7 @@ class CodecHelper {
   public:
     using DT = typename TD::DataTypeTag;
     using D = typename TD::DimensionTag;
-    constexpr static HashedValue seed = 0x42;
+    constexpr static HashedValue seed = HashAccum::DEFAULT_SEED;
     using T = typename DT::raw_type;
     constexpr static Dimension dim = D::value;
 
