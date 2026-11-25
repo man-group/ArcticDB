@@ -101,16 +101,20 @@ bool is_skipped_name(std::string_view file_name) noexcept {
     return is_tmp_file_name(file_name) || is_silly_rename(file_name) || is_dot_dir(file_name);
 }
 
-void refresh_directory(PosixInterface& posix, const fs::path& dir) {
+// Try to open the directory and report success.
+bool refresh_directory(PosixInterface& posix, const fs::path& dir) {
     int fd = posix.open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
-    if (fd >= 0)
+    if (fd >= 0) {
         (void)posix.close(fd);
+        return true;
+    }
+    return false;
 }
 
 /**
  * Open all directories from `dir` up to `subpath`, inclusive. This forces NFS to purge caches and
  * eliminates spurious ENOENT responses for files, which actually exist.
- * Note that we use real syscalls here. Testing should not be happening at this level.
+ * The first successful directory re-open is a sufficient stopping condition.
  */
 void refresh_ancestors(PosixInterface& posix, const fs::path& dir, const fs::path& subpath) {
     fs::path to_check = subpath;
@@ -122,11 +126,9 @@ void refresh_ancestors(PosixInterface& posix, const fs::path& dir, const fs::pat
             subpath.c_str()
     );
     while (to_check != dir) {
-        // TODO: The stopping condition here can be relaxed. The only reason we traverse parents one by one
-        //       is because of the possibility that they are **all missing**. If one of them successfully opens,
-        //       we can stop.
         to_check = to_check.parent_path();
-        refresh_directory(posix, to_check);
+        if (refresh_directory(posix, to_check))
+            break;
     }
 }
 
