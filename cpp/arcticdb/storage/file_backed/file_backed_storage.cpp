@@ -495,26 +495,31 @@ auto as_variant_keys(KeyType key_type) {
            std::views::transform([](std::optional<VariantKey> key) { return std::move(*key); });
 }
 
+template<typename Op>
+auto retry_on_estale(Op&& op, size_t max_attempts = 2) {
+    for (size_t i = 0;; ++i) {
+        try {
+            return std::forward<Op>(op)();
+        } catch (const StaleFileDescriptor&) {
+            if (i + 1 == max_attempts)
+                throw;
+        }
+    }
+}
+
 Segment read_impl(PosixInterface& posix, const fs::path& storage_dir, const VariantKey& variant_key) {
     const fs::path dest_path = storage_dir / get_key_subpath(variant_key);
-    bool retried_stale = false;
-    while (true) {
+    return retry_on_estale([&]() {
         try {
             File file(posix, storage_dir, dest_path, O_RDONLY | O_CLOEXEC, 0);
             Segment result = Segment::from_buffer(file.read_all());
             file.close();
             return result;
-        } catch (const StaleFileDescriptor& e) {
-            if (!retried_stale) {
-                retried_stale = true;
-                continue;
-            } else
-                throw;
         } catch (const storage::KeyNotFoundException&) {
-            // TODO: Kind of a silly exception handler, attaching variant_key here is important.
+            // TODO: Somewhat silly exception handler, but attaching variant_key here is important.
             throw storage::KeyNotFoundException(variant_key);
         }
-    }
+    });
 }
 
 bool remove_impl(Directory& containing_dir, const fs::path& directory_path, const std::string& key_file_name) {
@@ -575,30 +580,20 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     Segment& seg = *key_seg.segment_ptr();
     const std::string key_name = entity::key_type_long_name(variant_key_type(key_seg.variant_key()));
 
-    bool retried_stale = false;
-    while (true) {
+    return retry_on_estale([&]() {
         Directory storage_dir_fd(*posix_, storage_dir_, storage_dir_);
         storage_dir_fd.mkdir(key_name, new_dir_mode_);
         Directory key_type_dir_fd(*posix_, storage_dir_fd, key_name);
-        try {
-            TempFile tmp_key_fd(*posix_, key_type_dir_fd);
-            // TODO: Unnecessary copy
-            std::vector<std::uint8_t> buffer(seg.calculate_size());
-            seg.write_to(buffer.data());
-            tmp_key_fd.write_all(buffer);
-            // This closes and moves the temp file.
-            tmp_key_fd.commit_as(maybe_safe_file_name_for_key.c_str());
-            key_type_dir_fd.close();
-            storage_dir_fd.close();
-            break;
-        } catch (const StaleFileDescriptor& e) {
-            if (!retried_stale) {
-                retried_stale = true;
-                continue;
-            }
-            throw;
-        }
-    }
+        TempFile tmp_key_fd(*posix_, key_type_dir_fd);
+        // TODO: Unnecessary copy
+        std::vector<std::uint8_t> buffer(seg.calculate_size());
+        seg.write_to(buffer.data());
+        tmp_key_fd.write_all(buffer);
+        // This closes and moves the temp file.
+        tmp_key_fd.commit_as(maybe_safe_file_name_for_key.c_str());
+        key_type_dir_fd.close();
+        storage_dir_fd.close();
+    });
 }
 
 void FileBackedStorage::do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) {
