@@ -604,7 +604,7 @@ FileBackedStorage::FileBackedStorage(
     storage_dir_ = root_path / lib_path_str;
 
     struct stat st;
-    // TODO: Root path is assumed to exist.
+    // Root path is assumed to exist.
     if (::stat(root_path.c_str(), &st) == 0) {
         new_dir_mode_ = st.st_mode & DIR_MODE_MASK;
     } else
