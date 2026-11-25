@@ -157,17 +157,17 @@ int open_fd(PosixInterface& posix, const fs::path& storage_dir, const fs::path& 
             "For fork safety, mode O_CLOEXEC should always be set"
     );
     int fd = posix.open(pathname.c_str(), flags, mode);
-    if (fd < 0) {
-        if (errno == ENOENT) {
-            // Only occurs without O_CREAT
-            refresh_ancestors(storage_dir, pathname);
-            fd = posix.open(pathname.c_str(), flags, mode);
-        }
+    if (fd >= 0)
+        return fd;
+
+    if (errno == ENOENT) {
+        // Only occurs without O_CREAT
+        refresh_ancestors(storage_dir, pathname);
+        fd = posix.open(pathname.c_str(), flags, mode);
+        if (fd >= 0)
+            return fd;
     }
-    if (fd < 0) {
-        raise_io_error(errno, fmt::format("Failed to open {}", pathname.c_str()));
-    }
-    return fd;
+    raise_io_error(errno, fmt::format("Failed to open {}", pathname.c_str()));
 }
 
 void create_directories(PosixInterface& posix, const fs::path& pathname, mode_t mode) {
@@ -199,7 +199,6 @@ int open_dir(
 
 class FdHolder {
   protected:
-    // TODO: storage_dir sneaked in here only because of the retry. Maybe the retry wrapper can absorb this concern.
     FdHolder(PosixInterface& posix, int fd) : posix_(posix), fd_(fd) {}
 
     ~FdHolder() {
@@ -304,17 +303,17 @@ int openat_fd(PosixInterface& posix, Directory& dir, const fs::path& pathname, i
             "For fork safety, mode O_CLOEXEC should always be set"
     );
     int fd = posix.openat(dir.fd(), pathname.c_str(), flags, mode);
-    if (fd < 0) {
-        if (errno == ENOENT) {
-            // Only occurs without O_CREAT
-            dir.reopen();
-            fd = posix.openat(dir.fd(), pathname.c_str(), flags, mode);
-        }
+    if (fd >= 0)
+        return fd;
+
+    if (errno == ENOENT) {
+        // Only occurs without O_CREAT
+        dir.reopen();
+        fd = posix.openat(dir.fd(), pathname.c_str(), flags, mode);
+        if (fd >= 0)
+            return fd;
     }
-    if (fd < 0) {
-        raise_io_error(errno, fmt::format("Failed to open {}", pathname.c_str()));
-    }
-    return fd;
+    raise_io_error(errno, fmt::format("Failed to open {}", pathname.c_str()));
 }
 
 class File : public FdHolder {
@@ -386,13 +385,12 @@ class TempFile {
         file_.close();
         if (posix_.renameat(dir_.fd(), file_name_.c_str(), dir_.fd(), dest) != 0) {
             if (errno == ENOENT) {
-                // Could be a lost reply from NFS server and the file was actually moved into place.
-                // TODO: Consider how to construct the check that the file exists.
-                // try {
-                //     File destination_file(posix_, dir_, dest, O_RDONLY | O_CLOEXEC, 0);
-                // } catch (const storage::KeyNotFoundException&) {
-                //     raise_io_error(errno, fmt::format("Failed to move temp file to {}", dest));
-                // }
+                // The rename could have succeeded but the server crashed before it had a chance to notify us.
+                // Then the client would resubmit the rename request and get an error because the tmp file is
+                // no longer there. We should check that the target file exists, has the proper size, and
+                // potentially could also check that the hash is correct, if it's in a segment header which
+                // we can cheaply read off disk.
+                // TODO: Implement me
             }
             raise_io_error(errno, fmt::format("Failed to move temp file to {}", dest));
         }
