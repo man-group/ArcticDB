@@ -13,3 +13,6 @@ cp vcpkg/ports/folly/* $overlays/folly
 sed -i -e 's/PATCHES$/&\n        no_exception_tracer.patch/' \
        -e '/^vcpkg_cmake_configure/,+10 s/OPTIONS$/&\n        -DFOLLY_NO_EXCEPTION_TRACER=ON/' \
        $overlays/folly/portfile.cmake
+
+# jemalloc, gperftools and mimalloc (ARCTICDB_ALLOCATOR): derived from the ports at vcpkg.json's builtin-baseline. Changes
+# are marked "ArcticDB" in their portfile.cmake files and in gperftools/cmake-project-include.cmake
