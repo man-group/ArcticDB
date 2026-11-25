@@ -9,6 +9,7 @@
 #pragma once
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <cstdint>
 #include <optional>
 
 namespace arcticdb::pipelines {
@@ -19,6 +20,9 @@ namespace arcticdb {
 class Column;
 class SegmentInMemory;
 
+enum class RowSpace : std::uint8_t { FRAME, SEGMENT };
+
+template<RowSpace Space>
 struct ColumnTruncation {
     ColumnTruncation(std::optional<size_t> start, std::optional<size_t> end) : start_(start), end_(end) {}
 
@@ -30,6 +34,9 @@ struct ColumnTruncation {
     std::optional<size_t> end_;
 };
 
+using FrameTruncation = ColumnTruncation<RowSpace::FRAME>;
+using SegmentTruncation = ColumnTruncation<RowSpace::SEGMENT>;
+
 struct ColumnMapping {
     const entity::TypeDescriptor source_type_desc_;
     const entity::TypeDescriptor dest_type_desc_;
@@ -40,7 +47,7 @@ struct ColumnMapping {
     const size_t offset_bytes_;
     const size_t dest_bytes_;
     const size_t dest_col_;
-    ColumnTruncation truncate_;
+    FrameTruncation truncate_;
 
     ColumnMapping(SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context);
 
@@ -50,9 +57,11 @@ struct ColumnMapping {
             const size_t first_row, const size_t offset_bytes, const size_t dest_bytes, const size_t dest_col
     );
 
-    void set_truncate(ColumnTruncation truncate) { truncate_ = std::move(truncate); }
+    void set_truncate(FrameTruncation truncate) { truncate_ = truncate; }
 
     bool requires_truncation() const { return truncate_.requires_truncation(); }
+
+    SegmentTruncation segment_truncation() const;
 };
 
 struct StaticColumnMappingIterator {
@@ -85,11 +94,19 @@ struct StaticColumnMappingIterator {
     [[nodiscard]] size_t index_fieldcount() const;
 };
 
-void handle_truncation(Column& dest_column, const ColumnTruncation& truncate);
+void handle_truncation(Column& dest_column, const FrameTruncation& truncate);
 
 void handle_truncation(Column& dest_column, const ColumnMapping& mapping);
 
-void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate);
+struct PositionsAfterTruncation {
+    SegmentTruncation segment_rows;
+    // Byte offset, in the frame, of the first row kept after truncation
+    size_t extra_buffer_position;
+};
+
+PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& mapping);
+
+void truncate_segment_bitset(util::BitSet& bv, const SegmentTruncation& segment_rows);
 
 void create_dense_bitmap(
         size_t offset, const util::BitSet& sparse_map, Column& dest_column, entity::AllocationType allocation_type

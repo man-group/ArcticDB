@@ -60,31 +60,6 @@ void ArrowStringHandler::handle_type(
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
 
-struct PositionsAfterTruncation {
-    std::optional<size_t> first_idx_after_truncation;
-    std::optional<size_t> end_idx_after_truncation;
-    size_t extra_buffer_position;
-};
-
-PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& mapping) {
-    // If truncation is required, we need to calculate the starting index in the data we are writing after truncation.
-    // `truncate_.start_` and `truncate_.end_` are in terms of the full segment, so we need to adjust them to indices in
-    // the segment slice we are reading. For example, if we are reading rows 20-29 (mapping.offset_bytes_ = 20 *
-    // dest_size_) and truncate_.start_ = 22, we need to start writing from index 2 in our data (22 - 20 = 2).
-    std::optional<size_t> first_idx_after_truncation = std::nullopt;
-    if (mapping.truncate_.start_.has_value()) {
-        first_idx_after_truncation = mapping.truncate_.start_.value() - mapping.offset_bytes_ / mapping.dest_size_;
-    }
-    std::optional<size_t> end_idx_after_truncation = std::nullopt;
-    if (mapping.truncate_.end_.has_value()) {
-        end_idx_after_truncation = mapping.truncate_.end_.value() - mapping.offset_bytes_ / mapping.dest_size_;
-    }
-    // The extra buffer position needs to correspond to the byte offset of the first index after truncation with respect
-    // to the full segment.
-    auto extra_buffer_position = mapping.offset_bytes_ + first_idx_after_truncation.value_or(0) * mapping.dest_size_;
-    return {first_idx_after_truncation, end_idx_after_truncation, extra_buffer_position};
-}
-
 template<typename OffsetType>
 void encode_variable_length(
         const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
@@ -93,7 +68,7 @@ void encode_variable_length(
     const auto positions = get_positions_after_truncation(mapping);
 
     int64_t bytes = 0u;
-    ssize_t last_idx = positions.first_idx_after_truncation.value_or(0);
+    auto last_idx = static_cast<ssize_t>(positions.segment_rows.start_.value_or(0));
 
     // `mapping.dest_bytes` does not count the extra offset value we need to store in the end.
     // Thus, we request one extra value to assert that the buffer has that extra value allocated.
@@ -130,8 +105,8 @@ void encode_variable_length(
                                         inserter = en.idx();
                                     }
                                 },
-                                positions.first_idx_after_truncation,
-                                positions.end_idx_after_truncation
+                                positions.segment_rows.start_,
+                                positions.segment_rows.end_
                         );
                         return strings;
                     } else { // fixed-width string type
@@ -156,8 +131,8 @@ void encode_variable_length(
                                         inserter = en.idx();
                                     }
                                 },
-                                positions.first_idx_after_truncation,
-                                positions.end_idx_after_truncation
+                                positions.segment_rows.start_,
+                                positions.segment_rows.end_
                         );
                         return strings;
                     }
@@ -166,7 +141,7 @@ void encode_variable_length(
                 }
             }
     );
-    while (last_idx <= static_cast<ssize_t>(positions.end_idx_after_truncation.value_or(mapping.num_rows_))) {
+    while (last_idx <= static_cast<ssize_t>(positions.segment_rows.end_.value_or(mapping.num_rows_))) {
         dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
     }
     // The below assertion can only break for `SMALL_STRING` because `OffsetType=int32_t` and we can have more than 2^32
@@ -187,8 +162,8 @@ void encode_variable_length(
     }
     dest_bitset.resize(mapping.num_rows_);
 
-    handle_truncation(dest_bitset, mapping.truncate_);
-    handle_truncation(dest_column, mapping.truncate_);
+    truncate_segment_bitset(dest_bitset, positions.segment_rows);
+    handle_truncation(dest_column, mapping);
 
     create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
 
@@ -228,8 +203,8 @@ void encode_dictionary(
             unique_offsets;
 
     const auto positions = get_positions_after_truncation(mapping);
-    const auto row_count_after_truncation = positions.end_idx_after_truncation.value_or(mapping.num_rows_) -
-                                            positions.first_idx_after_truncation.value_or(0);
+    const auto row_count_after_truncation =
+            positions.segment_rows.end_.value_or(mapping.num_rows_) - positions.segment_rows.start_.value_or(0);
     // Trade some memory for more performance
     // TODO: Use unique count column stat in V2 encoding
     unique_offsets_in_order.reserve(row_count_after_truncation);
@@ -284,8 +259,8 @@ void encode_dictionary(
                                         inserter = en.idx();
                                     }
                                 },
-                                positions.first_idx_after_truncation,
-                                positions.end_idx_after_truncation
+                                positions.segment_rows.start_,
+                                positions.segment_rows.end_
                         );
                         return unique_offsets_view;
                     } else { // fixed-width string type
@@ -318,8 +293,8 @@ void encode_dictionary(
                                         inserter = en.idx();
                                     }
                                 },
-                                positions.first_idx_after_truncation,
-                                positions.end_idx_after_truncation
+                                positions.segment_rows.start_,
+                                positions.segment_rows.end_
                         );
                         return unique_offsets_owning;
                     }
@@ -336,7 +311,7 @@ void encode_dictionary(
     }
     dest_bitset.resize(mapping.num_rows_);
 
-    handle_truncation(dest_bitset, mapping.truncate_);
+    truncate_segment_bitset(dest_bitset, positions.segment_rows);
     handle_truncation(dest_column, mapping);
 
     create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
@@ -466,19 +441,19 @@ void ArrowBoolHandler::
         for_each_enumerated_flattened<BoolTypeTag>(
                 source_column,
                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) { set_bit_at(packed_dest, en.idx(), en.value()); },
-                positions.first_idx_after_truncation,
-                positions.end_idx_after_truncation
+                positions.segment_rows.start_,
+                positions.segment_rows.end_
         );
         const auto& sparse_map = *source_column.opt_sparse_map();
-        // Copy the sparse map, because handle_truncation modifies the bitset inplace.
+        // Copy the sparse map, because truncate_segment_bitset modifies the bitset inplace.
         auto validity_bitset = sparse_map;
-        auto bitmap_truncate = m.truncate_;
+        auto bitmap_truncate = positions.segment_rows;
         if (bitmap_truncate.start_.has_value()) {
             // Round down the bitmap truncation start to the nearest byte boundary so that the BITMAP buffer's
             // bit layout matches the packed data block's non-zero shift after handle_truncation(dest_column).
             *bitmap_truncate.start_ -= *bitmap_truncate.start_ % 8;
         }
-        handle_truncation(validity_bitset, bitmap_truncate);
+        truncate_segment_bitset(validity_bitset, bitmap_truncate);
 
         if (validity_bitset.count() != validity_bitset.size()) {
             create_dense_bitmap(
@@ -543,8 +518,8 @@ void ArrowTimestampHandler::
     const auto positions = get_positions_after_truncation(m);
 
     const bool is_sparse = source_column.opt_sparse_map().has_value();
-    const auto first_idx = positions.first_idx_after_truncation.value_or(0);
-    const auto end_idx = positions.end_idx_after_truncation.value_or(m.num_rows_);
+    const auto first_idx = positions.segment_rows.start_.value_or(0);
+    const auto end_idx = positions.segment_rows.end_.value_or(m.num_rows_);
     using TimestampTag = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     util::BitSet validity;
     validity.resize(end_idx - first_idx);

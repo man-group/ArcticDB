@@ -388,10 +388,9 @@ void decode_or_expand(
             // For Arrow output, apply truncation to the bitmap and set it as an extra buffer.
             if (is_arrow) {
                 bv->resize(mapping.num_rows_);
-                handle_truncation(*bv, mapping.truncate_);
-                auto first_offset_after_truncation =
-                        mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0) * dest_type_desc.get_type_bytes();
-                create_dense_bitmap_if_any_nulls(first_offset_after_truncation, *bv, dest_column);
+                const auto positions = get_positions_after_truncation(mapping);
+                truncate_segment_bitset(*bv, positions.segment_rows);
+                create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, *bv, dest_column);
             }
         } else {
             SliceDataSink sink(dest, dest_bytes);
@@ -405,53 +404,73 @@ void decode_or_expand(
     }
 }
 
-ColumnTruncation get_truncate_range_from_rows(
-        const RowRange& slice_range, size_t row_filter_start, size_t row_filter_end
+namespace {
+template<RowSpace Space = RowSpace::FRAME>
+ColumnTruncation<Space> get_truncate_range_from_rows(
+        const RowRange& slice_range, size_t filter_start, size_t filter_end
 ) {
     util::check(
-            row_filter_start < slice_range.end() && row_filter_end > slice_range.start(),
-            "row range filter unexpectedly got a slice with no intersection with requested row range. "
+            filter_start < slice_range.end() && filter_end > slice_range.start(),
+            "range filter unexpectedly got a slice with no intersection with requested range. "
             "Slice: {} - {}. Filter: {} - {}",
             slice_range.start(),
             slice_range.end(),
-            row_filter_start,
-            row_filter_end
+            filter_start,
+            filter_end
     );
 
-    std::optional<int64_t> truncate_start;
-    std::optional<int64_t> truncate_end;
-    if (row_filter_start > slice_range.start())
-        truncate_start = row_filter_start;
+    std::optional<size_t> truncate_start;
+    std::optional<size_t> truncate_end;
+    if (filter_start > slice_range.start())
+        truncate_start = filter_start;
 
-    if (row_filter_end < slice_range.end())
-        truncate_end = row_filter_end;
+    if (filter_end < slice_range.end())
+        truncate_end = filter_end;
 
     return {truncate_start, truncate_end};
 }
 
-ColumnTruncation get_truncate_range_from_index(
+SegmentTruncation get_truncate_range_from_index(
         const Column& column, const RowRange& slice_range, const TimestampRange& timestamp_range
 ) {
     auto start_row = lower_bound_idx<timestamp>(column, timestamp_range.first, slice_range.start(), slice_range.end());
     auto end_row = upper_bound_idx<timestamp>(column, timestamp_range.second, slice_range.start(), slice_range.end());
-    util::check(
-            start_row < slice_range.end() && end_row > slice_range.start(),
-            "date range filter unexpectedly got a slice with no intersection with requested date range. "
-            "Slice: {} - {}. Offsets with requested values: {} - {}",
-            slice_range.start(),
-            slice_range.end(),
-            start_row,
-            end_row
-    );
+    return get_truncate_range_from_rows<RowSpace::SEGMENT>(slice_range, start_row, end_row);
+}
 
+// As get_truncate_range_from_index, but searches only the slice's own block of the frame's index column. An end
+// iterator at slice_range.end() would load the next segment's block while that segment's decode task may replace it.
+// Locating the block still reads block offsets that truncating tasks update unsynchronised, as decode's bytes_at does.
+FrameTruncation get_truncate_range_from_segment_index_rows(
+        const Column& frame_index, const RowRange& slice_range, const TimestampRange& timestamp_range
+) {
+    // The same precondition lower_bound_idx checks, as the search below reads the block as timestamps directly
+    util::check(
+            !frame_index.is_sparse() &&
+                    search_detail::data_type_compatible_with<timestamp>(frame_index.type().data_type()),
+            "Date range truncation expects a dense timestamp index, got {}",
+            frame_index.type()
+    );
+    const auto num_rows = slice_range.diff();
+    const auto location = frame_index.data().buffer().block_and_offset(slice_range.start() * sizeof(timestamp));
+    util::check(
+            location.offset_ + num_rows * sizeof(timestamp) <= location.block_->logical_size(),
+            "Index rows {} - {} are not in a single block",
+            slice_range.start(),
+            slice_range.end()
+    );
+    const auto* begin = reinterpret_cast<const timestamp*>(location.block_->ptr(location.offset_));
+    const auto* end = begin + num_rows;
+    const auto start_row = slice_range.start() + (std::lower_bound(begin, end, timestamp_range.first) - begin);
+    const auto end_row = slice_range.start() + (std::upper_bound(begin, end, timestamp_range.second) - begin);
     return get_truncate_range_from_rows(slice_range, start_row, end_row);
 }
 
-ColumnTruncation get_truncate_range(
+FrameTruncation get_truncate_range(
         const SegmentInMemory& frame, const PipelineContextRow& context, const ReadQuery& read_query,
         EncodingVersion encoding_version, const EncodedFieldImpl& index_field, const uint8_t* index_field_offset
 ) {
-    ColumnTruncation truncate_rows;
+    FrameTruncation truncate_rows;
     const auto& row_range = context.slice_and_key().slice().row_range;
     const auto& first_row_offset = frame.offset();
     auto adjusted_row_range = RowRange(row_range.first - first_row_offset, row_range.second - first_row_offset);
@@ -486,7 +505,7 @@ ColumnTruncation get_truncate_range(
                     }
                     return std::make_tuple(_index_column, _first_ts, _last_ts);
                 }();
-                // The `get_truncate_range_from_index` is O(logn). This check serves to avoid the expensive O(logn)
+                // The index searches below are O(logn). This check serves to avoid the expensive O(logn)
                 // check for blocks in the middle of the range
                 // Note that this is slightly stricter than entity::contains, as if a time filter boundary exactly
                 // matches the segment index boundary, we would keep the whole segment and no log-complexity search
@@ -494,17 +513,19 @@ ColumnTruncation get_truncate_range(
                 if ((time_filter.first > first_ts && time_filter.first <= last_ts) ||
                     (time_filter.second >= first_ts && time_filter.second < last_ts)) {
                     if (context.fetch_index()) {
-                        truncate_rows = get_truncate_range_from_index(*index_column, adjusted_row_range, time_filter);
+                        truncate_rows = get_truncate_range_from_segment_index_rows(
+                                *index_column, adjusted_row_range, time_filter
+                        );
                     } else {
-                        truncate_rows = get_truncate_range_from_index(
+                        const auto segment_truncate = get_truncate_range_from_index(
                                 *index_column, {0, index_column->row_count()}, time_filter
                         );
-                        if (truncate_rows.start_.has_value()) {
-                            truncate_rows.start_ = *truncate_rows.start_ + adjusted_row_range.first;
-                        }
-                        if (truncate_rows.end_.has_value()) {
-                            truncate_rows.end_ = *truncate_rows.end_ + adjusted_row_range.first;
-                        }
+                        auto to_frame_row = [&](std::optional<size_t> row) -> std::optional<size_t> {
+                            return row ? std::optional{*row + adjusted_row_range.first} : std::nullopt;
+                        };
+                        truncate_rows = FrameTruncation{
+                                to_frame_row(segment_truncate.start_), to_frame_row(segment_truncate.end_)
+                        };
                     }
                 }
                 // Because of an old bug where end_index values in the index key could be larger than the last_ts+1,
@@ -524,7 +545,8 @@ ColumnTruncation get_truncate_range(
             }
     );
     return truncate_rows;
-};
+}
+} // namespace
 
 size_t get_field_range_compressed_size(
         size_t start_idx, size_t num_fields, const SegmentHeader& hdr, const EncodedFieldCollection& fields
@@ -652,9 +674,9 @@ void decode_into_frame_static( // with or without filters, row range or date ran
         const auto index_field_offset = data;
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
         // Truncation applies only to columns that decode via the arrow path. Computed lazily
-        std::optional<ColumnTruncation> truncate_range;
-        const ColumnTruncation no_truncation;
-        auto truncate_range_for = [&](const TypeDescriptor& type) -> const ColumnTruncation& {
+        std::optional<FrameTruncation> truncate_range;
+        const FrameTruncation no_truncation;
+        auto truncate_range_for = [&](const TypeDescriptor& type) -> const FrameTruncation& {
             if (read_options.output_format_for_column_type(type) != OutputFormat::ARROW)
                 return no_truncation;
             if (!truncate_range) {
@@ -763,9 +785,9 @@ void decode_into_frame_dynamic(
         auto index_field_offset = data;
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
         // Truncation applies only to columns that decode via the arrow path. Computed lazily
-        std::optional<ColumnTruncation> truncate_range;
-        const ColumnTruncation no_truncation;
-        auto truncate_range_for = [&](const TypeDescriptor& type) -> const ColumnTruncation& {
+        std::optional<FrameTruncation> truncate_range;
+        const FrameTruncation no_truncation;
+        auto truncate_range_for = [&](const TypeDescriptor& type) -> const FrameTruncation& {
             if (read_options.output_format_for_column_type(type) != OutputFormat::ARROW) {
                 return no_truncation;
             }

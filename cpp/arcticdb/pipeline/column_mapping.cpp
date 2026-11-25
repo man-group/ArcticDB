@@ -124,7 +124,17 @@ size_t StaticColumnMappingIterator::field_count() const { return field_count_; }
 
 size_t StaticColumnMappingIterator::index_fieldcount() const { return index_fieldcount_; }
 
-void handle_truncation(Column& dest_column, const ColumnTruncation& truncate) {
+SegmentTruncation ColumnMapping::segment_truncation() const {
+    auto to_segment_row = [this](std::optional<size_t> row) -> std::optional<size_t> {
+        if (!row)
+            return std::nullopt;
+        util::check(*row >= first_row_, "Truncation row {} is before the segment's first row {}", *row, first_row_);
+        return *row - first_row_;
+    };
+    return {to_segment_row(truncate_.start_), to_segment_row(truncate_.end_)};
+}
+
+void handle_truncation(Column& dest_column, const FrameTruncation& truncate) {
     if (dest_column.num_blocks() == 1 && truncate.start_ && truncate.end_) {
         dest_column.truncate_single_block(*truncate.start_, *truncate.end_);
     } else {
@@ -139,13 +149,19 @@ void handle_truncation(Column& dest_column, const ColumnMapping& mapping) {
     handle_truncation(dest_column, mapping.truncate_);
 }
 
-void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate) {
-    if (truncate.start_) {
-        bv = util::truncate_sparse_map(bv, *truncate.start_, truncate.end_.value_or(bv.size()));
-    } else if (truncate.end_) {
+void truncate_segment_bitset(util::BitSet& bv, const SegmentTruncation& segment_rows) {
+    if (segment_rows.start_) {
+        bv = util::truncate_sparse_map(bv, *segment_rows.start_, segment_rows.end_.value_or(bv.size()));
+    } else if (segment_rows.end_) {
         // More efficient than util::truncate_sparse_map as it avoids a copy
-        bv.resize(*truncate.end_);
+        bv.resize(*segment_rows.end_);
     }
+}
+
+PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& mapping) {
+    auto segment_rows = mapping.segment_truncation();
+    const auto extra_buffer_position = mapping.offset_bytes_ + segment_rows.start_.value_or(0) * mapping.dest_size_;
+    return {segment_rows, extra_buffer_position};
 }
 
 void create_dense_bitmap(
