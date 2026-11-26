@@ -108,6 +108,11 @@ R list_streams_internal_implementation(
 
 } // namespace details
 
+std::optional<VersionedItem> get_version_to_read(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        const VersionQuery& version_query
+);
+
 class LocalVersionedEngine : public VersionedEngine {
 
   public:

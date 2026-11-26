@@ -42,6 +42,7 @@ from arcticdb.version_store._store import (
     VersionQueryInput,
     MergeStrategy,
     MergeAction,
+    ArcticReadGenerator,
 )
 from arcticdb_ext.version_store import (
     CompactDataInfo,
@@ -2160,7 +2161,7 @@ class Library:
             Only one of date_range or row_range can be provided.
 
         columns: List[str], default=None
-            Applicable only for Pandas data. Determines which columns to return data for. Special values:
+            Applicable only for dataframes. Determines which columns to return data for. Special values:
             - ``None``: Return a dataframe containing all columns
             - ``[]``: Return a dataframe containing only the index columns
 
@@ -2247,6 +2248,133 @@ class Library:
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
             )
+
+    def read_streaming_experimental(
+        self,
+        symbol: str,
+        as_of: Optional[AsOf] = None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
+        prefetch_rows: Optional[int] = None,
+    ) -> ArcticReadGenerator:
+        """
+        Return a generator for iterating through the row-slices of a symbol.
+
+        This API is experimental, and subject to change at any time, not following semver. There is a major known issue
+        that if the loop over the returned generator does not complete (either due to an exception, or due to an
+        explicit `break` in calling code) then the memory of the row-slices that have been prefetched will leak. In
+        addition, if the exception from a `ArcticReadGenerator.__next__()` call is caught, and
+        `ArcticReadGenerator.__next__()` is called again, then the process could crash.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name.
+
+        as_of : AsOf, default=None
+            Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The
+            various types of this parameter mean:
+            - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version,
+                       -2 the version before that, etc.
+            - ``str``: snapshot name which contains the version
+            - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
+
+        date_range: Tuple[Optional[Timestamp], Optional[Timestamp]], default=None
+            DateRange to restrict read data to.
+
+            Applicable only for time-indexed dataframes or series. Returns only the part of the data that falls within
+            the given range (inclusive). None on either end leaves that part of the range open-ended. Hence specifying
+            ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up to and including 20250101.
+
+            Only one of date_range or row_range can be provided.
+
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
+            the handling of negative start/end values.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
+            Only one of date_range or row_range can be provided.
+
+        columns: List[str], default=None
+            Applicable only for dataframes. Determines which columns to return data for. Special values:
+            - ``None``: Return a dataframe containing all columns
+            - ``[]``: Return a dataframe containing only the index columns
+
+        query_builder: Optional[QueryBuilder], default=None
+            A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
+            documentation for the QueryBuilder class (``from arcticdb import QueryBuilder; help(QueryBuilder)``).
+
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            Output format for the returned dataframe. Pandas is not supported, and an exception will be raised if this
+            is explicitly requested through this parameter.
+            If `None`, uses the output format from the `Library` instance, or Polars if the default is Pandas.
+            See `OutputFormat` documentation for details on available formats.
+
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
+            String column format when using `PYARROW` or `POLARS` output formats.
+            If `None`, uses the `arrow_string_format_default` from the `Library` instance.
+            See `ArrowOutputStringFormat` documentation for details on available string formats.
+
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None
+            Per-column overrides for `arrow_string_format_default`. Keys are column names.
+
+        prefetch_rows: `Optional[int]`, default=None
+            How many rows to read-ahead from disk
+
+        Returns
+        -------
+        ArcticReadGenerator
+            An object that can be iterated through to retrieve row-slices of the whole data.
+
+        Raises
+        ------
+        ArcticNativeException
+            If Pandas output format is explicitly requested. This API only supports the Polars and PyArrow output
+            formats.
+            If prefetch_rows is negative.
+            If invalid kwargs are provided.
+        MissingDataException
+            If the symbol does not exist.
+        SchemaException
+            If the symbol is recursively normalized, pickled, or a numpy array.
+            If a date_range filter is provided, but the data is not a timeseries, or is an unsorted timeseries.
+        UserInputException
+            If a QueryBuilder is provided with invalid clauses. Supported operations are filters, projections,
+            date_range, row_range, head, and tail.
+
+        Examples
+        --------
+
+        >>> df = pl.DataFrame({"col": pl.Series(values=list(range(50)), dtype=pl.Int64)})
+        >>> for idx in range(5):
+        >>>     lib.append("sym", df.slice(idx * 10, 10))
+        >>> gen = lib.read_streaming_experimental("sym")
+        >>> for idx, row_slice in enumerate(gen):
+        >>>     assert row_slice.equals(df.slice(idx * 10, 10))
+        >>> gen.versioned_item().version
+        4
+        """
+
+        return self._nvs.read_streaming_experimental(
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            prefetch_rows=prefetch_rows,
+            output_format=output_format,
+            arrow_string_format_default=arrow_string_format_default,
+            arrow_string_format_per_column=arrow_string_format_per_column,
+            implement_read_index=True,
+            iterate_snapshots_if_tombstoned=False,
+        )
 
     def read_batch(
         self,

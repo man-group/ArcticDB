@@ -974,6 +974,23 @@ std::vector<SliceAndMergeInfo> gather_slices_and_infos_for_merge_update_index_co
     return total_slices_and_infos;
 }
 
+void add_index_columns_to_query(const ReadQuery& read_query, const FrameSchema& schema) {
+    if (read_query.columns.has_value()) {
+        auto index_columns = stream::get_index_columns_from_descriptor(schema);
+        if (index_columns.empty())
+            return;
+
+        std::vector<std::string> index_columns_to_add;
+        for (const auto& index_column : index_columns) {
+            if (ranges::find(*read_query.columns, index_column) == std::end(*read_query.columns))
+                index_columns_to_add.emplace_back(index_column);
+        }
+        read_query.columns->insert(
+                std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add)
+        );
+    }
+}
+
 } // namespace
 
 VersionedItem delete_range_impl(
@@ -982,8 +999,8 @@ VersionedItem delete_range_impl(
 ) {
 
     util::check(update_info.previous_index_key_.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
-    util::check(std::holds_alternative<IndexRange>(query.row_filter), "Delete range requires index range argument");
-    const auto& index_range = std::get<IndexRange>(query.row_filter);
+    util::check(query.row_filter.has_value(), "Delete range requires index range argument");
+    const auto& index_range = *query.row_filter;
     ARCTICDB_DEBUG(
             log::version(),
             "Delete range in versioned dataframe for stream_id: {} , version_id = {}",
@@ -1023,16 +1040,12 @@ VersionedItem delete_range_impl(
     )
                                                        .get();
 
-    auto orig_filter_range = std::holds_alternative<std::monostate>(query.row_filter)
-                                     ? get_query_index_range(index, index_range)
-                                     : query.row_filter;
-
     size_t row_count = 0;
     const std::array<std::vector<SliceAndKey>, 5> groups{
-            strictly_before(orig_filter_range, unaffected_keys),
+            strictly_before(index_range, unaffected_keys),
             std::move(intersect_before),
             std::move(intersect_after),
-            strictly_after(orig_filter_range, unaffected_keys)
+            strictly_after(index_range, unaffected_keys)
     };
     auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
 
@@ -1063,31 +1076,26 @@ struct UpdateRanges {
 };
 
 static UpdateRanges compute_update_ranges(
-        const FilterRange& row_filter, const InputFrame& update_frame, std::span<SliceAndKey> update_slice_and_keys
+        const std::optional<IndexRange>& row_filter, const InputFrame& update_frame,
+        std::span<SliceAndKey> update_slice_and_keys
 ) {
-    return util::variant_match(
-            row_filter,
-            [&](std::monostate) -> UpdateRanges {
-                util::check(
-                        std::holds_alternative<TimeseriesIndex>(update_frame.index),
-                        "Update with row count index is not permitted"
-                );
-                if (update_slice_and_keys.empty()) {
-                    // If there are no new keys, then we can't intersect with the existing data.
-                    return UpdateRanges{{}, {}, update_frame.index_range};
-                }
-                return UpdateRanges{
-                        update_slice_and_keys.front().key().index_range(),
-                        update_slice_and_keys.back().key().index_range(),
-                        update_frame.index_range
-                };
-            },
-            [&](const IndexRange& idx_range) { return UpdateRanges{idx_range, idx_range, idx_range}; },
-            [](const RowRange&) -> UpdateRanges {
-                util::raise_rte("Unexpected row_range in update query");
-                return {};
-            }
-    );
+    if (row_filter.has_value()) {
+        return UpdateRanges{*row_filter, *row_filter, *row_filter};
+    } else {
+        util::check(
+                std::holds_alternative<TimeseriesIndex>(update_frame.index),
+                "Update with row count index is not permitted"
+        );
+        if (update_slice_and_keys.empty()) {
+            // If there are no new keys, then we can't intersect with the existing data.
+            return UpdateRanges{{}, {}, update_frame.index_range};
+        }
+        return UpdateRanges{
+                update_slice_and_keys.front().key().index_range(),
+                update_slice_and_keys.back().key().index_range(),
+                update_frame.index_range
+        };
+    }
 }
 
 static std::shared_ptr<std::vector<SliceAndKey>> get_keys_affected_by_update(
@@ -1603,23 +1611,6 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
             });
 }
 
-static void add_index_columns_to_query(const ReadQuery& read_query, const FrameSchema& schema) {
-    if (read_query.columns.has_value()) {
-        auto index_columns = stream::get_index_columns_from_descriptor(schema);
-        if (index_columns.empty())
-            return;
-
-        std::vector<std::string> index_columns_to_add;
-        for (const auto& index_column : index_columns) {
-            if (ranges::find(*read_query.columns, index_column) == std::end(*read_query.columns))
-                index_columns_to_add.emplace_back(index_column);
-        }
-        read_query.columns->insert(
-                std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add)
-        );
-    }
-}
-
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
     return add_index_columns_to_query(read_query, schema_from_tsd(desc));
 }
@@ -1671,9 +1662,7 @@ void check_can_perform_processing(
         check_multi_key_is_not_index_only(*pipeline_context, read_query);
     }
 
-    const bool is_query_empty =
-            (!read_query.columns && !read_query.row_range &&
-             std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
+    const bool is_query_empty = (!read_query.columns && !read_query.has_row_filtering() && read_query.clauses_.empty());
     const bool is_pickled = pipeline_context->has_normalization() && pipeline_context->is_pickled();
     const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->is_numpy_array();
     // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
@@ -1704,13 +1693,13 @@ void check_can_perform_processing(
     if (pipeline_context->has_on_disk_descriptor()) {
         schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
                 pipeline_context->on_disk_descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP ||
-                        !std::holds_alternative<IndexRange>(read_query.row_filter),
+                        !read_query.row_filter.has_value(),
                 "Cannot apply date range filter to symbol with non-timestamp index"
         );
         const auto sorted_value = pipeline_context->on_disk_descriptor().sorted();
         sorting::check<ErrorCode::E_UNSORTED_DATA>(
                 sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING ||
-                        !std::holds_alternative<IndexRange>(read_query.row_filter),
+                        !read_query.row_filter.has_value(),
                 "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
                 "it is not sorted in ascending order and cannot therefore filter the data using date_range."
         );
@@ -2302,8 +2291,7 @@ void create_column_stats_impl(
 ) {
     using namespace arcticdb::pipelines;
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
-    const bool range_given =
-            read_query->row_range.has_value() || !std::holds_alternative<std::monostate>(read_query->row_filter);
+    const bool range_given = read_query->has_row_filtering();
 
     auto index_future = store->read(versioned_item.key_);
     std::optional<folly::Try<std::pair<VariantKey, SegmentInMemory>>> column_stats_try;
@@ -2336,8 +2324,7 @@ void create_column_stats_impl(
             "Cannot create column stats on pickled data"
     );
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            !std::holds_alternative<IndexRange>(read_query->row_filter) ||
-                    tsd.index().type() == IndexDescriptor::Type::TIMESTAMP,
+            !read_query->row_filter.has_value() || tsd.index().type() == IndexDescriptor::Type::TIMESTAMP,
             "date_range is only supported for timestamp-indexed symbols when creating column stats"
     );
 
@@ -3018,7 +3005,7 @@ VersionedItem defragment_symbol_data_impl(
     );
 }
 
-static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
+folly::Future<std::shared_ptr<IndexInformation>> fetch_index_and_column_stats(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadQuery& read_query
 ) {
     auto index_future = store->read(versioned_item.key_);
@@ -3040,7 +3027,7 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
             .via(&async::io_executor())
-            .thenValue([vi = versioned_item](auto&& results) -> VersionIdentifier {
+            .thenValue([vi = versioned_item](auto&& results) -> std::shared_ptr<IndexInformation> {
                 auto& [index_try, column_stats_try] = results;
 
                 if (index_try.hasException()) {
@@ -3105,10 +3092,8 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
     }
 
     if (read_options.get_incompletes()) {
-        util::check(
-                std::holds_alternative<IndexRange>(read_query.row_filter), "Streaming read requires date range filter"
-        );
-        const auto& query_range = std::get<IndexRange>(read_query.row_filter);
+        util::check(read_query.row_filter.has_value(), "Streaming read requires date range filter");
+        const auto& query_range = *read_query.row_filter;
         const auto existing_range = pipeline_context->index_range();
         if (!existing_range.specified_ || query_range.end_ > existing_range.end_) {
             const ReadIncompletesFlags read_incompletes_flags{
