@@ -10,6 +10,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/util/reliable_storage_lock.hpp>
 #include <gtest/gtest.h>
+#include <future>
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <arcticdb/util/clock.hpp>
@@ -219,4 +220,129 @@ TEST(ReliableStorageLock, AdminTools) {
     // And now we can take a lock with the regular try_take_lock
     ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{AcquiredLock{22}});
     ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{22}, 40));
+}
+
+TEST(ReliableStorageLock, GuardInvokesOnLostLockOnStealAndSetAfterLoss) {
+    auto store = std::make_shared<InMemoryStore>();
+    ReliableStorageLock<> lock{StringId{"test_lock_loss"}, store, 50 * ONE_MILLISECOND};
+
+    auto res = lock.try_take_lock();
+    ASSERT_TRUE(std::holds_alternative<AcquiredLock>(res));
+    const auto acquired = std::get<AcquiredLock>(res);
+
+    std::atomic<int> loss_count{0};
+    std::promise<void> lost_promise;
+    auto lost_future = lost_promise.get_future();
+
+    {
+        ReliableStorageLockGuard guard(lock, acquired, [&]() {
+            if (loss_count.fetch_add(1) == 0) {
+                lost_promise.set_value();
+            }
+        });
+
+        // Steal the lock via force_take_lock so the next heartbeat observes LockInUse.
+        const auto stolen_id = lock.force_take_lock(5 * ONE_SECOND);
+        ASSERT_EQ(lost_future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+        EXPECT_EQ(loss_count.load(), 1);
+
+        // Installing a new callback after the lock was already lost must invoke it immediately outside state_mutex_.
+        bool immediate_called = false;
+        guard.set_on_lost_lock([&]() { immediate_called = true; });
+        EXPECT_TRUE(immediate_called);
+
+        // Destroying guard after loss must NOT free the thief's lock.
+        EXPECT_EQ(stolen_id, lock.inspect_latest_lock()->lock_id);
+    }
+
+    EXPECT_EQ(lock.try_take_lock(), ReliableLockResult{LockInUse{}});
+}
+
+TEST(ReliableStorageLock, GuardInvokesOnLostLockOnHeartbeatStorageException) {
+    class FailingExtendStore : public InMemoryStore {
+      public:
+        void set_fail_atomic_writes(bool fail) { fail_atomic_writes_.store(fail); }
+
+        VariantKey write_if_none_sync(KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment) override {
+            if (key_type == KeyType::ATOMIC_LOCK && fail_atomic_writes_.load()) {
+                throw StorageException("injected heartbeat storage failure");
+            }
+            return InMemoryStore::write_if_none_sync(key_type, stream_id, std::move(segment));
+        }
+
+      private:
+        std::atomic<bool> fail_atomic_writes_{false};
+    };
+
+    auto store = std::make_shared<FailingExtendStore>();
+    ReliableStorageLock<> lock{StringId{"test_lock_storage_err"}, store, 50 * ONE_MILLISECOND};
+    auto res = lock.try_take_lock();
+    ASSERT_TRUE(std::holds_alternative<AcquiredLock>(res));
+
+    std::atomic<int> loss_count{0};
+    std::promise<void> lost_promise;
+    auto lost_future = lost_promise.get_future();
+
+    ReliableStorageLockGuard guard(lock, std::get<AcquiredLock>(res), [&]() {
+        if (loss_count.fetch_add(1) == 0) {
+            lost_promise.set_value();
+        }
+    });
+    store->set_fail_atomic_writes(true);
+
+    ASSERT_EQ(lost_future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    EXPECT_EQ(loss_count.load(), 1);
+}
+
+TEST(ReliableStorageLock, GuardConcurrentSetOnLostLockAndDestructionDuringLoss) {
+    class PausedExtendStore : public InMemoryStore {
+      public:
+        VariantKey write_if_none_sync(KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment) override {
+            if (key_type == KeyType::ATOMIC_LOCK && intercept_.exchange(false)) {
+                entered_.set_value();
+                release_.wait();
+                throw StorageException("injected concurrent loss during heartbeat extend");
+            }
+            return InMemoryStore::write_if_none_sync(key_type, stream_id, std::move(segment));
+        }
+
+        void arm() { intercept_.store(true); }
+        std::future<void> entered_future() { return entered_.get_future(); }
+        void release() {
+            intercept_.store(false);
+            if (!released_.exchange(true)) {
+                release_promise_.set_value();
+            }
+        }
+
+      private:
+        std::atomic<bool> intercept_{false};
+        std::atomic<bool> released_{false};
+        std::promise<void> entered_;
+        std::promise<void> release_promise_;
+        std::shared_future<void> release_{release_promise_.get_future().share()};
+    };
+
+    for (int iter = 0; iter < 8; ++iter) {
+        auto store = std::make_shared<PausedExtendStore>();
+        ReliableStorageLock<> lock{StringId{"test_lock_race_" + std::to_string(iter)}, store, 20 * ONE_MILLISECOND};
+        auto res = lock.try_take_lock();
+        ASSERT_TRUE(std::holds_alternative<AcquiredLock>(res));
+
+        std::atomic<int> callbacks{0};
+        auto entered = store->entered_future();
+        {
+            ReliableStorageLockGuard guard(lock, std::get<AcquiredLock>(res), std::nullopt);
+            auto unblock_guard = folly::makeGuard([&]() { store->release(); });
+            // Wait until the heartbeat thread is inside try_extend_lock's write_if_none_sync,
+            // then steal the lock and release the heartbeat right as set_on_lost_lock & dtor run.
+            store->arm();
+            ASSERT_EQ(entered.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+            (void)lock.force_take_lock(5 * ONE_SECOND);
+            store->release();
+            guard.set_on_lost_lock([&]() { callbacks.fetch_add(1); });
+            // Guard destructor joins heartbeat thread cleanly while racing with loss notification.
+        }
+        EXPECT_EQ(callbacks.load(), 1);
+    }
 }

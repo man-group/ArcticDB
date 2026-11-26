@@ -243,6 +243,19 @@ class SymbolList {
 
     size_t compact(const std::shared_ptr<Store>& store);
 
+    struct Mutation {
+        StreamId symbol;
+        entity::VersionId reference_id;
+        ActionType action;
+    };
+
+    // Applies a batch of symbol-list ADD/DELETE mutations directly into a single compacted
+    // SYMBOL_LIST segment under the compaction lock, avoiding per-symbol journal PUT/DELETE storms.
+    // Returns true if mutations were written directly to the compacted segment; returns false if
+    // lock contention, concurrent compaction, or read-only delete permissions forced a fallback
+    // to individual journal entries (all mutations are still durably persisted before returning).
+    bool apply_mutations_and_compact(const std::shared_ptr<Store>& store, const std::vector<Mutation>& mutations);
+
     static void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, entity::VersionId reference_id);
 
     static void remove_symbol(

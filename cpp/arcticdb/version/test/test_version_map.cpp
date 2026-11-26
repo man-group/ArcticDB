@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <folly/ScopeGuard.h>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
@@ -1573,6 +1574,182 @@ TEST(VersionMap, DowntoCacheHitAfterFromTimeWithTombstoneAll) {
     ASSERT_FALSE(version_map->has_cached_entry(
             id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}
     ));
+}
+
+TEST(VersionMap, OverwriteSymbolTreeDeferredRemoval) {
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test_overwrite_deferred"};
+    THREE_SIMPLE_KEYS
+    auto key4 = atom_key_builder()
+                        .version_id(4)
+                        .creation_ts(PilotedClock::nanos_since_epoch())
+                        .content_hash(6)
+                        .start_index(7)
+                        .end_index(8)
+                        .build(id, KeyType::TABLE_INDEX);
+
+    auto version_map = std::make_shared<VersionMap>();
+    version_map->set_validate(true);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
+
+    std::vector<VariantKey> old_version_keys;
+    store->iterate_type(KeyType::VERSION, [&](VariantKey&& vk) { old_version_keys.emplace_back(std::move(vk)); });
+    ASSERT_EQ(old_version_keys.size(), 3u);
+
+    // Pre-populate deferred with a key from another symbol to verify append-only behavior.
+    const VariantKey sentinel_key =
+            atom_key_builder().version_id(99).creation_ts(1).content_hash(1).build(StreamId{"other"}, KeyType::VERSION);
+    std::vector<VariantKey> deferred{sentinel_key};
+
+    const std::vector<AtomKeyPacked> new_keys{key4, key2, key1};
+    version_map->overwrite_symbol_tree(store, id, new_keys, &deferred);
+
+    std::vector<VariantKey> expected_deferred{sentinel_key};
+    expected_deferred.insert(expected_deferred.end(), old_version_keys.begin(), old_version_keys.end());
+    ASSERT_THAT(deferred, ::testing::UnorderedElementsAreArray(expected_deferred));
+
+    // Superseded VERSION keys must still be present in storage until the caller removes them.
+    for (const auto& vk : old_version_keys) {
+        ASSERT_TRUE(store->key_exists_sync(vk));
+    }
+    ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION), 4u);
+
+    // The new version chain must be immediately readable via both cached and fresh VersionMaps.
+    ASSERT_EQ(get_all_versions(store, version_map, id), new_keys);
+    auto fresh_version_map = std::make_shared<VersionMap>();
+    fresh_version_map->set_validate(true);
+    ASSERT_EQ(get_all_versions(store, fresh_version_map, id), new_keys);
+
+    // Once the caller removes the deferred superseded keys, only the new VERSION key remains.
+    store->remove_keys(old_version_keys, storage::RemoveOpts{}).get();
+    for (const auto& vk : old_version_keys) {
+        ASSERT_FALSE(store->key_exists_sync(vk));
+    }
+    ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION), 1u);
+
+    auto post_delete_version_map = std::make_shared<VersionMap>();
+    post_delete_version_map->set_validate(true);
+    ASSERT_TRUE(post_delete_version_map->check_ref_key(store, id));
+    ASSERT_EQ(get_all_versions(store, post_delete_version_map, id), new_keys);
+}
+
+TEST(VersionMap, OverwriteSymbolTreeDeferredRemovalEdgeCases) {
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test_overwrite_deferred_edges"};
+    THREE_SIMPLE_KEYS
+
+    auto version_map = std::make_shared<VersionMap>();
+    version_map->set_validate(true);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
+
+    auto loaded = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    ASSERT_TRUE(loaded->head_.has_value());
+    const AtomKey existing_head = *loaded->head_;
+    std::vector<VariantKey> non_head_old_version_keys;
+    for (const auto& k : loaded->keys_) {
+        if (k.type() == KeyType::VERSION) {
+            non_head_old_version_keys.emplace_back(k.to_atom_key(id));
+        }
+    }
+    ASSERT_EQ(non_head_old_version_keys.size(), 2u);
+
+    // Force the rewritten VERSION head to match existing_head (same version_id, creation_ts, content_hash).
+    std::vector<VariantKey> deferred;
+    const std::vector<AtomKeyPacked> same_keys{key3, key2, key1};
+    {
+        const timestamp saved_time = PilotedClock::time_.load();
+        auto clock_guard = folly::makeGuard([saved_time]() {
+            PilotedClock::time_.store(std::max(saved_time, PilotedClock::time_.load()));
+        });
+        PilotedClock::time_.store(existing_head.creation_ts());
+        version_map->overwrite_symbol_tree(store, id, same_keys, &deferred);
+    }
+
+    // The live head must NOT be scheduled for deferred deletion; only the superseded non-head keys are.
+    ASSERT_THAT(deferred, ::testing::UnorderedElementsAreArray(non_head_old_version_keys));
+    store->remove_keys(deferred, storage::RemoveOpts{}).get();
+    ASSERT_TRUE(store->key_exists_sync(existing_head));
+    ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION), 1u);
+
+    auto fresh_version_map = std::make_shared<VersionMap>();
+    fresh_version_map->set_validate(true);
+    ASSERT_TRUE(fresh_version_map->check_ref_key(store, id));
+    ASSERT_EQ(get_all_versions(store, fresh_version_map, id), same_keys);
+
+    // Synchronous overwrite_symbol_tree (deferred == nullptr) with identical head key also preserves live head.
+    {
+        const timestamp sync_saved = PilotedClock::time_.load();
+        auto sync_clock_guard = folly::makeGuard([sync_saved]() {
+            PilotedClock::time_.store(std::max(sync_saved, PilotedClock::time_.load()));
+        });
+        PilotedClock::time_.store(existing_head.creation_ts());
+        version_map->overwrite_symbol_tree(store, id, same_keys, nullptr);
+    }
+    ASSERT_TRUE(store->key_exists_sync(existing_head));
+    ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION), 1u);
+
+    // Empty index_keys schedules deletion of the old chain without writing a new head and clears the cached entry.
+    std::vector<VariantKey> deferred_empty;
+    version_map->overwrite_symbol_tree(store, id, {}, &deferred_empty);
+    ASSERT_THAT(deferred_empty, UnorderedElementsAre(VariantKey{existing_head}));
+    EXPECT_FALSE(version_map->cached_head(id).has_value());
+    ASSERT_TRUE(store->key_exists_sync(existing_head));
+    store->remove_keys(deferred_empty, storage::RemoveOpts{}).get();
+    ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION), 0u);
+}
+
+TEST(VersionMap, OverwriteSymbolTreeKnownAbsentTombstonesFailureSafetyAndCachedHead) {
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test_overwrite_known_absent"};
+    THREE_SIMPLE_KEYS
+
+    auto version_map = std::make_shared<VersionMap>();
+    version_map->set_validate(true);
+    EXPECT_FALSE(version_map->cached_head(id).has_value());
+
+    // 1. known_absent_on_storage = true populates both storage and cache without reading prior state.
+    std::vector<VariantKey> deferred;
+    const std::vector<AtomKeyPacked> initial_keys{key3, key2, key1};
+    version_map->overwrite_symbol_tree(store, id, initial_keys, &deferred, /*known_absent_on_storage=*/true);
+    EXPECT_TRUE(deferred.empty());
+    ASSERT_TRUE(version_map->cached_head(id).has_value());
+    const AtomKey first_head = *version_map->cached_head(id);
+    EXPECT_EQ(get_all_versions(store, version_map, id), initial_keys);
+
+    // 2. Overwriting with tombstoned chain rebuilds tombstone bookkeeping immediately in cached entry.
+    const AtomKey tomb_key3 = index_to_tombstone(key3, id, PilotedClock::nanos_since_epoch());
+    const std::vector<AtomKeyPacked> tombstoned_keys{tomb_key3, key3, key2, key1};
+    version_map->overwrite_symbol_tree(store, id, tombstoned_keys, &deferred, /*known_absent_on_storage=*/false);
+    ASSERT_THAT(deferred, UnorderedElementsAre(VariantKey{first_head}));
+    auto [latest_key, is_deleted] = get_latest_version(store, version_map, id);
+    ASSERT_TRUE(latest_key.has_value());
+    EXPECT_TRUE(is_deleted);
+    EXPECT_EQ(latest_key->version_id(), key3.version_id());
+    auto reloaded = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    ASSERT_TRUE(reloaded->get_first_index(/*include_deleted=*/false).first.has_value());
+    EXPECT_EQ(reloaded->get_first_index(/*include_deleted=*/false).first->version_id(), key2.version_id());
+    const AtomKey head_before_failure = *version_map->cached_head(id);
+
+    // 3. Failure during write_entry_to_storage leaves the cached entry intact and valid.
+    auto sim_guard = folly::makeGuard([]() { StorageFailureSimulator::reset(); });
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE, {action_factories::fault()}}});
+    EXPECT_THROW(
+            version_map->overwrite_symbol_tree(store, id, {key1}, nullptr, /*known_absent_on_storage=*/true),
+            StorageException
+    );
+    EXPECT_EQ(version_map->cached_head(id), std::optional<AtomKey>{head_before_failure});
+    auto [still_latest, still_deleted] = get_latest_version(store, version_map, id);
+    ASSERT_TRUE(still_latest.has_value());
+    EXPECT_TRUE(still_deleted);
+    EXPECT_EQ(still_latest->version_id(), key3.version_id());
 }
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"

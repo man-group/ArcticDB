@@ -511,38 +511,77 @@ class VersionMapImpl {
         std::swap(*entry, *new_entry);
     }
 
+    /**
+     * Overwrites the version chain for `stream_id` with `index_keys` and updates the VERSION_REF key.
+     *
+     * When `deferred_keys_to_remove` is non-null, superseded VERSION keys from the previous chain are
+     * appended to `*deferred_keys_to_remove` instead of being deleted synchronously (allowing callers to
+     * batch deletions across symbols). If a new head was written (`!index_keys.empty()`), any key equal
+     * to the newly written live head is excluded so the live chain is never scheduled for deletion. When
+     * `index_keys.empty()`, no new head is written and all VERSION keys from the old chain are appended
+     * for deferred deletion (mirroring the synchronous deletion path).
+     */
     void overwrite_symbol_tree(
-            std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKeyPacked>& index_keys
+            const std::shared_ptr<Store>& store, const StreamId& stream_id,
+            const std::vector<AtomKeyPacked>& index_keys, std::vector<VariantKey>* deferred_keys_to_remove = nullptr,
+            bool known_absent_on_storage = false
     ) {
-        auto entry = std::make_shared<VersionMapEntry>(stream_id);
-        try {
-            entry = check_reload(
-                    store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
-            );
-        } catch (const storage::KeyNotFoundException& e) {
-            log::version().debug(
-                    "Failed to load version entry for symbol {} in overwrite_symbol_tree, creating new entry, "
-                    "exception: {}",
-                    stream_id,
-                    e.what()
-            );
+        std::shared_ptr<VersionMapEntry> entry;
+        if (known_absent_on_storage) {
+            entry = get_entry(stream_id);
+        } else {
+            try {
+                entry = check_reload(
+                        store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+                );
+            } catch (const storage::KeyNotFoundException& e) {
+                log::version().debug(
+                        "Failed to load version entry for symbol {} in overwrite_symbol_tree, creating new entry, "
+                        "exception: {}",
+                        stream_id,
+                        e.what()
+                );
+                entry = get_entry(stream_id);
+            }
         }
-        auto old_entry = *entry;
+
+        VersionMapEntry old_entry(stream_id);
+        if (!known_absent_on_storage) {
+            old_entry = *entry;
+        }
+
         if (!index_keys.empty()) {
-            entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
+            auto new_entry = std::make_shared<VersionMapEntry>(stream_id);
+            new_entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
+            // Assigning keys_ directly bypasses load-time tombstone tracking; rebuild before publishing.
+            new_entry->rebuild_tombstones_from_keys();
             auto new_version_id = index_keys[0].version_id();
-            entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
+            new_entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, new_entry);
+            new_entry->last_reload_time_ = now();
+            new_entry->load_progress_.is_earliest_version_loaded = true;
             if (validate_)
-                entry->validate();
+                new_entry->validate();
+            std::swap(*entry, *new_entry);
+        } else {
+            entry->clear();
         }
-        try {
-            remove_entry_version_keys(store, old_entry, stream_id);
-        } catch (const storage::KeyNotFoundException& e) {
-            log::version().debug(
-                    "Failed to remove version keys for symbol {} in overwrite_symbol_tree, exception: {}",
-                    stream_id,
-                    e.what()
-            );
+
+        if (known_absent_on_storage || old_entry.empty()) {
+            return;
+        }
+        const std::optional<AtomKey> live_head = !index_keys.empty() ? entry->head_ : std::nullopt;
+        if (deferred_keys_to_remove != nullptr) {
+            collect_entry_version_keys(old_entry, stream_id, *deferred_keys_to_remove, live_head);
+        } else {
+            try {
+                remove_entry_version_keys(store, old_entry, stream_id, live_head);
+            } catch (const storage::KeyNotFoundException& e) {
+                log::version().debug(
+                        "Failed to remove version keys for symbol {} in overwrite_symbol_tree, exception: {}",
+                        stream_id,
+                        e.what()
+                );
+            }
         }
     }
 
@@ -690,15 +729,9 @@ class VersionMapImpl {
         return tombstones;
     }
 
-    void remove_entry_version_keys(
-            const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMapEntry>& entry,
-            const StreamId& stream_id
-    ) const {
-        return remove_entry_version_keys(store, *entry, stream_id);
-    }
-
-    void remove_entry_version_keys(
-            const std::shared_ptr<Store>& store, const VersionMapEntry& entry, const StreamId& stream_id
+    void collect_entry_version_keys(
+            const VersionMapEntry& entry, const StreamId& stream_id, std::vector<VariantKey>& out,
+            const std::optional<AtomKey>& exclude = std::nullopt
     ) const {
         if (entry.head_) {
             util::check(
@@ -707,14 +740,49 @@ class VersionMapImpl {
                     entry.head_->id(),
                     stream_id
             );
-            store->remove_key_sync(*entry.head_);
+            if (!exclude.has_value() || *entry.head_ != *exclude) {
+                out.emplace_back(*entry.head_);
+            }
         }
-        std::vector<folly::Future<folly::Unit>> key_futs;
         for (const auto& key : entry.keys_) {
-            if (key.type() == KeyType::VERSION)
-                key_futs.emplace_back(store->remove_key(key.to_atom_key(entry.stream_id_)));
+            if (key.type() == KeyType::VERSION) {
+                auto ak = key.to_atom_key(entry.stream_id_);
+                if (!exclude.has_value() || ak != *exclude) {
+                    out.emplace_back(std::move(ak));
+                }
+            }
         }
-        folly::collect(key_futs).get();
+    }
+
+    void remove_entry_version_keys(
+            const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMapEntry>& entry,
+            const StreamId& stream_id, const std::optional<AtomKey>& exclude = std::nullopt
+    ) const {
+        return remove_entry_version_keys(store, *entry, stream_id, exclude);
+    }
+
+    void remove_entry_version_keys(
+            const std::shared_ptr<Store>& store, const VersionMapEntry& entry, const StreamId& stream_id,
+            const std::optional<AtomKey>& exclude = std::nullopt
+    ) const {
+        std::vector<VariantKey> keys_to_remove;
+        collect_entry_version_keys(entry, stream_id, keys_to_remove, exclude);
+        if (keys_to_remove.empty()) {
+            return;
+        }
+        size_t start_idx = 0;
+        if (entry.head_ && (!exclude.has_value() || *entry.head_ != *exclude)) {
+            store->remove_key_sync(keys_to_remove[0]);
+            start_idx = 1;
+        }
+        if (start_idx < keys_to_remove.size()) {
+            std::vector<folly::Future<folly::Unit>> key_futs;
+            key_futs.reserve(keys_to_remove.size() - start_idx);
+            for (size_t i = start_idx; i < keys_to_remove.size(); ++i) {
+                key_futs.emplace_back(store->remove_key(keys_to_remove[i]));
+            }
+            folly::collect(key_futs).get();
+        }
     }
 
     /**
@@ -1121,6 +1189,16 @@ class VersionMapImpl {
         entry->keys_.insert(std::begin(entry->keys_), std::begin(missing_versions), std::end(missing_versions));
         entry->sort();
         rewrite_entry(store, stream_id, entry);
+    }
+
+    // Caller must hold get_lock_object(stream_id) (or serialize symbol access) while reading head_.
+    std::optional<AtomKey> cached_head(const StreamId& stream_id) const {
+        std::lock_guard lock(map_mutex_);
+        auto it = map_.find(stream_id);
+        if (it == map_.end()) {
+            return std::nullopt;
+        }
+        return it->second->head_;
     }
 
     std::shared_ptr<Lock> get_lock_object(const StreamId& stream_id) const {

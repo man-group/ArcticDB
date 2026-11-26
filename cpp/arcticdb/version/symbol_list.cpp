@@ -249,13 +249,19 @@ void add_journal_entry(JournalMapType& update_map, const AtomKey& key) {
     update_map[key.start_index()].emplace_back(key);
 }
 
+namespace {
+
+bool journal_entry_less(const JournalEntryData& a, const JournalEntryData& b) noexcept {
+    const auto a_ver = a.is_new_style ? a.key_version_id : VersionId{0};
+    const auto b_ver = b.is_new_style ? b.key_version_id : VersionId{0};
+    return std::tie(a_ver, a.creation_ts) < std::tie(b_ver, b.creation_ts);
+}
+
+} // namespace
+
 void sort_journal_map(JournalMapType& update_map) {
     for (auto& [symbol, keys] : update_map) {
-        std::sort(keys.begin(), keys.end(), [](const JournalEntryData& a, const JournalEntryData& b) {
-            auto a_ver = a.is_new_style ? a.key_version_id : VersionId{0};
-            auto b_ver = b.is_new_style ? b.key_version_id : VersionId{0};
-            return std::tie(a_ver, a.creation_ts) < std::tie(b_ver, b.creation_ts);
-        });
+        std::ranges::sort(keys, journal_entry_less);
     }
 }
 
@@ -943,6 +949,100 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
 
     auto written = write_symbols(store, std::move(load_result.symbols_), compaction_id, data_.type_holder_);
     delete_superseded_keys(store, load_result.journal_, std::get<AtomKey>(written));
+}
+
+namespace {
+
+bool try_compact_mutations(
+        const std::shared_ptr<Store>& store, SymbolListData& data,
+        const std::vector<SymbolList::Mutation>& coalesced_mutations
+) {
+    StorageLock lock{StringId{CompactionLockName}};
+    if (!lock.try_lock(store)) {
+        ARCTICDB_RUNTIME_DEBUG(
+                log::symbol(), "apply_mutations_and_compact falling back to journal writes: compaction lock busy"
+        );
+        return false;
+    }
+    OnExit unlock_guard([&lock, &store] { lock.unlock(store); });
+
+    auto version_map = data.version_map_;
+    JournalResult journal = ExponentialBackoff<StorageException>(100, 2000).go([&]() {
+        return load_journal_streaming(store, data, WillAttemptCompaction::YES);
+    });
+
+    if (has_recent_compaction(store, journal.compaction_key)) {
+        return false;
+    }
+
+    // Merge pre-existing pending journals and this batch in one pass so pending DELETE journals
+    // remain in the compacted segment's deleted_symbol columns before delete_superseded_keys runs.
+    JournalMapType combined_map = journal.update_map;
+    const timestamp batch_ts = store->current_timestamp();
+    for (const auto& m : coalesced_mutations) {
+        auto& entries = combined_map[m.symbol];
+        JournalEntryData entry{m.reference_id, batch_ts, m.action};
+        // upper_bound places this batch mutation after any pre-existing entry with equal (ver, ts).
+        auto insert_pos = std::ranges::upper_bound(entries, entry, journal_entry_less);
+        entries.insert(insert_pos, entry);
+    }
+
+    CollectionType merged_symbols = ExponentialBackoff<StorageException>(100, 2000).go([&]() {
+        return journal.compaction_key
+                       ? load_from_symbol_list_keys(version_map, store, combined_map, *journal.compaction_key)
+                       : load_from_version_keys(version_map, store, combined_map, data, WillAttemptCompaction::YES);
+    });
+
+    const StreamId& type_holder = coalesced_mutations.front().symbol;
+    auto written = write_symbols(store, std::move(merged_symbols), compaction_id, type_holder);
+    try {
+        delete_superseded_keys(store, journal, std::get<AtomKey>(written));
+    } catch (const StorageException& ex) {
+        log::symbol().warn(
+                "apply_mutations_and_compact succeeded writing compacted symbol list, "
+                "but cleanup failed (skipping journal fallback): {}",
+                ex.what()
+        );
+    }
+    return true;
+}
+
+} // namespace
+
+bool SymbolList::apply_mutations_and_compact(
+        const std::shared_ptr<Store>& store, const std::vector<Mutation>& mutations
+) {
+    if (mutations.empty()) {
+        return true;
+    }
+
+    // Coalesce multiple mutations for the same symbol in arrival order so the final causal
+    // mutation wins deterministically (even when ADD and DELETE share the same reference_id).
+    ankerl::unordered_dense::map<StreamId, size_t> last_idx_by_symbol;
+    last_idx_by_symbol.reserve(mutations.size());
+    for (size_t idx = 0; idx < mutations.size(); ++idx) {
+        last_idx_by_symbol[mutations[idx].symbol] = idx;
+    }
+    std::vector<Mutation> coalesced;
+    coalesced.reserve(last_idx_by_symbol.size());
+    for (const auto& [_, idx] : last_idx_by_symbol) {
+        coalesced.push_back(mutations[idx]);
+    }
+
+    if (store->open_mode() >= storage::OpenMode::DELETE) {
+        try {
+            if (try_compact_mutations(store, data_, coalesced)) {
+                return true;
+            }
+        } catch (const StorageException& ex) {
+            log::symbol().warn("apply_mutations_and_compact falling back to journal writes: {}", ex.what());
+        }
+    }
+
+    for (const auto& m : coalesced) {
+        write_journal(store, m.symbol, m.action, m.reference_id);
+    }
+    return false;
 }
 
 } // namespace arcticdb
