@@ -39,7 +39,7 @@ bool trivially_compatible_types(const entity::TypeDescriptor& left, const entity
     return false;
 }
 
-constexpr bool is_mixed_float_and_integer(entity::DataType left, entity::DataType right) {
+constexpr static bool is_mixed_float_and_integer(entity::DataType left, entity::DataType right) {
     return (is_integer_type(left) && is_floating_point_type(right)) ||
            (is_floating_point_type(left) && is_integer_type(right));
 }

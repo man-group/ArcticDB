@@ -15,15 +15,15 @@
 #include <arcticdb/storage/s3/detail-inl.hpp>
 namespace arcticdb::storage::nfs_backed {
 
-std::string add_suffix_char(const std::string& str) { return fmt::format("{}*", str); }
+static std::string add_suffix_char(const std::string& str) { return fmt::format("{}*", str); }
 
-std::string remove_suffix_char(const std::string& str) {
+static std::string remove_suffix_char(const std::string& str) {
     util::check(!str.empty() && *str.rbegin() == '*', "Unexpected string passed to remove_suffix_char: {}", str);
     return str.substr(0, str.size() - 1);
 }
 
 template<typename MixedType, typename StringType, typename NumericType>
-MixedType encode_item(const MixedType& input, bool add_suffix) {
+static MixedType encode_item(const MixedType& input, bool add_suffix) {
     return util::variant_match(
             input,
             [add_suffix](const StringType& str) {
@@ -35,7 +35,7 @@ MixedType encode_item(const MixedType& input, bool add_suffix) {
 }
 
 template<typename MixedType, typename StringType, typename NumericType>
-MixedType decode_item(const MixedType& input, bool remove_suffix) {
+static MixedType decode_item(const MixedType& input, bool remove_suffix) {
     return util::variant_match(
             input,
             [remove_suffix](const StringType& str) {
@@ -45,7 +45,7 @@ MixedType decode_item(const MixedType& input, bool remove_suffix) {
     );
 }
 
-VariantKey encode_object_id(const VariantKey& key) {
+static VariantKey encode_object_id(const VariantKey& key) {
     return util::variant_match(
             key,
             [](const AtomKey& k) {
@@ -67,7 +67,7 @@ VariantKey encode_object_id(const VariantKey& key) {
     );
 }
 
-uint32_t id_to_number(const StreamId& stream_id) {
+static uint32_t id_to_number(const StreamId& stream_id) {
     return util::variant_match(
             stream_id,
             [](const NumericId& num_id) { return static_cast<uint32_t>(num_id); },
@@ -75,22 +75,22 @@ uint32_t id_to_number(const StreamId& stream_id) {
     );
 }
 
-uint32_t get_id_bucket(const StreamId& id) { return id_to_number(id) % 1000; }
+static uint32_t get_id_bucket(const StreamId& id) { return id_to_number(id) % 1000; }
 
-uint32_t get_hash_bucket(const AtomKey& atom) { return atom.content_hash() % 1000; }
+static uint32_t get_hash_bucket(const AtomKey& atom) { return atom.content_hash() % 1000; }
 
-std::string get_root_folder(const std::string& root_folder, const RefKey& ref) {
+static std::string get_root_folder(const std::string& root_folder, const RefKey& ref) {
     const auto id_bucket = get_id_bucket(ref.id());
     return fmt::format("{}/{:03}", root_folder, id_bucket);
 }
 
-std::string get_root_folder(const std::string& root_folder, const AtomKey& atom) {
+static std::string get_root_folder(const std::string& root_folder, const AtomKey& atom) {
     const auto id_bucket = get_id_bucket(atom.id());
     const auto hash_bucket = get_hash_bucket(atom);
     return fmt::format("{}/{:03}/{:03}", root_folder, id_bucket, hash_bucket);
 }
 
-std::string get_root_folder(const std::string& root_folder, const VariantKey& vk) {
+static std::string get_root_folder(const std::string& root_folder, const VariantKey& vk) {
     return util::variant_match(vk, [&root_folder](const auto& k) { return get_root_folder(root_folder, k); });
 }
 
@@ -100,7 +100,7 @@ std::string NfsBucketizer::bucketize(const std::string& root_folder, const Varia
 
 size_t NfsBucketizer::bucketize_length(KeyType key_type) { return is_ref_key_class(key_type) ? 4 : 8; }
 
-VariantKey unencode_object_id(const VariantKey& key) {
+static VariantKey unencode_object_id(const VariantKey& key) {
     return util::variant_match(
             key,
             [](const AtomKey& k) {

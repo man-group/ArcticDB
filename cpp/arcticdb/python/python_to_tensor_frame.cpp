@@ -258,7 +258,7 @@ static std::pair<Column, std::vector<sparrow::record_batch>> record_batches_to_s
     return {std::move(cols[0]), std::move(owners)};
 }
 
-void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
+static void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
     frame.num_rows = 0u;
     const auto& idx_names = pandas_data.index_names;
     const auto& idx_vals = pandas_data.index_values;

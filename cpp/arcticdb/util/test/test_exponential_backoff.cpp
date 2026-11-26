@@ -10,7 +10,7 @@
 
 #include <arcticdb/util/exponential_backoff.hpp>
 
-uint8_t g_called;
+static uint8_t g_called;
 
 struct MySpecialError : public std::runtime_error {
     MySpecialError(const char* msg) : std::runtime_error(msg) {}

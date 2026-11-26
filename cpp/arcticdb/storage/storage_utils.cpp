@@ -38,7 +38,7 @@ void filter_keys_on_existence(std::vector<AtomKey>& keys, const std::shared_ptr<
     keys.erase(keys_itr, keys.end());
 }
 
-AtomKey write_table_index_tree_from_source_to_target(
+static AtomKey write_table_index_tree_from_source_to_target(
         const std::shared_ptr<Store>& source_store, const std::shared_ptr<Store>& target_store,
         const AtomKey& index_key, std::optional<VersionId> new_version_id
 ) {
@@ -98,7 +98,7 @@ AtomKey write_table_index_tree_from_source_to_target(
     });
 }
 
-AtomKey copy_multi_key_from_source_to_target(
+static AtomKey copy_multi_key_from_source_to_target(
         const std::shared_ptr<Store>& source_store, const std::shared_ptr<Store>& target_store,
         const AtomKey& index_key, std::optional<VersionId> new_version_id
 ) {

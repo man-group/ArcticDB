@@ -18,7 +18,7 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
-SegmentInMemory get_segment_for_merge(const StreamId& id, size_t num_rows, size_t start, size_t step) {
+static SegmentInMemory get_segment_for_merge(const StreamId& id, size_t num_rows, size_t start, size_t step) {
     auto segment = SegmentInMemory{
             get_test_descriptor<stream::TimeseriesIndex>(id, std::array{scalar_field(DataType::UINT8, "column")}),
             num_rows
@@ -33,7 +33,7 @@ SegmentInMemory get_segment_for_merge(const StreamId& id, size_t num_rows, size_
     return segment;
 }
 
-void time_merge_on_segments(const std::vector<SegmentInMemory>& segments, benchmark::State& state) {
+static void time_merge_on_segments(const std::vector<SegmentInMemory>& segments, benchmark::State& state) {
     // Pauses the timing while setting up the merge clause to only time the merging itself
     state.PauseTiming();
     auto component_manager = std::make_shared<ComponentManager>();
@@ -87,7 +87,7 @@ static void BM_merge_ordered(benchmark::State& state) {
 
 template<typename integer>
 requires std::integral<integer>
-void BM_hash_grouping_int(benchmark::State& state) {
+static void BM_hash_grouping_int(benchmark::State& state) {
     auto num_rows = state.range(0);
     auto num_unique_values = state.range(1);
     auto num_buckets = state.range(2);
@@ -127,7 +127,7 @@ void BM_hash_grouping_int(benchmark::State& state) {
     }
 }
 
-void BM_hash_grouping_string(benchmark::State& state) {
+static void BM_hash_grouping_string(benchmark::State& state) {
     auto num_rows = state.range(0);
     auto num_unique_values = state.range(1);
     auto num_buckets = state.range(2);

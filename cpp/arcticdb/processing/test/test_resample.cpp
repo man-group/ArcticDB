@@ -16,14 +16,14 @@
 
 using namespace arcticdb;
 
-auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
+static auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
     return [bucket_boundaries = std::move(bucket_boundaries)](
                    timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin
            ) { return bucket_boundaries; };
 }
 
 template<ResampleBoundary resample_boundary>
-ResampleClause<resample_boundary> generate_resample_clause(
+static ResampleClause<resample_boundary> generate_resample_clause(
         ResampleBoundary label_boundary, std::vector<timestamp>&& bucket_boundaries,
         ResampleOrigin origin = timestamp{0}
 ) {
@@ -460,14 +460,16 @@ template<typename AggregatorAndLabel>
 class SortedAggregatorSparseStructure : public ::testing::Test {};
 
 template<typename T, size_t count>
-constexpr std::array<T, count> linear_range(T start, T step) {
+constexpr static std::array<T, count> linear_range(T start, T step) {
     std::array<T, start> arr;
     std::generate_n(arr.begin(), count, [i = T{0}, start, step]() mutable { return start + (i++) * step; });
     return arr;
 }
 
 template<typename T, size_t bucket_count>
-constexpr std::array<T, bucket_count - 1> generate_labels(std::array<T, bucket_count> buckets, ResampleBoundary label) {
+constexpr static std::array<T, bucket_count - 1> generate_labels(
+        std::array<T, bucket_count> buckets, ResampleBoundary label
+) {
     std::array<T, bucket_count - 1> result;
     if (label == ResampleBoundary::LEFT) {
         std::copy_n(buckets.begin(), bucket_count - 1, result.begin());
@@ -477,20 +479,20 @@ constexpr std::array<T, bucket_count - 1> generate_labels(std::array<T, bucket_c
     return result;
 }
 
-void assert_column_is_dense(const Column& c) {
+static void assert_column_is_dense(const Column& c) {
     ASSERT_FALSE(c.sparse_permitted());
     ASSERT_FALSE(c.is_sparse());
     ASSERT_FALSE(c.opt_sparse_map().has_value());
 }
 
-void assert_column_is_sparse(const Column& c) {
+static void assert_column_is_sparse(const Column& c) {
     ASSERT_TRUE(c.sparse_permitted());
     ASSERT_TRUE(c.is_sparse());
     ASSERT_TRUE(c.opt_sparse_map().has_value());
 }
 
 template<ResampleBoundary closed_boundary, typename AggregatorT>
-std::optional<Column> compute_output_column(
+static std::optional<Column> compute_output_column(
         const AggregatorT& aggregator, std::span<const std::shared_ptr<Column>> input_index_columns,
         std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
         const std::vector<timestamp>& bucket_boundaries, ResampleBoundary label_boundary

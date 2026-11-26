@@ -51,7 +51,6 @@ struct ColumnEncoderV2 {
     );
 };
 
-size_t calc_column_blocks_size(const Column& col);
 } // namespace arcticdb
 
 using namespace arcticdb;

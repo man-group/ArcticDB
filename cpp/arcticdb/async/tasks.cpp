@@ -12,7 +12,7 @@ namespace arcticdb::async {
 
 // N.B. Not the same as the filtered descriptor commonly used in allocate_frame, as the segment may not contain all the
 // columns in the filter
-StreamDescriptor get_filtered_descriptor(
+static StreamDescriptor get_filtered_descriptor(
         const StreamDescriptor& desc, const std::shared_ptr<std::unordered_set<std::string>>& filter_columns
 ) {
     // We assume here that filter_columns_ will always contain the index.

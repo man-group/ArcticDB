@@ -18,6 +18,7 @@
 #include <arcticdb/toolbox/storage_mover.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/toolbox/python_bindings.hpp>
 
 namespace arcticdb::toolbox::apy {
 

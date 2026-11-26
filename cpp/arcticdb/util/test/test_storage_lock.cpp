@@ -313,7 +313,7 @@ TEST(StorageLock, Timeouts) {
     ASSERT_TRUE(lock_data->timedout_);
 }
 
-int count_occurrences(std::string search, std::string pattern) {
+static int count_occurrences(std::string search, std::string pattern) {
     if (search.size() < pattern.size())
         return false;
     int count = 0;

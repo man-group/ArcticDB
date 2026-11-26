@@ -16,7 +16,7 @@
 
 namespace arcticdb::storage::memory {
 
-void add_serialization_fields(KeySegmentPair& kv) {
+static void add_serialization_fields(KeySegmentPair& kv) {
     auto& segment = *kv.segment_ptr();
     auto& hdr = segment.header();
     (void)segment.calculate_size();

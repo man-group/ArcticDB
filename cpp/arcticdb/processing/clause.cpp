@@ -640,7 +640,7 @@ std::vector<EntityId> SortClause::process(std::vector<EntityId>&& entity_ids) co
 }
 
 template<typename IndexType, typename DensityPolicy, typename QueueType, bool dynamic_schema>
-void merge_impl(
+static void merge_impl(
         std::shared_ptr<ComponentManager> component_manager, std::vector<std::vector<EntityId>>& ret,
         QueueType& input_streams, bool add_symbol_column, const RowRange& row_range, const ColRange& col_range,
         IndexType index, const StreamDescriptor& stream_descriptor

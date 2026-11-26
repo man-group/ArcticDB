@@ -17,7 +17,7 @@ using namespace arcticdb;
 using namespace arcticdb::column_stats_detail;
 
 template<typename LhsType, typename RhsType, typename Func>
-StatsComparison typed_range_stats_comparator(
+static StatsComparison typed_range_stats_comparator(
         LhsType lhs_min, LhsType lhs_max, RhsType rhs_min, RhsType rhs_max, Func&& func
 ) {
     ColumnStatsValues lhs{construct_value(lhs_min), construct_value(lhs_max)};
@@ -26,7 +26,7 @@ StatsComparison typed_range_stats_comparator(
 }
 
 template<typename LhsType, typename RhsType>
-StatsComparison dispatch_range_vs_range(
+static StatsComparison dispatch_range_vs_range(
         LhsType lhs_min, LhsType lhs_max, RhsType rhs_min, RhsType rhs_max, OperationType op
 ) {
     std::vector<ColumnStatsValues> lhs{{construct_value(lhs_min), construct_value(lhs_max)}};

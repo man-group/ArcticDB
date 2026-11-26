@@ -20,7 +20,7 @@
 
 using namespace arcticdb;
 
-SegmentInMemory get_detachable_segment(
+static SegmentInMemory get_detachable_segment(
         std::span<const FieldRef> fields, size_t num_rows, size_t chunk_size, const ReadOptions& read_options
 ) {
     auto desc = get_test_descriptor<stream::TimeseriesIndex>("symbol", fields);
@@ -56,7 +56,7 @@ SegmentInMemory get_detachable_segment(
 }
 
 // Populates a column with strings as if using OutputFormat::ARROW. Assumes column is already allocated.
-void fill_chunked_string_column(
+static void fill_chunked_string_column(
         Column& column, std::string_view col_name, size_t num_rows, size_t chunk_size,
         std::shared_ptr<StringPool> string_pool, const std::vector<std::string>& values, const ReadOptions& read_options
 ) {
@@ -378,7 +378,7 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
     }
 }
 
-void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std::span<std::string>& expected) {
+static void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std::span<std::string>& expected) {
     EXPECT_EQ(arr.size(), expected.size());
     for (auto i = 0u; i < arr.size(); i++) {
         const auto value = std::get<sparrow::nullable<std::string_view>>(arr[i]);

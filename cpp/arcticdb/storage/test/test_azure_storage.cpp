@@ -17,7 +17,7 @@ using namespace arcticdb;
 using namespace storage;
 using namespace azure;
 
-arcticdb::proto::azure_storage::Config get_mock_azure_config() {
+static arcticdb::proto::azure_storage::Config get_mock_azure_config() {
     arcticdb::proto::azure_storage::Config cfg;
     cfg.set_use_mock_storage_for_testing(true);
 

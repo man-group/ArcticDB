@@ -24,7 +24,7 @@ TEST_P(CompactDataStructureRowRangesFixture, All) {
     ASSERT_EQ(res, expected_output);
 }
 
-std::vector<std::pair<std::set<RowRange>, std::set<RowRange>>> parameters{
+static std::vector<std::pair<std::set<RowRange>, std::set<RowRange>>> parameters{
         // No-ops (output same as input)
         // A single slice of any size is always just returned as is, regardless of size
         {{{0, 4}}, {{0, 4}}},

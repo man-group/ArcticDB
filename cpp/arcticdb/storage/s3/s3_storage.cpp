@@ -129,7 +129,7 @@ void GCPXMLStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_no_batching_impl(keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
-IterateTypePredicate prefix_matching_visitor(const IterateTypePredicate& visitor, const std::string& prefix) {
+static IterateTypePredicate prefix_matching_visitor(const IterateTypePredicate& visitor, const std::string& prefix) {
     return [&](VariantKey&& key) { return detail::visit_if_prefix_matches(visitor, prefix, std::move(key)); };
 }
 
@@ -150,7 +150,9 @@ bool S3Storage::do_iterate_type_until_match(
     return res;
 }
 
-ObjectSizesVisitor prefix_matching_object_sizes_visitor(const ObjectSizesVisitor& visitor, const std::string& prefix) {
+static ObjectSizesVisitor prefix_matching_object_sizes_visitor(
+        const ObjectSizesVisitor& visitor, const std::string& prefix
+) {
     return [&](const VariantKey& key, CompressedSize size) {
         detail::object_sizes_visit_if_prefix_matches(visitor, prefix, key, size);
     };

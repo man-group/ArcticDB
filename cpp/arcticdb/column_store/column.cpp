@@ -16,7 +16,7 @@ namespace arcticdb {
 // it doesn't take into account integral promotion, however we don't care about that for the
 // purpose for which it is used in this file.
 template<typename SourceType, typename TargetType>
-constexpr bool is_narrowing_conversion() {
+constexpr static bool is_narrowing_conversion() {
     if (sizeof(TargetType) < sizeof(SourceType))
         return true;
 

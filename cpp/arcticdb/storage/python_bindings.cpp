@@ -26,7 +26,9 @@ namespace arcticdb::storage::apy {
 
 using namespace python_util;
 
-std::shared_ptr<LibraryIndex> create_library_index(const std::string& environment_name, const py::object& py_envs) {
+static std::shared_ptr<LibraryIndex> create_library_index(
+        const std::string& environment_name, const py::object& py_envs
+) {
     arcticdb::proto::storage::EnvironmentConfigsMap envs;
     pb_from_python(py_envs, envs);
     auto env_by_id = convert_environment_config(envs);

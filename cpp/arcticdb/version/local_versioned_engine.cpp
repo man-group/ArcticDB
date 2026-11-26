@@ -135,7 +135,7 @@ struct TransformBatchResultsFlags {
 /// @param version_queries i-th element corresponds to the i-th element of batch_request_versions. Use to record the
 ///     version query in the DataError for a batch read request
 template<typename ResultValueType>
-std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_throw(
+static std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_throw(
         std::vector<folly::Try<ResultValueType>>&& batch_request_versions, std::span<const StreamId> stream_ids,
         TransformBatchResultsFlags flags, std::span<const VersionQuery> version_queries = {}
 ) {
@@ -451,7 +451,7 @@ IndexRange LocalVersionedEngine::get_index_range(const StreamId& stream_id, cons
     return index::get_index_segment_range(version->key_, store());
 }
 
-VersionIdentifier get_version_identifier(
+static VersionIdentifier get_version_identifier(
         const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options,
         const std::optional<VersionedItem>& version
 ) {
@@ -964,7 +964,7 @@ VersionedItem LocalVersionedEngine::write_segment(
  * that are included in snapshots from deletion. This is because the index key may be dedup'd against an earlier
  * version in a snapshot, or a later version in a snapshot may be dedup'd against this index key.
  */
-void copy_versions_nearest_to_target(
+static void copy_versions_nearest_to_target(
         const MasterSnapshotMap::value_type::second_type& index_key_to_snapshot_map, const IndexTypeKey& target_key,
         util::ContainerFilterWrapper<std::unordered_set<IndexTypeKey>>& not_to_delete
 ) {
@@ -1001,7 +1001,7 @@ void copy_versions_nearest_to_target(
     }
 }
 
-std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::vector<AtomKey>& keys) {
+static std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::vector<AtomKey>& keys) {
     std::unordered_map<StreamId, VersionId> out;
     for (auto& key : keys) {
         auto found = out.find(key.id());
@@ -1492,7 +1492,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
     return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
 }
 
-auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symbol_processing_results) {
+static auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symbol_processing_results) {
     std::vector<FrameSchema> input_schemas;
     std::vector<std::vector<EntityId>> entity_ids;
     auto res_versioned_items = std::make_shared<std::vector<VersionedItem>>();
@@ -1512,7 +1512,7 @@ auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symb
     );
 }
 
-std::shared_ptr<PipelineContext> setup_join_pipeline_context(
+static std::shared_ptr<PipelineContext> setup_join_pipeline_context(
         std::vector<FrameSchema>&& input_schemas, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
     auto output_schema = modify_schema(clauses.front()->join_schemas(std::move(input_schemas)), clauses);
@@ -2116,7 +2116,7 @@ struct WarnVersionTypeNotHandled {
     }
 };
 
-std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
+static std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
     std::map<StreamId, VersionVectorType> sym_versions;

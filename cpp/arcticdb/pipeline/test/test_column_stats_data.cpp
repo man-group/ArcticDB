@@ -24,19 +24,19 @@ struct StatsSegmentRow {
 // "price" is at data_col_offset=1 in the TSD (offset 0 is the timestamp index)
 static constexpr uint32_t price_data_col_offset = 1;
 
-ColumnStatsValues stats_for(const ColumnStatsData& data, const std::string& col_name, size_t row) {
+static ColumnStatsValues stats_for(const ColumnStatsData& data, const std::string& col_name, size_t row) {
     auto v = data.values_for_column(col_name, {std::optional<size_t>{row}});
     return v.empty() ? ColumnStatsValues{} : std::move(v.at(0));
 }
 
-TimeseriesDescriptor build_test_tsd() {
+static TimeseriesDescriptor build_test_tsd() {
     TimeseriesDescriptor tsd;
     tsd.mutable_fields().add_field(scalar_field(DataType::NANOSECONDS_UTC64, "timestamp"));
     tsd.mutable_fields().add_field(scalar_field(DataType::INT64, "price"));
     return tsd;
 }
 
-SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
+static SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
     using namespace arcticc::pb2::column_stats_pb2;
 
     auto start_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);

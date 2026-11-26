@@ -247,18 +247,18 @@ TEST(Async, QueryStatsDemo) {
 
 using IndexSegmentReader = int;
 
-int get_index_segment_reader_impl(arcticdb::StreamId id) {
+static int get_index_segment_reader_impl(arcticdb::StreamId id) {
     std::cout << "Getting " << fmt::format("{}", id) << std::endl;
     return 5;
 }
 
-folly::Future<int> get_index_segment_reader(folly::Future<arcticdb::StreamId>&& fut) {
+static folly::Future<int> get_index_segment_reader(folly::Future<arcticdb::StreamId>&& fut) {
     return std::move(fut).via(&arcticdb::async::io_executor()).thenValue(get_index_segment_reader_impl);
 }
 
-std::string do_read_impl(IndexSegmentReader&& idx) { return fmt::format("{}", idx); }
+static std::string do_read_impl(IndexSegmentReader&& idx) { return fmt::format("{}", idx); }
 
-folly::Future<std::string> do_read(folly::Future<IndexSegmentReader>&& fut) {
+static folly::Future<std::string> do_read(folly::Future<IndexSegmentReader>&& fut) {
     return std::move(fut).via(&arcticdb::async::cpu_executor()).thenValue(do_read_impl);
 }
 
@@ -275,7 +275,7 @@ TEST(Async, SemiFuturePassing) {
     std::cout << thing << std::endl;
 }
 
-folly::Future<int> num_slices(folly::Future<int>&& f) {
+static folly::Future<int> num_slices(folly::Future<int>&& f) {
     return std::move(f).thenValue([](auto x) { return x; });
 }
 
@@ -287,7 +287,7 @@ struct Thing : arcticdb::async::BaseTask {
     int operator()() const { return x_ + 2; }
 };
 
-auto multiplex(folly::Future<int>&& n) {
+static auto multiplex(folly::Future<int>&& n) {
     using namespace arcticdb;
 
     return std::move(n).thenValue([](auto i) {
@@ -425,7 +425,7 @@ TEST(Async, NumCoresCgroupV2) {
 #endif
 }
 
-std::shared_ptr<arcticdb::Store> create_store(
+static std::shared_ptr<arcticdb::Store> create_store(
         const storage::LibraryPath& library_path, as::LibraryIndex& library_index, const storage::UserAuth& user_auth,
         std::shared_ptr<proto::encoding::VariantCodec>& codec_opt
 ) {
@@ -784,13 +784,13 @@ class RecordingStorage final : public as::Storage {
     std::function<void(std::span<entity::VariantKey>)> on_batch_remove_;
 };
 
-inline std::shared_ptr<aa::AsyncStore<>> build_async_store(std::shared_ptr<RecordingStorage> storage) {
+inline static std::shared_ptr<aa::AsyncStore<>> build_async_store(std::shared_ptr<RecordingStorage> storage) {
     auto storages = std::make_shared<as::Storages>(as::Storages::StorageVector{storage}, as::OpenMode::DELETE);
     auto library = std::make_shared<as::Library>(as::LibraryPath{"a", "b"}, std::move(storages));
     return std::make_shared<aa::AsyncStore<>>(std::move(library), proto::encoding::VariantCodec{}, EncodingVersion::V1);
 }
 
-inline std::vector<entity::VariantKey> make_keys(size_t n) {
+inline static std::vector<entity::VariantKey> make_keys(size_t n) {
     std::vector<entity::VariantKey> keys;
     keys.reserve(n);
     for (size_t i = 0; i < n; ++i) {

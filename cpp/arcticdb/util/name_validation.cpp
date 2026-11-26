@@ -15,7 +15,7 @@
 
 namespace arcticdb {
 
-[[nodiscard]] CheckOutcome verify_name(
+[[nodiscard]] static CheckOutcome verify_name(
         const std::string& name_type_for_error, const StringId& name, bool check_symbol_out_of_range,
         const std::set<char>& unsupported_chars, std::optional<char> unsupported_suffix = std::nullopt
 ) {
@@ -85,7 +85,7 @@ namespace arcticdb {
     return std::monostate{};
 }
 
-[[nodiscard]] CheckOutcome verify_name_for_backend(
+[[nodiscard]] static CheckOutcome verify_name_for_backend(
         const std::string& name_type_for_error, const VariantId& id, const std::shared_ptr<Store>& store
 ) {
     if (ConfigsMap::instance()->get_int("VersionStore.NoStrictSymbolCheck")) {

@@ -222,13 +222,13 @@ using namespace arcticdb;
 using namespace storage;
 using namespace s3;
 
-proto::s3_storage::Config get_test_s3_config() {
+static proto::s3_storage::Config get_test_s3_config() {
     auto config = proto::s3_storage::Config();
     config.set_use_mock_storage_for_testing(true);
     return config;
 }
 
-S3Settings get_test_s3_settings() {
+static S3Settings get_test_s3_settings() {
     auto config = proto::s3_storage::Config();
     auto s3_settings = S3Settings(arcticdb::storage::s3::AWSAuthMethod::DISABLED, "", true);
     s3_settings.update(config);
@@ -252,7 +252,7 @@ class WrapperS3StorageFixture : public testing::Test {
 
     void TearDown() override { ConfigsMap::instance()->unset_int("S3ClientTestWrapper.EnableFailures"); }
 };
-arcticdb::storage::nfs_backed::NfsBackedStorage::Config get_test_nfs_config() {
+static arcticdb::storage::nfs_backed::NfsBackedStorage::Config get_test_nfs_config() {
     arcticdb::storage::nfs_backed::NfsBackedStorage::Config cfg;
     cfg.set_use_mock_storage_for_testing(true);
     return cfg;
