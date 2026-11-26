@@ -277,13 +277,6 @@ static std::string type_to_name(ColumnStatType type) {
     }
 }
 
-std::optional<ColumnStatType> name_to_type(const std::string& name) {
-    if (name == "MINMAX") {
-        return ColumnStatType::MINMAX;
-    }
-    return std::nullopt;
-}
-
 std::string to_segment_column_name(std::string_view column, ColumnStatTypeInternal type) {
     return fmt::format("{}({})", type_to_operator_string(type), column);
 }

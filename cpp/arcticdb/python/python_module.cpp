@@ -88,23 +88,6 @@ static void register_configs_map_api(py::module& m) {
 #undef EXPOSE_TYPE
 }
 
-#ifdef WIN32
-__declspec(noinline)
-#else
-__attribute__((noinline))
-#endif
-int
-rec_call(int i) {
-    if (i < 0) {
-        throw std::invalid_argument("Explosion");
-    } else if (i == 0)
-        return 7;
-    if (i % 3 == 0)
-        return rec_call(i - 4);
-    else
-        return rec_call(i - 1);
-}
-
 static void register_termination_handler() {
     std::set_terminate([] {
         auto eptr = std::current_exception();

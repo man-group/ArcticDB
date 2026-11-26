@@ -207,23 +207,6 @@ inline arcticdb::proto::descriptors::FrameMetadata frame_metadata_from_any(const
 }
 } // namespace
 
-std::optional<FieldCollection> decode_descriptor_fields(
-        const SegmentHeader& hdr, const uint8_t*& data, const uint8_t* begin ARCTICDB_UNUSED, const uint8_t* end
-) {
-    if (hdr.has_descriptor_field()) {
-        ARCTICDB_TRACE(log::codec(), "Decoding index fields");
-        util::check(data != end, "Reached end of input block with descriptor fields to decode");
-        std::optional<util::BitMagic> bv;
-        FieldCollection fields;
-        data += decode_field(FieldCollection::type(), hdr.descriptor_field(), data, fields, bv, hdr.encoding_version());
-
-        ARCTICDB_TRACE(log::codec(), "Decoded descriptor fields to position {}", data - begin);
-        return std::make_optional<FieldCollection>(std::move(fields));
-    } else {
-        return std::nullopt;
-    }
-}
-
 static TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(
         const google::protobuf::Any& any, const StreamDescriptor& stream_desc, bool is_decoding_incompletes
 ) {

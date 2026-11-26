@@ -33,24 +33,6 @@ static void segment_scalar_assert_all_values_equal(
     ASSERT_EQ(expected_row_count, row_counter);
 }
 
-void segment_string_assert_all_values_equal(
-        const arcticdb::ProcessingUnit& proc_unit, const arcticdb::ColumnName& name, std::string_view expected,
-        size_t expected_row_count
-) {
-    auto segment = *proc_unit.segments_->front();
-    segment.init_column_map();
-    auto column_index = segment.column_index(name.value).value();
-    size_t row_counter = 0;
-    for (auto row : segment) {
-        if (auto maybe_val = row.string_at(column_index); maybe_val) {
-            ASSERT_EQ(maybe_val.value(), expected);
-            row_counter++;
-        }
-    }
-
-    ASSERT_EQ(expected_row_count, row_counter);
-}
-
 TEST(Clause, PartitionEmptyColumn) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();

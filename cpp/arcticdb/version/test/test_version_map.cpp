@@ -354,20 +354,6 @@ TEST(VersionMap, TombstoneAllTwice) {
     // Don't need a check condition, checking validation
 }
 
-void write_old_style_journal_entry(const AtomKey& key, std::shared_ptr<StreamSink> store) {
-    IndexAggregator<RowCountIndex> journal_agg(key.id(), [&](auto&& segment) {
-        store->write(KeyType::VERSION_JOURNAL,
-                     key.version_id(),
-                     key.id(),
-                     IndexValue(NumericIndex{0}),
-                     IndexValue(NumericIndex{0}),
-                     std::move(segment))
-                .wait();
-    });
-    journal_agg.add_key(key);
-    journal_agg.commit();
-}
-
 TEST(VersionMap, GetNextVersionInEntry) {
     using namespace arcticdb;
 
