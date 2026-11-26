@@ -228,15 +228,15 @@ class Aggregator {
         segment_.set_sparse_block(pos, val, rows_to_write);
     }
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+    void set_sparse_block(size_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
         segment_.set_sparse_block(idx, std::move(buffer), std::move(bitset));
     }
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+    void set_sparse_block(size_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
         segment_.set_sparse_block(idx, std::move(buffer), std::move(shapes), std::move(bitset));
     }
 
-    void set_string_at(position_t col, position_t row, const char* val, size_t size) {
+    void set_string_at(size_t col, position_t row, const char* val, size_t size) {
         segment_.set_string_at(col, row, val, size);
     }
 
@@ -249,17 +249,17 @@ class Aggregator {
 
     template<typename T, template<typename> typename Tensor>
     requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, Tensor<T>& val) {
+    void set_array(size_t pos, Tensor<T>& val) {
         segment_.set_array(pos, val);
     }
 
     template<typename T>
     requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, py::array_t<T>& val) {
+    void set_array(size_t pos, py::array_t<T>& val) {
         segment_.set_array(pos, val);
     }
 
-    void set_string_array(position_t pos, size_t string_size, size_t num_strings, char* data) {
+    void set_string_array(size_t pos, size_t string_size, size_t num_strings, char* data) {
         segment_.set_string_array(pos, string_size, num_strings, data);
     }
 
@@ -280,7 +280,7 @@ class Aggregator {
     template<typename T>
     requires std::integral<T> || std::floating_point<T>
     void set_scalar_by_name(std::string_view name, T val, DataType data_type) {
-        position_t pos = schema_policy_.get_column_idx_by_name(
+        size_t pos = schema_policy_.get_column_idx_by_name(
                 segment_,
                 name,
                 make_scalar_type(data_type),
@@ -290,20 +290,18 @@ class Aggregator {
         set_scalar(pos, val);
     }
 
-    void set_string(position_t pos, const std::string& str) { segment_.set_string(pos, str); }
+    void set_string(size_t pos, const std::string& str) { segment_.set_string(pos, str); }
 
-    void set_string(position_t pos, std::string_view str) { segment_.set_string(pos, str); }
+    void set_string(size_t pos, std::string_view str) { segment_.set_string(pos, str); }
 
     void set_string_by_name(std::string_view name, std::string_view str, DataType desc) {
-        position_t pos = schema_policy_.get_column_idx_by_name(
+        size_t pos = schema_policy_.get_column_idx_by_name(
                 segment_, name, make_scalar_type(desc), segmenting_policy_.expected_row_size(), segment_.row_count()
         );
         set_string(pos, str);
     }
 
-    void set_string_list(position_t pos, const std::vector<std::string>& input) {
-        segment_.set_string_list(pos, input);
-    }
+    void set_string_list(size_t pos, const std::vector<std::string>& input) { segment_.set_string_list(pos, input); }
 
     void end_row();
 

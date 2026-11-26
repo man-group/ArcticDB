@@ -531,7 +531,7 @@ void write_sparse_column_for_merge_update_row_range_insert(
         const MergeUpdateSliceInfo& insert_info, const size_t new_column_pos, const size_t new_column_size,
         SegmentInMemory& new_segment
 ) {
-    const Column& source_column = source.column(static_cast<position_t>(source_column_pos));
+    const Column& source_column = source.column(source_column_pos);
     ColumnData source_column_data = source_column.data();
     const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
     // Source rows are appended in order to the target. In case the number of source rows to
@@ -608,7 +608,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
         const Field& field = slice_descriptor.field(column_in_segment);
         const size_t source_field_pos = first_col_idx + column_in_segment;
         details::visit_scalar(field.type(), [&]<util::type_descriptor_tag TDT>(TDT) {
-            const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
+            const Column& source_column = source.column(source_field_pos);
             ColumnData source_column_data = source_column.data();
             if (source_column.is_sparse()) {
                 write_sparse_column_for_merge_update_row_range_insert<TDT>(
@@ -1959,8 +1959,8 @@ static void copy_frame_data_to_buffer(
     if (num_rows == 0) {
         return;
     }
-    auto& src_column = source.column(static_cast<position_t>(source_index));
-    auto& dst_column = destination.column(static_cast<position_t>(target_index));
+    auto& src_column = source.column(source_index);
+    auto& dst_column = destination.column(target_index);
     auto dst_rawtype_size = data_type_size(dst_column.type());
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     const auto total_size = dst_rawtype_size * num_rows;
@@ -2419,7 +2419,7 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
         auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
         const auto num_rows = segment_in_memory.row_count();
         for (auto i = 0u; i < segment_in_memory.num_columns(); ++i) {
-            auto& column = segment_in_memory.column(static_cast<position_t>(i));
+            auto& column = segment_in_memory.column(i);
             if (column.is_sparse()) {
                 auto sparse_map = column.sparse_map();
                 sparse_map.resize(num_rows);

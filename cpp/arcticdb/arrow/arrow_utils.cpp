@@ -434,7 +434,7 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(
     std::vector<sparrow::record_batch> output{column_blocks == 0 ? 1 : column_blocks, sparrow::record_batch{}};
     for (auto i = 0UL; i < num_columns; ++i) {
         const auto& column_name = segment.field(i).name();
-        auto& column = segment.column(static_cast<position_t>(i));
+        auto& column = segment.column(i);
         util::check(
                 column.num_blocks() == column_blocks,
                 "Non-standard column block number: {} != {}",

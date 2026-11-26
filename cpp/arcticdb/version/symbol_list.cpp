@@ -98,21 +98,21 @@ static std::vector<SymbolListEntry> load_previous_from_version_keys(
 // provided in SegmentInMemory, because the symbol list structure is the only place where columns can have more entries
 // than the segment has rows. Hence, we need to bypass the checks inside SegmentInMemory's function and directly call
 // the Column's string_at and scalar_at.
-static std::string_view string_at(const SegmentInMemory& seg, position_t row, position_t col) {
+static std::string_view string_at(const SegmentInMemory& seg, position_t row, size_t col) {
     auto offset = seg.column(col).scalar_at<position_t>(row);
     util::check(offset.has_value(), "Symbol list trying to call string_at for missing row {}, column {}", row, col);
     return seg.string_pool_ptr()->get_view(offset.value());
 }
 
 template<typename T>
-static T scalar_at(const SegmentInMemory& seg, position_t row, position_t col) {
+static T scalar_at(const SegmentInMemory& seg, position_t row, size_t col) {
     auto scalar = seg.column(col).scalar_at<T>(row);
     util::check(scalar.has_value(), "Symbol list trying to call scalar_at for missing row {}, column {}", row, col);
     return scalar.value();
 }
 
 static StreamId stream_id_from_segment(
-        DataType data_type, const SegmentInMemory& seg, position_t row_id, position_t column
+        DataType data_type, const SegmentInMemory& seg, position_t row_id, size_t column
 ) {
     if (data_type == DataType::UINT64) {
         auto num_id = scalar_at<uint64_t>(seg, row_id, column);
@@ -710,7 +710,7 @@ bool SymbolList::needs_compaction(const LoadResult& load_result) const {
 }
 
 static void write_symbol_at(
-        const StreamId& type_holder, SegmentInMemory& list_segment, const SymbolListEntry& entry, position_t column
+        const StreamId& type_holder, SegmentInMemory& list_segment, const SymbolListEntry& entry, size_t column
 ) {
     util::variant_match(
             type_holder,
@@ -754,9 +754,7 @@ static SegmentInMemory write_entries_to_symbol_segment(
     if (!deleted_segment.empty()) {
         for (auto col = 0UL; col < deleted_segment.descriptor().fields().size(); ++col) {
             const auto& field = deleted_segment.descriptor().fields(col);
-            added_segment.add_column(
-                    FieldRef{field.type(), field.name()}, deleted_segment.column_ptr(static_cast<position_t>(col))
-            );
+            added_segment.add_column(FieldRef{field.type(), field.name()}, deleted_segment.column_ptr(col));
         }
         util::check(
                 added_segment.descriptor().field_count() == 6,

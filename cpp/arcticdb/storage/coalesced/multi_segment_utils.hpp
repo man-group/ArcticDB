@@ -3,6 +3,7 @@
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 
 /*
  * Contains similar functions to stream_utils.hpp but assumes that many keys are mixed in together, so we can't
@@ -63,8 +64,8 @@ struct TimeSymbol {
 
 inline TimeSymbol time_symbol_from_key(const AtomKey& key) { return {key.id(), key.creation_ts()}; }
 template<typename FieldType>
-position_t as_pos(FieldType id_type) {
-    return static_cast<position_t>(id_type);
+size_t as_pos(FieldType id_type) {
+    return util::lossless_cast<size_t>(id_type);
 }
 
 template<typename FieldType>

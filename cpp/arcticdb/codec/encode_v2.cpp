@@ -195,7 +195,7 @@ static void encode_index_descriptors(
 [[nodiscard]] static size_t encoded_blocks_size(const SegmentInMemory& in_mem_seg) {
     size_t bytes = 0;
     for (std::size_t c = 0; c < in_mem_seg.num_columns(); ++c) {
-        const auto& col = in_mem_seg.column(position_t(c));
+        const auto& col = in_mem_seg.column(c);
         bytes += calc_column_blocks_size(col);
     }
     bytes += sizeof(EncodedBlock);

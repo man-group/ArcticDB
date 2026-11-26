@@ -12,6 +12,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
@@ -34,7 +35,7 @@ folly::Future<IndexSegmentReader> async_get_index_reader(
 
 IndexSegmentReader::IndexSegmentReader(SegmentInMemory&& s) : seg_(std::move(s)) {}
 
-const Column& IndexSegmentReader::column(Fields field) const { return seg_.column(position_t(field)); }
+const Column& IndexSegmentReader::column(Fields field) const { return seg_.column(util::lossless_cast<size_t>(field)); }
 
 bool IndexSegmentReader::empty() const { return seg_.empty(); }
 

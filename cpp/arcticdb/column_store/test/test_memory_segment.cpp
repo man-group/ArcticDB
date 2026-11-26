@@ -439,13 +439,13 @@ TEST(MemSegment, Append) {
         for (int col = 0; col < 3; ++col) {
             switch (col) {
             case 0:
-                s1.set_scalar<timestamp>(col, row + col);
+                s1.set_scalar<timestamp>(0, row + col);
                 break;
             case 1:
-                s1.set_scalar<uint8_t>(col, row + col);
+                s1.set_scalar<uint8_t>(1, row + col);
                 break;
             case 2:
-                s1.set_scalar<uint32_t>(col, row + col);
+                s1.set_scalar<uint32_t>(2, row + col);
                 break;
             default:
                 break;
@@ -459,13 +459,13 @@ TEST(MemSegment, Append) {
         for (int col = 0; col < 3; ++col) {
             switch (col) {
             case 0:
-                s2.set_scalar<timestamp>(col, row + col);
+                s2.set_scalar<timestamp>(0, row + col);
                 break;
             case 1:
-                s2.set_scalar<uint8_t>(col, row + col);
+                s2.set_scalar<uint8_t>(1, row + col);
                 break;
             case 2:
-                s2.set_scalar<uint32_t>(col, row + col);
+                s2.set_scalar<uint32_t>(2, row + col);
                 break;
             default:
                 break;

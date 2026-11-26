@@ -108,13 +108,13 @@ static void BM_sort_sparse(benchmark::State& state) {
 
 static void BM_iterate_with_scalar_at(benchmark::State& state) {
     auto num_rows = state.range(0);
-    auto num_cols = state.range(1);
+    const size_t num_cols = state.range(1);
     auto segment = get_shuffled_segment("test", num_rows, num_cols);
     // Accumulate result to not get optimized away
     [[maybe_unused]] auto acc = 0ull;
     for (auto _ : state) {
         // Starting col from 1 to skip the index
-        for (auto col = 1; col <= num_cols; ++col) {
+        for (size_t col = 1; col <= num_cols; ++col) {
             for (auto row = 0; row < num_rows; ++row) {
                 acc += segment.scalar_at<uint64_t>(row, col).value_or(0);
             }
@@ -124,13 +124,13 @@ static void BM_iterate_with_scalar_at(benchmark::State& state) {
 
 static void BM_iterate_with_iterator(benchmark::State& state) {
     auto num_rows = state.range(0);
-    auto num_cols = state.range(1);
+    const size_t num_cols = state.range(1);
     auto segment = get_shuffled_segment("test", num_rows, num_cols);
     // Accumulate result to not get optimized away
     [[maybe_unused]] auto acc = 0ull;
     for (auto _ : state) {
         // Starting col from 1 to skip the index
-        for (auto col = 1; col <= num_cols; ++col) {
+        for (size_t col = 1; col <= num_cols; ++col) {
             auto data = segment.column(col).data();
             using tdt = ScalarTagType<DataTypeTag<DataType::UINT64>>;
             std::for_each(

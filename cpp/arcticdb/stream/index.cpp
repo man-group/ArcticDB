@@ -10,6 +10,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 #include <ranges>
 
 namespace arcticdb::stream {
@@ -85,7 +86,7 @@ IndexValue TimeseriesIndex::end_value_for_segment(const SegmentInMemory& segment
 IndexValue TimeseriesIndex::start_value_for_keys_segment(const SegmentInMemory& segment) {
     if (segment.row_count() == 0)
         return {NumericIndex{min_index_value()}};
-    auto start_index_id = int(pipelines::index::Fields::start_index);
+    auto start_index_id = util::lossless_cast<size_t>(pipelines::index::Fields::start_index);
     auto first_ts = segment.template scalar_at<timestamp>(0, start_index_id).value();
     return {first_ts};
 }
@@ -94,7 +95,7 @@ IndexValue TimeseriesIndex::end_value_for_keys_segment(const SegmentInMemory& se
     auto row_count = segment.row_count();
     if (row_count == 0)
         return {NumericIndex{min_index_value()}};
-    auto end_index_id = int(pipelines::index::Fields::end_index);
+    auto end_index_id = util::lossless_cast<size_t>(pipelines::index::Fields::end_index);
     auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, end_index_id).value();
     return {last_ts};
 }
@@ -134,7 +135,7 @@ IndexValue TableIndex::end_value_for_segment(const SegmentInMemory& segment) {
 IndexValue TableIndex::start_value_for_keys_segment(const SegmentInMemory& segment) {
     if (segment.row_count() == 0)
         return {NumericIndex{0}};
-    auto start_index_id = int(pipelines::index::Fields::start_index);
+    auto start_index_id = util::lossless_cast<size_t>(pipelines::index::Fields::start_index);
     auto string_index = segment.string_at(0, start_index_id).value();
     return {std::string{string_index}};
 }
@@ -143,7 +144,7 @@ IndexValue TableIndex::end_value_for_keys_segment(const SegmentInMemory& segment
     auto row_count = segment.row_count();
     if (row_count == 0)
         return {NumericIndex{0}};
-    auto end_index_id = int(pipelines::index::Fields::end_index);
+    auto end_index_id = util::lossless_cast<size_t>(pipelines::index::Fields::end_index);
     auto string_index = segment.string_at(row_count - 1, end_index_id).value();
     return {std::string{string_index}};
 }
