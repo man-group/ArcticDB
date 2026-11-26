@@ -470,9 +470,11 @@ VersionIdentifier get_version_identifier(
     return *version;
 }
 
+namespace {
+
 // Prepare an already-loaded index for one read.
 // Give each read its own working copy so the original index can be reused
-static VersionIdentifier prepare_preloaded_index(
+VersionIdentifier prepare_preloaded_index(
         const std::shared_ptr<PreloadedIndexQuery>& preloaded_index, const std::shared_ptr<ReadQuery>& read_query
 ) {
     std::optional<ColumnStatsSource> column_stats;
@@ -493,7 +495,7 @@ static VersionIdentifier prepare_preloaded_index(
 
 // Prepare one lookup future per request.
 // Preloaded requests skip storage lookup but keep their position in the list
-static std::vector<folly::Future<std::optional<AtomKey>>> prepare_batch_index_key_futures(
+std::vector<folly::Future<std::optional<AtomKey>>> prepare_batch_index_key_futures(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
@@ -545,6 +547,8 @@ static std::vector<folly::Future<std::optional<AtomKey>>> prepare_batch_index_ke
 
     return index_key_futs;
 }
+
+} // namespace
 
 ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
