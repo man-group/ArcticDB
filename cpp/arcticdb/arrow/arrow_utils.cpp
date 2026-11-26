@@ -730,6 +730,7 @@ static ArrowOutputStringFormat convert_arrow_string_format_enum(
     }
 }
 
+#ifdef DEBUG_BUILD
 static bool check_arrow_config_all_specified(const ArrowOutputConfig& arrow_config) {
     if (arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED) {
         return false;
@@ -742,6 +743,7 @@ static bool check_arrow_config_all_specified(const ArrowOutputConfig& arrow_conf
         );
     }
 }
+#endif
 
 void modify_arrow_output_config_from_norm_meta(
         const proto::descriptors::NormalizationMetadata& norm_meta, ArrowOutputConfig& arrow_config
