@@ -430,6 +430,7 @@ set(arcticdb_srcs
         util/spinlock.hpp
         util/key_utils.hpp
         util/lock_table.hpp
+        util/lossless_cast.hpp
         util/lru_cache.hpp
         util/magic_num.hpp
         util/movable_priority_queue.hpp
