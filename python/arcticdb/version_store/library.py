@@ -694,7 +694,23 @@ class LazyDataFrameCollection(QueryBuilder):
         -------
         List[LazyDataFrame]
         """
-        return [LazyDataFrame(self._lib, read_request) for read_request in self._read_requests()]
+        # Keep the original as_of and include the collection's processing
+        read_requests = self._read_requests(use_preloaded_indexes=False)
+        split_sources = []
+
+        for original_source, read_request in zip(
+            self._lazy_dataframes,
+            read_requests,
+        ):
+            # Create a new source with the combined query
+            split_source = LazyDataFrame(self._lib, read_request)
+
+            # Reuse the loaded index for reads.
+            # Keep it separate from as_of so schema discovery can run again
+            split_source._preloaded_index = original_source._preloaded_index
+            split_sources.append(split_source)
+
+        return split_sources
 
     def collect(self) -> List[Union[VersionedItem, DataError]]:
         """
@@ -714,15 +730,32 @@ class LazyDataFrameCollection(QueryBuilder):
             arrow_string_format_per_column=self._arrow_string_format_per_column,
         )
 
-    def _read_requests(self) -> List[ReadRequest]:
-        # Combines queries for individual LazyDataFrames with the global query associated with this
-        # LazyDataFrameCollection and returns a list of corresponding read requests
-        read_requests = [lazy_dataframe._to_read_request() for lazy_dataframe in self._lazy_dataframes]
+    def _read_requests(
+        self,
+        *,
+        use_preloaded_indexes: bool = True,
+    ) -> List[ReadRequest]:
+        """Build requests with individual and collection-level (batch) processing."""
+        read_requests = []
+
+        for lazy_dataframe in self._lazy_dataframes:
+            # Build a fresh request with the source's existing processing
+            read_request = lazy_dataframe._to_read_request()
+
+            if not use_preloaded_indexes:
+                # split() needs the original as_of setting on each new source.
+                # The loaded index is copied separately.
+                read_request = read_request._replace(
+                    as_of=lazy_dataframe.read_request.as_of,
+                )
+
+            read_requests.append(read_request)
+
         if len(self.clauses):
             for read_request in read_requests:
-                if read_request.query_builder is None:
-                    read_request.query_builder = QueryBuilder()
+                # Add the collection's shared processing to each fresh query
                 read_request.query_builder.then(self)
+
         return read_requests
 
     def __str__(self) -> str:

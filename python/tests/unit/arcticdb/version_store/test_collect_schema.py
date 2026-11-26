@@ -16,7 +16,7 @@ from arcticdb.exceptions import SchemaException, KeyNotFoundException
 from arcticdb.options import ArrowOutputStringFormat, OutputFormat
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal_with_arrow, config_context, query_stats_operation_count
-from arcticdb import LazyDataFrameCollection
+from arcticdb import LazyDataFrameCollection, concat
 from tests.util.arrow import create_1d_arrow_structure
 from pandas.testing import assert_frame_equal
 
@@ -599,6 +599,7 @@ def test_read_request_uses_latest_schema_index(mem_library):
         assert_frame_equal(result.data, newer)
 
 
+@pytest.mark.parametrize("operation", ["batch", "concat"])
 @pytest.mark.parametrize(
     "preload_first",
     [False, True],
@@ -609,95 +610,162 @@ def test_read_request_uses_latest_schema_index(mem_library):
     [False, True],
     ids=["second-unresolved", "second-preloaded"],
 )
-def test_batch_read_reuses_preloaded_indexes(
+def test_multiple_reads_reuse_preloaded_indexes(
     mem_library,
     clear_query_stats,
+    operation,
     preload_first,
     preload_second,
 ):
-    """Reuse loaded indexes and resolve ordinary selectors in the same batch."""
+    """Reuse loaded versions in batch and concat reads."""
     lib = mem_library
-    original = pd.DataFrame({"a": np.arange(6, dtype=np.int64)})
-    newer = original.assign(a=original["a"] + 100)
 
-    # Create version 0 for both symbols
-    lib.write("first", original)
-    lib.write("second", original)
+    # Separate timestamp ranges make concat's expected row order clear
+    first_data = pd.DataFrame(
+        {"a": np.arange(3, dtype=np.int64)},
+        index=pd.date_range("2020-01-01", periods=3),
+    )
+    second_data = pd.DataFrame(
+        {"a": np.arange(3, 6, dtype=np.int64)},
+        index=pd.date_range("2020-01-04", periods=3),
+    )
+    first_data.index.name = "ts"
+    second_data.index.name = "ts"
+
+    lib.write("first", first_data)
+    lib.write("second", second_data)
 
     first = lib.read("first", lazy=True)
     second = lib.read("second", lazy=True)
 
-    # Give each source its own filter
-    first = first[first["a"] > 1]
-    second = second[second["a"] > 2]
+    # These individual filters must survive batch/concat processing
+    first = first[first["a"] != 0]
+    second = second[second["a"] != 5]
 
     if preload_first:
-        # Resolve the first source while version 0 is latest
         first._collect_schema()
 
     if preload_second:
-        # Resolve the second source while version 0 is latest
         second._collect_schema()
 
     first_index = first._preloaded_index
     second_index = second._preloaded_index
 
-    # Publish version 1 after optional schema discovery
-    lib.write("first", newer)
-    lib.write("second", newer)
+    # Publish newer values after optional index loading
+    newer_first = first_data.assign(a=first_data["a"] + 100)
+    newer_second = second_data.assign(a=second_data["a"] + 100)
+    lib.write("first", newer_first)
+    lib.write("second", newer_second)
 
-    # Preloaded sources must keep version 0, unresolved sources should now select version 1
-    first_data = original if preload_first else newer
-    second_data = original if preload_second else newer
+    # Loaded sources keep version 0; unresolved sources select version 1
+    selected_first = first_data if preload_first else newer_first
+    selected_second = second_data if preload_second else newer_second
 
-    # Include the shared collection filter when calculating expected results
-    expected_first = first_data[
-        (first_data["a"] > 1) & (first_data["a"] < 104)
-    ].reset_index(drop=True)
+    expected_first = selected_first[selected_first["a"] != 0]
+    expected_second = selected_second[selected_second["a"] != 5]
 
-    expected_second = second_data[
-        (second_data["a"] > 2) & (second_data["a"] < 104)
-    ].reset_index(drop=True)
+    if operation == "batch":
+        query = LazyDataFrameCollection([first, second])
+    else:
+        query = concat([first, second])
 
-    collection = LazyDataFrameCollection([first, second])
+    # For batch, this filter applies to each source
+    # For concat, it applies after combining the sources
+    query = query[query["a"] < 105]
 
-    # Apply another filter to both sources
-    collection = collection[collection["a"] < 104]
+    expected_first = expected_first[expected_first["a"] < 105]
+    expected_second = expected_second[expected_second["a"] < 105]
 
     with config_context("VersionMap.ReloadInterval", 0):
-        # Collect twice to check that loaded indexes remain reusable
+        # Repeat the read to check that loaded indexes remain reusable
         for _ in range(2):
             qs.reset_stats()
 
             with qs.query_stats():
-                results = collection.collect()
+                result = query.collect()
                 stats = qs.get_query_stats()
 
-            assert len(results) == 2
+            if operation == "batch":
+                # Batch results must stay in input order
+                assert len(result) == 2
+                assert result[0].version == (0 if preload_first else 1)
+                assert result[1].version == (0 if preload_second else 1)
 
-            # Results must stay in the same order as the input sources
-            assert results[0].version == (0 if preload_first else 1)
-            assert results[1].version == (0 if preload_second else 1)
+                # Check values, timestamps and types.
+                # ArcticDB does not preserve pandas' index-frequency annotation
+                assert_frame_equal(result[0].data, expected_first, check_freq=False)
+                assert_frame_equal(result[1].data, expected_second, check_freq=False)
 
-            # Both the individual and shared filters must be preserved
-            assert_frame_equal(results[0].data, expected_first)
-            assert_frame_equal(results[1].data, expected_second)
+            else:
+                # Concat returns one combined frame
+                expected = pd.concat([expected_first, expected_second])
+                # Keep exact timestamp/value checks, but ignore index-frequency metadata
+                assert_frame_equal(result.data, expected, check_freq=False)
 
-            # Each small table occupies one data segment
-            assert query_stats_operation_count(
-                stats, "Memory_GetObject", "TABLE_DATA"
-            ) == 2
+            # Each input table occupies one data segment
+            assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 2
 
-            # Only unresolved sources need to fetch their indexes
-            expected_index_reads = (
-                int(not preload_first) + int(not preload_second)
-            )
-            assert query_stats_operation_count(
-                stats, "Memory_GetObject", "TABLE_INDEX"
-            ) == expected_index_reads
+            # Only unresolved inputs should fetch an index
+            expected_index_reads = int(not preload_first) + int(not preload_second)
+            assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == expected_index_reads
 
-    # Collection must not change the sources' saved indexes or selectors
+    # Collection must not replace the sources' saved indexes
     assert first._preloaded_index is first_index
     assert second._preloaded_index is second_index
+
+    # Keep the original latest instructions for future schema discovery
     assert first.read_request.as_of is None
     assert second.read_request.as_of is None
+
+
+def test_split_preserves_selector_and_preloaded_index(mem_library):
+    """Keep the original version setting, loaded index and combined query."""
+    lib = mem_library
+
+    # Write version 0
+    original = pd.DataFrame({"a": np.arange(6, dtype=np.int64)})
+    lib.write("data", original)
+
+    # Schema discovery now resolves latest to version 0 and loads its index
+    source = lib.read("data", lazy=True)
+    source._collect_schema()
+    loaded_index = source._preloaded_index
+    assert loaded_index is not None
+
+    # Put the source in a collection and add a shared filter
+    collection = LazyDataFrameCollection([source])
+    collection = collection[collection["a"] > 1]
+
+    # split() creates a new lazy source containing that filter
+    split_source = collection.split()[0]
+
+    # Keep "latest" as its original instruction.
+    # Do not store the preloaded-index object in read_request.as_of
+    assert split_source.read_request.as_of is None
+
+    # Carry the loaded index separately so data reads can reuse it
+    assert split_source._preloaded_index is loaded_index
+
+    # Publish version 1
+    newer = original.assign(a=original["a"] + 100)
+    lib.write("data", newer)
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        # The split source must still read version 0 using its saved index
+        result = split_source.collect()
+        assert result.version == 0
+
+        # The collection's filter must also survive split()
+        expected = original[original["a"] > 1].reset_index(drop=True)
+        assert_frame_equal(result.data, expected)
+
+        # A new schema call must still be able to resolve latest normally
+        split_source._collect_schema()
+        result = split_source.collect()
+
+        assert result.version == 1
+        assert_frame_equal(result.data, newer)
+
+    # Refreshing the split source must not replace the original source's index
+    assert source._preloaded_index is loaded_index
+    assert source.read_request.as_of is None
