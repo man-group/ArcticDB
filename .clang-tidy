@@ -13,7 +13,6 @@ Checks: >
   misc-unconventional-assign-operator,
   misc-unused-alias-decls,
   misc-unused-using-decls,
-  misc-use-anonymous-namespace,
   misc-use-internal-linkage,
   modernize-deprecated-headers,
   readability-redundant-inline-specifier,
