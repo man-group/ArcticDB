@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/version/python_bindings.hpp>
 #include <arcticdb/util/error_code.hpp>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>

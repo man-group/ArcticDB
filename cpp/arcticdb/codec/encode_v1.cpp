@@ -5,18 +5,13 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
  * will be governed by the Apache License, version 2.0.
  */
+#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb {
-void add_bitmagic_compressed_size(
-        const ColumnData& column_data, size_t& max_compressed_bytes, size_t& uncompressed_bytes
-);
-
-void encode_sparse_map(ColumnData& column_data, EncodedFieldImpl& variant_field, Buffer& out, std::ptrdiff_t& pos);
-
 /// @brief Utility class used to encode and compute the max encoding size for regular data columns for V1 encoding
 struct ColumnEncoderV1 {
     static std::pair<size_t, size_t> max_compressed_size(

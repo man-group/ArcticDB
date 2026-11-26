@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
@@ -13,12 +14,6 @@
 #include <arcticdb/codec/segment_identifier.hpp>
 
 namespace arcticdb {
-void add_bitmagic_compressed_size(
-        const ColumnData& column_data, size_t& max_compressed_bytes, size_t& uncompressed_bytes
-);
-
-void encode_sparse_map(ColumnData& column_data, EncodedFieldImpl& field, Buffer& out, std::ptrdiff_t& pos);
-
 template<typename MagicType>
 static void write_magic(Buffer& buffer, std::ptrdiff_t& pos) {
     new (buffer.data() + pos) MagicType{};

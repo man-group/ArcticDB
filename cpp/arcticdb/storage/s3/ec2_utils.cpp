@@ -1,3 +1,4 @@
+#include <arcticdb/storage/s3/ec2_utils.hpp>
 #include <aws/core/platform/Environment.h>
 #include <curl/curl.h>
 #include <arcticdb/log/log.hpp>
