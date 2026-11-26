@@ -13,6 +13,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/version/de_dup_map.hpp>
+#include <arcticdb/version/write_capture_cache.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 
 #include <folly/synchronization/NativeSemaphore.h>
@@ -144,10 +145,73 @@ struct StreamSink {
     // there is no such limit. Callers can use this to size the key batches they submit for deletion.
     [[nodiscard]] virtual std::optional<size_t> max_delete_batch_size() const { return std::nullopt; }
 
+    // Optional write-capture hooks used to embed already-compressed write artifacts into KeyType::LOG
+    // without issuing extra storage reads. Default no-op for minimal sinks/mocks.
+    [[nodiscard]] virtual bool is_write_capture_enabled() const { return false; }
+
+    [[nodiscard]] virtual std::optional<CapturedVersionWrite> take_captured_version_write(
+            const StreamId& /*stream_id*/, entity::VersionId /*version_id*/
+    ) {
+        return std::nullopt;
+    }
+
+    virtual void discard_captured_version_write(const StreamId& /*stream_id*/, entity::VersionId /*version_id*/) {}
+
     virtual timestamp current_timestamp() = 0;
 };
 
 } // namespace arcticdb::stream
+
+namespace arcticdb {
+
+// RAII guard that discards a (StreamId, VersionId) write-capture entry on any synchronous throw or
+// failed future so aborted writes cannot contaminate a subsequent retry at the same version_id.
+class WriteCaptureDiscardGuard {
+  public:
+    WriteCaptureDiscardGuard(
+            std::shared_ptr<stream::StreamSink> sink, StreamId stream_id, entity::VersionId version_id
+    ) :
+        sink_(std::move(sink)),
+        stream_id_(std::move(stream_id)),
+        version_id_(version_id),
+        active_(sink_ && sink_->is_write_capture_enabled()) {}
+
+    WriteCaptureDiscardGuard(const WriteCaptureDiscardGuard&) = delete;
+    WriteCaptureDiscardGuard& operator=(const WriteCaptureDiscardGuard&) = delete;
+
+    ~WriteCaptureDiscardGuard() {
+        if (active_) {
+            sink_->discard_captured_version_write(stream_id_, version_id_);
+        }
+    }
+
+    void dismiss() noexcept { active_ = false; }
+
+    template<typename T>
+    [[nodiscard]] folly::Future<T> discard_on_error(folly::Future<T>&& fut) {
+        const bool should_discard = active_;
+        dismiss();
+        if (!should_discard) {
+            return std::move(fut);
+        }
+        return std::move(fut).thenError(
+                [sink = std::move(sink_),
+                 stream_id = std::move(stream_id_),
+                 version_id = version_id_](folly::exception_wrapper&& ew) -> folly::Future<T> {
+                    sink->discard_captured_version_write(stream_id, version_id);
+                    return folly::makeFuture<T>(std::move(ew));
+                }
+        );
+    }
+
+  private:
+    std::shared_ptr<stream::StreamSink> sink_;
+    StreamId stream_id_;
+    entity::VersionId version_id_{0};
+    bool active_{false};
+};
+
+} // namespace arcticdb
 
 namespace fmt {
 using namespace arcticdb::stream;

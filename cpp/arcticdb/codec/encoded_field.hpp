@@ -356,7 +356,7 @@ constexpr size_t calc_field_bytes(size_t num_blocks) {
 static_assert(calc_field_bytes(0) >= sizeof(EncodedFieldImpl));
 
 inline size_t encoded_field_bytes(const EncodedField& encoded_field) {
-    return calc_field_bytes(encoded_field.shapes_count_ + encoded_field.values_count_);
+    return calc_field_bytes(size_t{encoded_field.shapes_count_} + size_t{encoded_field.values_count_});
 }
 
 } // namespace arcticdb

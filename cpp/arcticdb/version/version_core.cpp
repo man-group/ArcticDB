@@ -240,20 +240,6 @@ OutputSchema select_columns(OutputSchema&& output_schema, const std::unordered_s
 }
 
 namespace {
-/// Like folly::collect, but completes only once every future has completed, rethrowing the first exception. Use when
-/// the tasks read memory owned by the caller (e.g. a Python source), which may be freed as soon as an exception
-/// propagates.
-template<typename T>
-folly::SemiFuture<std::vector<T>> collect_all_then_rethrow(std::vector<folly::Future<T>>&& futures) {
-    return folly::collectAll(std::move(futures)).deferValue([](std::vector<folly::Try<T>>&& tries) {
-        auto values = util::reserve_vector<T>(tries.size());
-        for (auto& t : tries) {
-            values.emplace_back(std::move(t).value());
-        }
-        return values;
-    });
-}
-
 bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.start_; }
 
 bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
@@ -903,16 +889,13 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
     )));
     pipeline_context->set_output_schema(generate_output_schema(*pipeline_context, *read_query));
 
+    // When write capture is active, drain all scheduled sibling writes before returning an error
+    // so late-finishing writes cannot re-populate WriteCaptureCache after the caller discards it.
+    const bool fail_fast = flags.fail_fast && !store->is_write_capture_enabled();
     auto processed = read_and_schedule_processing(
-            store,
-            pipeline_context,
-            read_query,
-            read_options,
-            component_manager,
-            flags.decode_and_encode,
-            flags.fail_fast
+            store, pipeline_context, read_query, read_options, component_manager, flags.decode_and_encode, fail_fast
     );
-    if (!flags.fail_fast) {
+    if (!fail_fast) {
         processed = std::move(processed).thenError([component_manager](folly::exception_wrapper&& ew) {
             // Wait for the writes scheduled by the units which succeeded, so that none outlives the storage
             std::vector<folly::Future<SliceAndKey>> pending_writes;
@@ -927,7 +910,7 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
     }
     return std::move(processed).thenValue([component_manager = std::move(component_manager),
                                            read_query = std::move(read_query),
-                                           fail_fast = flags.fail_fast](std::vector<EntityId>&& processed_entity_ids) {
+                                           fail_fast](std::vector<EntityId>&& processed_entity_ids) {
         std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_futures =
                 std::get<0>(component_manager->get_and_remove_components<std::shared_ptr<folly::Future<SliceAndKey>>>(
                         processed_entity_ids
@@ -2764,7 +2747,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
             }
     );
 
-    auto keys = folly::collect(write_futures).get();
+    auto keys = collect_all_then_rethrow(std::move(write_futures)).get();
     auto vit =
             collate_and_write(store, pipeline_context, slices, keys, pipeline_context->incompletes_after(), user_meta);
     return vit;

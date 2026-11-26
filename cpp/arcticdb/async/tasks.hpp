@@ -14,6 +14,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/version/write_capture_cache.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/stream/stream_source.hpp>
@@ -150,16 +151,23 @@ struct EncodeRefTask : BaseTask {
 
 struct WriteSegmentTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
+    std::shared_ptr<WriteCaptureCache> capture_cache_;
 
-    explicit WriteSegmentTask(std::shared_ptr<storage::Library> lib) : lib_(std::move(lib)) {}
+    explicit WriteSegmentTask(
+            std::shared_ptr<storage::Library> lib, std::shared_ptr<WriteCaptureCache> capture_cache = nullptr
+    ) :
+        lib_(std::move(lib)),
+        capture_cache_(std::move(capture_cache)) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteSegmentTask)
 
     VariantKey operator()(storage::KeySegmentPair&& key_seg) const {
         ARCTICDB_SAMPLE(WriteSegmentTask, 0)
-        auto k = key_seg.variant_key();
         lib_->write(key_seg);
-        return k;
+        if (capture_cache_) {
+            capture_cache_->record_key_segment(key_seg);
+        }
+        return std::move(key_seg).variant_key();
     }
 };
 
@@ -181,18 +189,25 @@ struct WriteIfNoneTask : BaseTask {
 struct UpdateSegmentTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
     storage::UpdateOpts opts_;
+    std::shared_ptr<WriteCaptureCache> capture_cache_;
 
-    explicit UpdateSegmentTask(std::shared_ptr<storage::Library> lib, storage::UpdateOpts opts) :
+    explicit UpdateSegmentTask(
+            std::shared_ptr<storage::Library> lib, storage::UpdateOpts opts,
+            std::shared_ptr<WriteCaptureCache> capture_cache = nullptr
+    ) :
         lib_(std::move(lib)),
-        opts_(opts) {}
+        opts_(opts),
+        capture_cache_(std::move(capture_cache)) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(UpdateSegmentTask)
 
     VariantKey operator()(storage::KeySegmentPair&& key_seg) const {
         ARCTICDB_SAMPLE(UpdateSegmentTask, 0)
-        auto k = key_seg.variant_key();
         lib_->update(key_seg, opts_);
-        return k;
+        if (capture_cache_) {
+            capture_cache_->record_key_segment(key_seg);
+        }
+        return std::move(key_seg).variant_key();
     }
 };
 
@@ -262,16 +277,18 @@ struct CopyCompressedTask : BaseTask {
     StreamId stream_id_;
     VersionId version_id_;
     std::shared_ptr<storage::Library> lib_;
+    std::shared_ptr<WriteCaptureCache> capture_cache_;
 
     CopyCompressedTask(
             entity::VariantKey source_key, KeyType key_type, StreamId stream_id, VersionId version_id,
-            std::shared_ptr<storage::Library> lib
+            std::shared_ptr<storage::Library> lib, std::shared_ptr<WriteCaptureCache> capture_cache = nullptr
     ) :
         source_key_(std::move(source_key)),
         key_type_(key_type),
         stream_id_(std::move(stream_id)),
         version_id_(version_id),
-        lib_(std::move(lib)) {
+        lib_(std::move(lib)),
+        capture_cache_(std::move(capture_cache)) {
         ARCTICDB_DEBUG(
                 log::storage(),
                 "Creating copy compressed task for key {} -> {} {} {}",
@@ -291,9 +308,11 @@ struct CopyCompressedTask : BaseTask {
                     auto target_key_seg = stream::make_target_key<ClockType>(
                             key_type_, stream_id_, version_id_, source_key, std::move(*key_seg.segment_ptr())
                     );
-                    auto return_key = target_key_seg.variant_key();
                     lib_->write(target_key_seg);
-                    return return_key;
+                    if (capture_cache_) {
+                        capture_cache_->record_key_segment(target_key_seg);
+                    }
+                    return std::move(target_key_seg).variant_key();
                 },
                 source_key_
         );
@@ -602,10 +621,15 @@ struct KeyExistsTask : BaseTask {
 struct WriteCompressedTask : BaseTask {
     storage::KeySegmentPair kv_;
     std::shared_ptr<storage::Library> lib_;
+    std::shared_ptr<WriteCaptureCache> capture_cache_;
 
-    WriteCompressedTask(storage::KeySegmentPair&& key_seg, std::shared_ptr<storage::Library> lib) :
+    WriteCompressedTask(
+            storage::KeySegmentPair&& key_seg, std::shared_ptr<storage::Library> lib,
+            std::shared_ptr<WriteCaptureCache> capture_cache = nullptr
+    ) :
         kv_(std::move(key_seg)),
-        lib_(std::move(lib)) {
+        lib_(std::move(lib)),
+        capture_cache_(std::move(capture_cache)) {
         ARCTICDB_DEBUG(log::storage(), "Creating write compressed task");
     }
 
@@ -613,6 +637,9 @@ struct WriteCompressedTask : BaseTask {
 
     folly::Future<folly::Unit> write() {
         lib_->write(kv_);
+        if (capture_cache_) {
+            capture_cache_->record_key_segment(kv_);
+        }
         return folly::makeFuture();
     }
 
@@ -625,10 +652,15 @@ struct WriteCompressedTask : BaseTask {
 struct WriteCompressedBatchTask : BaseTask {
     std::vector<storage::KeySegmentPair> kvs_;
     std::shared_ptr<storage::Library> lib_;
+    std::shared_ptr<WriteCaptureCache> capture_cache_;
 
-    WriteCompressedBatchTask(std::vector<storage::KeySegmentPair>&& kvs, std::shared_ptr<storage::Library> lib) :
+    WriteCompressedBatchTask(
+            std::vector<storage::KeySegmentPair>&& kvs, std::shared_ptr<storage::Library> lib,
+            std::shared_ptr<WriteCaptureCache> capture_cache = nullptr
+    ) :
         kvs_(std::move(kvs)),
-        lib_(std::move(lib)) {
+        lib_(std::move(lib)),
+        capture_cache_(std::move(capture_cache)) {
         util::check(!kvs_.empty(), "WriteCompressedBatch task created with no data");
 
         ARCTICDB_DEBUG(log::storage(), "Creating read and decode task for {} keys", kvs_.size());
@@ -637,8 +669,12 @@ struct WriteCompressedBatchTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteCompressedBatchTask)
 
     folly::Future<folly::Unit> write() {
-        for (auto&& kv : kvs_)
+        for (auto&& kv : kvs_) {
             lib_->write(kv);
+            if (capture_cache_) {
+                capture_cache_->record_key_segment(kv);
+            }
+        }
 
         return folly::makeFuture();
     }

@@ -463,6 +463,8 @@ set(arcticdb_srcs
         util/variant.hpp
         version/admission_handler.hpp
         version/de_dup_map.hpp
+        version/enriched_op_log_payload.hpp
+        version/write_capture_cache.hpp
         version/op_log.hpp
         version/merge_options.hpp
         version/schema_checks.hpp
@@ -635,6 +637,8 @@ set(arcticdb_srcs
         util/type_handler.cpp
         util/format_date.cpp
         version/admission_handler.cpp
+        version/enriched_op_log_payload.cpp
+        version/write_capture_cache.cpp
         version/key_block.hpp
         version/key_block.cpp
         version/local_versioned_engine.cpp
@@ -1223,6 +1227,7 @@ if(${TEST})
             util/test/segment_generation_utils.cpp
             version/test/test_admission_handler.cpp
             version/test/test_append.cpp
+            version/test/test_enriched_op_log.cpp
             version/test/test_key_block.cpp
             version/test/test_object_sizes.cpp
             version/test/test_sort_index.cpp

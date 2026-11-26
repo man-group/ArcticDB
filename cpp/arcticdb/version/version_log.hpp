@@ -10,6 +10,8 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/stream/stream_sink.hpp>
+#include <arcticdb/version/enriched_op_log_payload.hpp>
 #include <arcticdb/version/op_log.hpp>
 #include <arcticdb/version/version_constants.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
@@ -33,6 +35,24 @@ inline void log_event(
 
 inline void log_write(const std::shared_ptr<StreamSink>& store, const StreamId& symbol, VersionId version_id) {
     log_event(store, symbol, WriteVersionId, version_id);
+}
+
+inline void log_write_enriched(
+        const std::shared_ptr<StreamSink>& store, const StreamId& symbol, VersionId version_id,
+        const EnrichedOpLogPayload& payload
+) {
+    const auto encoded = encode_enriched_op_log_payload(payload);
+    ExponentialBackoff<StorageException>(100, 2000).go([&store, &symbol, &version_id, &encoded]() {
+        SegmentInMemory seg = make_enriched_op_log_segment(WriteVersionId, encoded);
+        store->write_sync(
+                KeyType::LOG,
+                version_id,
+                StreamId{WriteVersionId},
+                IndexValue{symbol},
+                IndexValue{symbol},
+                std::move(seg)
+        );
+    });
 }
 
 inline void log_tombstone(const std::shared_ptr<StreamSink>& store, const StreamId& symbol, VersionId version_id) {

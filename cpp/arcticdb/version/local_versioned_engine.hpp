@@ -501,6 +501,11 @@ class LocalVersionedEngine : public VersionedEngine {
             arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta, bool prune_previous_versions
     );
 
+    folly::Future<VersionedItem> commit_optional_index_key_async(
+            folly::Future<std::optional<AtomKey>>&& index_key_fut, UpdateInfo&& update_info,
+            bool prune_previous_versions
+    );
+
     folly::Future<VersionedItem> async_compact_data_internal(
             UpdateInfo&& update_info, uint64_t rows_per_segment, bool prune_previous_versions
     );

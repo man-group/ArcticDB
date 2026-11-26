@@ -15,6 +15,7 @@
 #include <folly/futures/Future.h>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/version/write_capture_cache.hpp>
 
 namespace arcticdb::toolbox::apy {
 class LibraryTool;
@@ -59,7 +60,12 @@ class AsyncStore : public Store {
     ) :
         library_(std::move(library)),
         codec_(std::make_shared<proto::encoding::VariantCodec>(codec)),
-        encoding_version_(encoding_version) {}
+        encoding_version_(encoding_version),
+        sync_passive_enabled_(is_sync_passive_enabled(library_->config())) {}
+
+    [[nodiscard]] bool is_write_capture_enabled() const override {
+        return sync_passive_enabled_ && is_enriched_op_log_enabled();
+    }
 
     folly::Future<entity::VariantKey> write(
             stream::KeyType key_type, VersionId version_id, const StreamId& stream_id, IndexValue start_index,
@@ -85,7 +91,7 @@ class AsyncStore : public Store {
                                               encoding_version_
                                       })
                 .via(&async::io_executor())
-                .thenValue(WriteSegmentTask{library_});
+                .thenValue(WriteSegmentTask{library_, active_capture_cache()});
     }
 
     folly::Future<entity::VariantKey> write(
@@ -112,7 +118,7 @@ class AsyncStore : public Store {
                                               encoding_version_
                                       })
                 .via(&async::io_executor())
-                .thenValue(WriteSegmentTask{library_});
+                .thenValue(WriteSegmentTask{library_, active_capture_cache()});
     }
 
     folly::Future<VariantKey> write(stream::PartialKey pk, SegmentInMemory&& segment) override {
@@ -164,7 +170,7 @@ class AsyncStore : public Store {
                 codec_,
                 encoding_version_
         }();
-        return WriteSegmentTask{library_}(std::move(encoded));
+        return WriteSegmentTask{library_, active_capture_cache()}(std::move(encoded));
     }
 
     entity::VariantKey write_sync(stream::PartialKey pk, SegmentInMemory&& segment) override {
@@ -193,13 +199,21 @@ class AsyncStore : public Store {
     }
 
     folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair ks) override {
-        return async::submit_io_task(WriteCompressedTask{std::move(ks), library_});
+        return async::submit_io_task(WriteCompressedTask{std::move(ks), library_, active_capture_cache()});
     }
 
-    void write_compressed_sync(storage::KeySegmentPair ks) override { library_->write(ks); }
+    void write_compressed_sync(storage::KeySegmentPair ks) override {
+        library_->write(ks);
+        if (auto cache = active_capture_cache()) {
+            cache->record_key_segment(ks);
+        }
+    }
 
     void update_compressed_sync(storage::KeySegmentPair ks, storage::UpdateOpts opts) override {
         library_->update(ks, opts);
+        if (auto cache = active_capture_cache()) {
+            cache->record_key_segment(ks);
+        }
     }
 
     folly::Future<entity::VariantKey> update(
@@ -215,7 +229,7 @@ class AsyncStore : public Store {
 
         return async::submit_cpu_task(EncodeSegmentTask{key, std::move(segment), codec_, encoding_version_})
                 .via(&async::io_executor())
-                .thenValue(UpdateSegmentTask{library_, opts});
+                .thenValue(UpdateSegmentTask{library_, opts, active_capture_cache()});
     }
 
     entity::VariantKey update_sync(const entity::VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts opts)
@@ -229,21 +243,23 @@ class AsyncStore : public Store {
         );
 
         auto encoded = EncodeSegmentTask{key, std::move(segment), codec_, encoding_version_}();
-        return UpdateSegmentTask{library_, opts}(std::move(encoded));
+        return UpdateSegmentTask{library_, opts, active_capture_cache()}(std::move(encoded));
     }
 
     folly::Future<VariantKey> copy(
             KeyType key_type, const StreamId& stream_id, VersionId version_id, const VariantKey& source_key
     ) override {
-        return async::submit_io_task(
-                CopyCompressedTask<ClockType>{source_key, key_type, stream_id, version_id, library_}
-        );
+        return async::submit_io_task(CopyCompressedTask<ClockType>{
+                source_key, key_type, stream_id, version_id, library_, active_capture_cache()
+        });
     }
 
     VariantKey copy_sync(
             KeyType key_type, const StreamId& stream_id, VersionId version_id, const VariantKey& source_key
     ) override {
-        return CopyCompressedTask<ClockType>{source_key, key_type, stream_id, version_id, library_}();
+        return CopyCompressedTask<ClockType>{
+                source_key, key_type, stream_id, version_id, library_, active_capture_cache()
+        }();
     }
 
     timestamp current_timestamp() override { return ClockType::nanos_since_epoch(); }
@@ -391,7 +407,7 @@ class AsyncStore : public Store {
     }
 
     folly::Future<folly::Unit> batch_write_compressed(std::vector<storage::KeySegmentPair> kvs) override {
-        return async::submit_io_task(WriteCompressedBatchTask(std::move(kvs), library_));
+        return async::submit_io_task(WriteCompressedBatchTask(std::move(kvs), library_, active_capture_cache()));
     }
 
     folly::Future<folly::Unit> remove_key(const entity::VariantKey& key, storage::RemoveOpts opts) override {
@@ -505,6 +521,9 @@ class AsyncStore : public Store {
                 std::move(dedup_lookup),
                 [&, this](NewObject&& obj) {
                     library_->write(obj);
+                    if (auto cache = active_capture_cache()) {
+                        cache->record_key_segment(obj);
+                    }
                     return SliceAndKey{std::move(slice), std::move(obj).atom_key()};
                 },
                 [&](ExistingObject&& obj) { return SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }
@@ -559,6 +578,15 @@ class AsyncStore : public Store {
   private:
     friend class arcticdb::toolbox::apy::LibraryTool;
 
+    static bool is_sync_passive_enabled(const storage::LibraryDescriptor::VariantStoreConfig& cfg) {
+        const auto* vs_cfg = std::get_if<arcticdb::proto::storage::VersionStoreConfig>(&cfg);
+        return vs_cfg != nullptr && vs_cfg->write_options().sync_passive().enabled();
+    }
+
+    [[nodiscard]] std::shared_ptr<WriteCaptureCache> active_capture_cache() const {
+        return is_write_capture_enabled() ? write_capture_cache() : nullptr;
+    }
+
     static std::vector<std::vector<entity::VariantKey>> chunk_keys(
             std::vector<entity::VariantKey>&& keys, size_t batch_size
     ) {
@@ -574,6 +602,7 @@ class AsyncStore : public Store {
     std::shared_ptr<storage::Library> library_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
     const EncodingVersion encoding_version_;
+    const bool sync_passive_enabled_;
 };
 
 } // namespace arcticdb::async

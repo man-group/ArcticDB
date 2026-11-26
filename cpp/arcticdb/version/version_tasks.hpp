@@ -82,31 +82,39 @@ struct AsyncRestoreVersionTask : async::BaseTask {
         auto tsd = std::make_shared<TimeseriesDescriptor>(index_segment_reader.tsd().clone());
         auto sk = std::make_shared<std::vector<SliceAndKey>>(std::move(slice_and_keys));
         auto version_id = get_next_version_from_key(maybe_prev_->key);
+        WriteCaptureDiscardGuard capture_guard(store_, stream_id_, version_id);
         std::vector<folly::Future<VariantKey>> fut_keys;
         for (const auto& slice_and_key : *sk)
             fut_keys.emplace_back(store_->copy(slice_and_key.key().type(), stream_id_, version_id, slice_and_key.key())
             );
 
-        return folly::collect(fut_keys)
-                .via(&async::io_executor())
-                .thenValue([sk](auto keys) {
-                    std::vector<SliceAndKey> res;
-                    res.reserve(keys.size());
-                    for (std::size_t i = 0; i < res.capacity(); ++i) {
-                        res.emplace_back(SliceAndKey{(*sk)[i].slice_, std::move(to_atom(keys[i]))});
-                    }
-                    return res;
-                })
-                .thenValue([store = store_, version_map = version_map_, tsd = tsd, stream_id = stream_id_, version_id](
-                                   auto&& new_slice_and_keys
-                           ) {
-                    auto index = index_type_from_descriptor(tsd->as_stream_descriptor());
-                    return index::index_and_version(index, store, *tsd, new_slice_and_keys, stream_id, version_id);
-                })
-                .thenValue([store = store_, version_map = version_map_, tsd = tsd](auto versioned_item) {
-                    version_map->write_version(store, versioned_item.key_, std::nullopt);
-                    return std::make_pair(versioned_item, *tsd);
-                });
+        return capture_guard.discard_on_error(
+                folly::collectAll(std::move(fut_keys))
+                        .via(&async::io_executor())
+                        .thenValue([sk](std::vector<folly::Try<VariantKey>>&& tries) {
+                            std::vector<SliceAndKey> res;
+                            res.reserve(tries.size());
+                            for (std::size_t i = 0; i < tries.size(); ++i) {
+                                tries[i].throwUnlessValue();
+                                res.emplace_back(SliceAndKey{(*sk)[i].slice_, std::move(to_atom(tries[i].value()))});
+                            }
+                            return res;
+                        })
+                        .thenValue([store = store_,
+                                    version_map = version_map_,
+                                    tsd = tsd,
+                                    stream_id = stream_id_,
+                                    version_id](auto&& new_slice_and_keys) {
+                            auto index = index_type_from_descriptor(tsd->as_stream_descriptor());
+                            return index::index_and_version(
+                                    index, store, *tsd, new_slice_and_keys, stream_id, version_id
+                            );
+                        })
+                        .thenValue([store = store_, version_map = version_map_, tsd = tsd](const auto& versioned_item) {
+                            version_map->write_version(store, versioned_item.key_, std::nullopt);
+                            return std::make_pair(versioned_item, *tsd);
+                        })
+        );
     }
 };
 

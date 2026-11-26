@@ -35,6 +35,7 @@
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
 #include <arcticdb/async/batch_read_args.hpp>
+#include <arcticdb/version/enriched_op_log_payload.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/util/lock_table.hpp>
@@ -245,12 +246,20 @@ class VersionMapImpl {
         LoadStrategy load_param{LoadType::LATEST, LoadObjective::INCLUDE_DELETED};
         auto entry = check_reload(store, key.id(), load_param, __FUNCTION__);
 
+        const auto [is_clean_successor, prev_chain_index] =
+                (log_changes_ && is_enriched_op_log_enabled())
+                        ? check_clean_successor(*entry, key, previous_key, prevent_non_increasing_version_id)
+                        : std::pair<bool, std::optional<AtomKey>>{false, std::nullopt};
+
         do_write(store, key, entry, prevent_non_increasing_version_id);
         write_symbol_ref(store, key, previous_key, entry->head_.value());
         if (validate_)
             entry->validate();
-        if (log_changes_)
-            log_write(store, key.id(), key.version_id());
+        if (log_changes_) {
+            emit_write_op_log(store, key, prev_chain_index, is_clean_successor);
+        } else {
+            store->discard_captured_version_write(key.id(), key.version_id());
+        }
     }
 
     /**
@@ -271,7 +280,15 @@ class VersionMapImpl {
                     store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
             );
         }
-        auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
+        std::optional<AtomKey> tombstone_key;
+        auto output = tombstone_from_key_or_all_internal(
+                store,
+                stream_id,
+                std::move(first_key_to_tombstone),
+                entry,
+                /*should_write_to_storage=*/true,
+                &tombstone_key
+        );
 
         if (validate_)
             entry->validate();
@@ -280,6 +297,10 @@ class VersionMapImpl {
             write_symbol_ref(
                     store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), std::nullopt, entry->head_.value()
             );
+
+        if (log_changes_ && tombstone_key.has_value()) {
+            log_tombstone_all(store, stream_id, tombstone_key->version_id());
+        }
 
         return output;
     }
@@ -297,6 +318,7 @@ class VersionMapImpl {
         ARCTICDB_DEBUG(log::version(), "Version map pruning previous versions for stream {}", key.id());
         auto entry =
                 check_reload(store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__);
+        const bool was_empty = entry->empty();
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
 
         std::vector<AtomKey> keys_to_write;
@@ -316,9 +338,14 @@ class VersionMapImpl {
 
         maybe_invalidate_cached_undeleted(*entry);
         if (log_changes_) {
-            if (tombstone_all_key)
+            if (tombstone_all_key) {
                 log_tombstone_all(store, tombstone_all_key.value().id(), tombstone_all_key.value().version_id());
-            log_write(store, key.id(), key.version_id());
+            }
+            const bool is_clean_brand_new = !tombstone_all_key.has_value() && key.type() == KeyType::TABLE_INDEX &&
+                                            was_empty && !previous_key.has_value();
+            emit_write_op_log(store, key, std::nullopt, is_clean_brand_new);
+        } else {
+            store->discard_captured_version_write(key.id(), key.version_id());
         }
 
         return result;
@@ -1206,11 +1233,68 @@ class VersionMapImpl {
     }
 
   private:
+    static std::pair<bool, std::optional<AtomKey>> check_clean_successor(
+            const VersionMapEntry& entry, const AtomKey& key, const std::optional<AtomKey>& previous_key,
+            bool prevent_non_increasing_version_id
+    ) {
+        if (!prevent_non_increasing_version_id || key.type() != KeyType::TABLE_INDEX) {
+            return {false, std::nullopt};
+        }
+        if (entry.empty()) {
+            return {!previous_key.has_value(), std::nullopt};
+        }
+        if (!entry.keys_.empty() && entry.keys_.front().type() == KeyType::TABLE_INDEX &&
+            !entry.is_tombstoned(entry.keys_.front())) {
+            auto prev_chain_index = entry.keys_.front().to_atom_key(entry.stream_id_);
+            const bool is_clean = !previous_key.has_value() || *previous_key == prev_chain_index;
+            return {is_clean, std::move(prev_chain_index)};
+        }
+        return {false, std::nullopt};
+    }
+
+    static bool is_matching_column_stats_key(const AtomKey& cs_key, const AtomKey& index_key) noexcept {
+        return cs_key.type() == KeyType::COLUMN_STATS && cs_key.id() == index_key.id() &&
+               cs_key.version_id() == index_key.version_id() && cs_key.creation_ts() == index_key.creation_ts() &&
+               cs_key.content_hash() == index_key.content_hash();
+    }
+
+    static void emit_write_op_log(
+            const std::shared_ptr<Store>& store, const AtomKey& key, const std::optional<AtomKey>& prev_chain_index,
+            bool is_clean_successor
+    ) {
+        if (!is_enriched_op_log_enabled() || !is_clean_successor) {
+            store->discard_captured_version_write(key.id(), key.version_id());
+            log_write(store, key.id(), key.version_id());
+            return;
+        }
+        auto captured = store->take_captured_version_write(key.id(), key.version_id());
+        if (!captured.has_value() || !captured->index_key.has_value() || *captured->index_key != key ||
+            captured->compressed_index_bytes.empty() ||
+            captured->compressed_index_bytes.size() > kMaxEnrichedOpLogBlobBytes ||
+            captured->newly_written_data_keys.size() > kMaxEnrichedOpLogKeysPerPayload ||
+            captured->column_stats_bytes.size() > kMaxEnrichedOpLogBlobBytes) {
+            log_write(store, key.id(), key.version_id());
+            return;
+        }
+        EnrichedOpLogPayload payload;
+        payload.new_index_key = key;
+        payload.prev_index_key = prev_chain_index;
+        payload.is_clean_chain_successor = true;
+        payload.compressed_index_bytes = std::move(captured->compressed_index_bytes);
+        payload.newly_written_data_keys = std::move(captured->newly_written_data_keys);
+        if (captured->column_stats_key.has_value() && is_matching_column_stats_key(*captured->column_stats_key, key)) {
+            payload.column_stats_key = std::move(captured->column_stats_key);
+            payload.column_stats_bytes = std::move(captured->column_stats_bytes);
+        }
+        log_write_enriched(store, key.id(), key.version_id(), payload);
+    }
+
     FRIEND_TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad);
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(
             std::shared_ptr<Store> store, const StreamId& stream_id,
             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
-            std::shared_ptr<VersionMapEntry> entry = nullptr, bool should_write_to_storage = true
+            std::shared_ptr<VersionMapEntry> entry = nullptr, bool should_write_to_storage = true,
+            std::optional<AtomKey>* written_tombstone_key = nullptr
     ) {
         if (!entry) {
             entry = check_reload(
@@ -1234,8 +1318,8 @@ class VersionMapImpl {
 
         if (!output.empty() && should_write_to_storage) {
             auto tombstone_key = write_tombstone_all_key_internal(store, first_key_to_tombstone.value(), entry);
-            if (log_changes_) {
-                log_tombstone_all(store, stream_id, tombstone_key.version_id());
+            if (written_tombstone_key) {
+                *written_tombstone_key = std::move(tombstone_key);
             }
         }
 

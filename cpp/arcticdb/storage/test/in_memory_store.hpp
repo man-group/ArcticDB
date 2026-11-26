@@ -16,6 +16,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/version/enriched_op_log_payload.hpp>
 
 #include <folly/futures/Future.h>
 
@@ -372,7 +373,7 @@ class InMemoryStore : public Store {
             override {
         return std::move(input_fut).thenValue([this](auto&& input) {
             auto [pk, seg, slice] = std::move(input);
-            auto key = get_key(pk.key_type, 0, pk.stream_id, pk.start_index, pk.end_index);
+            auto key = get_key(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index);
             add_segment(key, std::move(seg));
             return SliceAndKey{std::move(slice), std::move(key)};
         });
@@ -382,7 +383,7 @@ class InMemoryStore : public Store {
     compress_and_schedule_async_write(std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input, const std::shared_ptr<DeDupMap>&)
             override {
         auto [pk, seg, slice] = std::move(input);
-        auto key = get_key(pk.key_type, 0, pk.stream_id, pk.start_index, pk.end_index);
+        auto key = get_key(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index);
         add_segment(key, std::move(seg));
         return SliceAndKey{std::move(slice), std::move(key)};
     }
@@ -548,8 +549,22 @@ class InMemoryStore : public Store {
 
     std::string name() const override { return "InMemoryStore"; }
 
+    [[nodiscard]] bool is_write_capture_enabled() const override { return is_enriched_op_log_enabled(); }
+
     void add_segment(const AtomKey& key, SegmentInMemory&& seg) {
         StorageFailureSimulator::instance()->go(FailureType::WRITE);
+        if (is_write_capture_enabled()) {
+            if (key.type() == KeyType::TABLE_DATA) {
+                write_capture_cache()->record_data(key);
+            } else if (key.type() == KeyType::TABLE_INDEX || key.type() == KeyType::COLUMN_STATS) {
+                Segment encoded = encode_dispatch(seg.clone(), codec_, EncodingVersion::V1);
+                if (key.type() == KeyType::TABLE_INDEX) {
+                    write_capture_cache()->record_index(key, encoded);
+                } else {
+                    write_capture_cache()->record_column_stats(key, encoded);
+                }
+            }
+        }
         std::lock_guard lock{mutex_};
         ARCTICDB_DEBUG(log::storage(), "Adding segment with key {}", key);
         seg_by_atom_key_[key] = std::make_unique<SegmentInMemory>(std::move(seg));

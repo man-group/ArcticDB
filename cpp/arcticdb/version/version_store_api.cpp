@@ -63,8 +63,10 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     auto input_frame = convert::py_input_item_to_frame(
             stream_id, item, norm, user_meta, cfg().write_options().empty_types(), pipelines::SortednessScan::SKIP
     );
+    WriteCaptureDiscardGuard capture_guard(store(), stream_id, VersionId(version_id));
     auto index_key = async_write_dataframe_impl(store(), VersionId(version_id), input_frame, get_write_options()).get();
     version_map()->write_version(store(), index_key, std::nullopt);
+    capture_guard.dismiss();
     if (cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, version_id);
 
@@ -776,6 +778,9 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     auto index_keys =
             batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)
                     .get();
+    for (const auto& sub_key : sub_keys) {
+        store()->discard_captured_version_write(sub_key, update_info.next_version_id_);
+    }
     release_gil.reset();
     auto multi_key = write_multi_index_entry(
             store(), index_keys, stream_id, metastruct, user_meta, update_info.next_version_id_

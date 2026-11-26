@@ -225,9 +225,23 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store, VersionIdentifier version_info, ReadQuery& read_query,
         const ReadOptions& read_options
 );
+
 } // namespace arcticdb::version_store
 
 namespace arcticdb {
+
+/// Like folly::collect, but completes only once every future has completed, rethrowing the first exception.
+template<typename T>
+folly::SemiFuture<std::vector<T>> collect_all_then_rethrow(std::vector<folly::Future<T>>&& futures) {
+    return folly::collectAll(std::move(futures)).deferValue([](std::vector<folly::Try<T>>&& tries) {
+        std::vector<T> values;
+        values.reserve(tries.size());
+        for (auto& t : tries) {
+            values.emplace_back(std::move(t).value());
+        }
+        return values;
+    });
+}
 
 using CompactionWrittenKeys = std::vector<VariantKey>;
 using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
@@ -348,7 +362,7 @@ template<
         );
 
         if (options.validate_index && is_segment_unsorted(segment)) {
-            auto written_keys = folly::collect(write_futures).get();
+            auto written_keys = collect_all_then_rethrow(std::move(write_futures)).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
         }
@@ -358,7 +372,7 @@ template<
     }
 
     aggregator.commit();
-    return folly::collect(std::move(write_futures)).get();
+    return collect_all_then_rethrow(std::move(write_futures)).get();
 }
 
 } // namespace arcticdb
