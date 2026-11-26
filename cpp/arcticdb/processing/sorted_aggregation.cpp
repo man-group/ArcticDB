@@ -17,7 +17,7 @@
 namespace arcticdb {
 template<typename InputTypeInfo, typename OutputTypeInfo>
 requires util::instantiation_of<InputTypeInfo, ScalarTypeInfo> && util::instantiation_of<OutputTypeInfo, ScalarTypeInfo>
-consteval bool is_aggregation_allowed(const AggregationOperator aggregation_operator) {
+consteval static bool is_aggregation_allowed(const AggregationOperator aggregation_operator) {
     return (is_numeric_type(InputTypeInfo::data_type) && is_numeric_type(OutputTypeInfo::data_type)) ||
            (is_sequence_type(InputTypeInfo::data_type) &&
             (is_sequence_type(OutputTypeInfo::data_type) || aggregation_operator == AggregationOperator::COUNT)) ||
@@ -27,7 +27,7 @@ consteval bool is_aggregation_allowed(const AggregationOperator aggregation_oper
 
 template<typename OutputTypeInfo>
 requires util::instantiation_of<OutputTypeInfo, ScalarTypeInfo>
-consteval bool is_aggregation_allowed(const AggregationOperator aggregation_operator) {
+consteval static bool is_aggregation_allowed(const AggregationOperator aggregation_operator) {
     return is_numeric_type(OutputTypeInfo::data_type) || is_bool_type(OutputTypeInfo::data_type) ||
            (is_sequence_type(OutputTypeInfo::data_type) &&
             (aggregation_operator == AggregationOperator::FIRST || aggregation_operator == AggregationOperator::LAST));

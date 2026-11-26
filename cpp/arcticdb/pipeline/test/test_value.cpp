@@ -12,7 +12,7 @@ TEST(Value, DefaultConstruct) {
 
 class ValueDataType : public ::testing::TestWithParam<DataType> {};
 
-consteval auto data_types() {
+consteval static auto data_types() {
     return std::array{
             DataType::INT8,
             DataType::INT16,
@@ -28,7 +28,7 @@ consteval auto data_types() {
 
 template<typename TypeTag>
 requires std::derived_from<TypeTag, DataTypeTagBase>
-consteval auto generate_numeric_testing_values() {
+consteval static auto generate_numeric_testing_values() {
     using raw_type = typename TypeTag::raw_type;
     constexpr DataType data_type = TypeTag::data_type;
     if constexpr (is_signed_type(data_type) || is_time_type(data_type)) {
@@ -158,7 +158,7 @@ class ValueDataTypePair : public ::testing::TestWithParam<std::tuple<DataType, D
 
 template<typename TypeTag>
 requires std::derived_from<TypeTag, DataTypeTagBase>
-consteval auto generate_pair_of_different_values_for_data_type() {
+consteval static auto generate_pair_of_different_values_for_data_type() {
     using raw_type = typename TypeTag::raw_type;
     constexpr DataType data_type = TypeTag::data_type;
     if constexpr (is_signed_type(data_type) || is_time_type(data_type)) {

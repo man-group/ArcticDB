@@ -84,7 +84,7 @@ FrameDescriptorImpl frame_descriptor_from_proto(arcticdb::proto::descriptors::Ti
     return output;
 }
 
-inline SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedValue sorted_proto) {
+inline static SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedValue sorted_proto) {
     switch (sorted_proto) {
     case arcticdb::proto::descriptors::SortedValue::UNSORTED:
         return SortedValue::UNSORTED;

@@ -36,7 +36,7 @@ SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId
     seed_(seed),
     version_map_(std::move(version_map)) {}
 
-auto warning_threshold() {
+static auto warning_threshold() {
     return 2 * static_cast<size_t>(
                        ConfigsMap::instance()
                                ->get_int("SymbolList.MaxDelta")
@@ -44,7 +44,7 @@ auto warning_threshold() {
                );
 }
 
-bool is_new_style_key(const AtomKey& key) {
+static bool is_new_style_key(const AtomKey& key) {
     return util::variant_match(
             key.end_index(),
             [](std::string_view str) { return str == version_string; },
@@ -52,7 +52,7 @@ bool is_new_style_key(const AtomKey& key) {
     );
 }
 
-std::vector<SymbolListEntry> load_previous_from_version_keys(
+static std::vector<SymbolListEntry> load_previous_from_version_keys(
         const std::shared_ptr<Store>& store, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
 ) {
     std::vector<StreamId> stream_ids;
@@ -98,20 +98,22 @@ std::vector<SymbolListEntry> load_previous_from_version_keys(
 // provided in SegmentInMemory, because the symbol list structure is the only place where columns can have more entries
 // than the segment has rows. Hence, we need to bypass the checks inside SegmentInMemory's function and directly call
 // the Column's string_at and scalar_at.
-std::string_view string_at(const SegmentInMemory& seg, position_t row, position_t col) {
+static std::string_view string_at(const SegmentInMemory& seg, position_t row, position_t col) {
     auto offset = seg.column(col).scalar_at<position_t>(row);
     util::check(offset.has_value(), "Symbol list trying to call string_at for missing row {}, column {}", row, col);
     return seg.string_pool_ptr()->get_view(offset.value());
 }
 
 template<typename T>
-T scalar_at(const SegmentInMemory& seg, position_t row, position_t col) {
+static T scalar_at(const SegmentInMemory& seg, position_t row, position_t col) {
     auto scalar = seg.column(col).scalar_at<T>(row);
     util::check(scalar.has_value(), "Symbol list trying to call scalar_at for missing row {}, column {}", row, col);
     return scalar.value();
 }
 
-StreamId stream_id_from_segment(DataType data_type, const SegmentInMemory& seg, position_t row_id, position_t column) {
+static StreamId stream_id_from_segment(
+        DataType data_type, const SegmentInMemory& seg, position_t row_id, position_t column
+) {
     if (data_type == DataType::UINT64) {
         auto num_id = scalar_at<uint64_t>(seg, row_id, column);
         ARCTICDB_DEBUG(log::symbol(), "Reading numeric symbol {}", num_id);
@@ -123,7 +125,7 @@ StreamId stream_id_from_segment(DataType data_type, const SegmentInMemory& seg, 
     }
 }
 
-DataType get_symbol_data_type(const SegmentInMemory& seg) {
+static DataType get_symbol_data_type(const SegmentInMemory& seg) {
     const auto& field_desc = seg.descriptor().field(0);
     auto data_type = field_desc.type().data_type();
 
@@ -136,7 +138,7 @@ DataType get_symbol_data_type(const SegmentInMemory& seg) {
     return data_type;
 }
 
-std::vector<SymbolListEntry> read_old_style_list_from_storage(const SegmentInMemory& seg) {
+static std::vector<SymbolListEntry> read_old_style_list_from_storage(const SegmentInMemory& seg) {
     std::vector<SymbolListEntry> output;
     if (seg.empty())
         return output;
@@ -149,7 +151,7 @@ std::vector<SymbolListEntry> read_old_style_list_from_storage(const SegmentInMem
     return output;
 }
 
-std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMemory& seg) {
+static std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMemory& seg) {
     std::vector<SymbolListEntry> output;
     if (seg.empty())
         return output;
@@ -203,7 +205,7 @@ std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMem
     return output;
 }
 
-std::vector<SymbolListEntry> read_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key) {
+static std::vector<SymbolListEntry> read_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key) {
     ARCTICDB_DEBUG(log::symbol(), "Reading list from storage with key {}", key);
     auto [_, seg] = store->read_sync(key);
     if (seg.row_count() == 0)
@@ -228,7 +230,7 @@ JournalEntryData::JournalEntryData(const AtomKey& key) :
 
 // Reconstructs the original AtomKey from a JournalEntryData + the owning symbol (map key).
 // For new-style keys the end_index encodes the version marker; for old-style it equals the symbol.
-AtomKey atom_key_from_journal_entry(const StreamId& symbol, const JournalEntryData& ck) {
+static AtomKey atom_key_from_journal_entry(const StreamId& symbol, const JournalEntryData& ck) {
     IndexValue end_index;
     if (ck.is_new_style) {
         end_index = std::holds_alternative<StringId>(symbol) ? IndexValue{StringIndex{std::string{version_string}}}
@@ -245,11 +247,11 @@ AtomKey atom_key_from_journal_entry(const StreamId& symbol, const JournalEntryDa
             .build(action_id(ck.action), KeyType::SYMBOL_LIST);
 }
 
-void add_journal_entry(JournalMapType& update_map, const AtomKey& key) {
+static void add_journal_entry(JournalMapType& update_map, const AtomKey& key) {
     update_map[key.start_index()].emplace_back(key);
 }
 
-void sort_journal_map(JournalMapType& update_map) {
+static void sort_journal_map(JournalMapType& update_map) {
     for (auto& [symbol, keys] : update_map) {
         std::sort(keys.begin(), keys.end(), [](const JournalEntryData& a, const JournalEntryData& b) {
             auto a_ver = a.is_new_style ? a.key_version_id : VersionId{0};
@@ -261,7 +263,7 @@ void sort_journal_map(JournalMapType& update_map) {
 
 /// Single-pass iteration over SYMBOL_LIST keys: builds the update map and locates the latest
 /// compaction key. Always uses JournalEntryData (26B/entry) for the update map.
-JournalResult load_journal_streaming(
+static JournalResult load_journal_streaming(
         const std::shared_ptr<Store>& store, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
 ) {
     JournalResult result;
@@ -299,7 +301,7 @@ JournalResult load_journal_streaming(
     return result;
 }
 
-auto tail_range(const std::vector<JournalEntryData>& updated) {
+static auto tail_range(const std::vector<JournalEntryData>& updated) {
     auto it = std::crbegin(updated);
     const auto reference_id = it->reference_id();
     auto action = it->action;
@@ -316,7 +318,7 @@ auto tail_range(const std::vector<JournalEntryData>& updated) {
     return std::make_pair(it, all_same_action);
 }
 
-std::optional<SymbolEntryData> timestamps_too_close(
+static std::optional<SymbolEntryData> timestamps_too_close(
         const std::vector<JournalEntryData>::const_reverse_iterator& first,
         const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval, bool all_same_action
 ) {
@@ -333,23 +335,25 @@ std::optional<SymbolEntryData> timestamps_too_close(
     return SymbolEntryData{latest};
 }
 
-bool has_unknown_reference_id(const SymbolEntryData& data) { return data.reference_id_ == unknown_version_id; }
+static bool has_unknown_reference_id(const SymbolEntryData& data) { return data.reference_id_ == unknown_version_id; }
 
-bool contains_unknown_reference_ids(const std::vector<JournalEntryData>& updated) {
+static bool contains_unknown_reference_ids(const std::vector<JournalEntryData>& updated) {
     return std::any_of(std::begin(updated), std::end(updated), [](const auto& data) {
         return data.reference_id() == unknown_version_id;
     });
 }
 
-SymbolVectorResult cannot_validate_symbol_vector() { return {ProblematicResult{true}}; }
+static SymbolVectorResult cannot_validate_symbol_vector() { return {ProblematicResult{true}}; }
 
-SymbolVectorResult vector_has_problem(const SymbolEntryData& data) { return {ProblematicResult{data}}; }
+static SymbolVectorResult vector_has_problem(const SymbolEntryData& data) { return {ProblematicResult{data}}; }
 
-SymbolVectorResult vector_okay(bool all_same_version, bool all_same_action, size_t latest_id_count) {
+static SymbolVectorResult vector_okay(bool all_same_version, bool all_same_action, size_t latest_id_count) {
     return {ProblematicResult{false}, all_same_version, all_same_action, latest_id_count};
 }
 
-SymbolVectorResult is_problematic_vector(const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval) {
+static SymbolVectorResult is_problematic_vector(
+        const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval
+) {
     if (contains_unknown_reference_ids(updated))
         return cannot_validate_symbol_vector();
 
@@ -408,7 +412,7 @@ ProblematicResult is_problematic(
     return ProblematicResult{SymbolEntryData{latest}};
 }
 
-void resolve_problematic_symbols(
+static void resolve_problematic_symbols(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
         ankerl::unordered_dense::map<StreamId, std::pair<VersionId, timestamp>>& problematic_symbols,
         CollectionType& symbols
@@ -460,7 +464,7 @@ void resolve_problematic_symbols(
 
 /// Merges journal entries (JournalEntryData map) with existing compacted or version-key symbols.
 /// The map is read-only so it can be moved into LoadResult for later batch deletion.
-CollectionType merge_existing_with_journal_map(
+static CollectionType merge_existing_with_journal_map(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
         const JournalMapType& update_map, std::vector<SymbolListEntry>&& existing
 ) {
@@ -515,7 +519,7 @@ CollectionType merge_existing_with_journal_map(
     return symbols;
 }
 
-CollectionType load_from_symbol_list_keys(
+static CollectionType load_from_symbol_list_keys(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
         const JournalMapType& update_map, const AtomKey& compaction_key
 ) {
@@ -529,7 +533,7 @@ CollectionType load_from_symbol_list_keys(
     return merge_existing_with_journal_map(version_map, store, update_map, std::move(existing));
 }
 
-CollectionType load_from_version_keys(
+static CollectionType load_from_version_keys(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
         const JournalMapType& update_map, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
 ) {
@@ -579,7 +583,7 @@ LoadResult attempt_load(
     return load_result;
 }
 
-inline StreamDescriptor journal_stream_descriptor(ActionType action, const StreamId& id) {
+inline static StreamDescriptor journal_stream_descriptor(ActionType action, const StreamId& id) {
     return util::variant_match(
             id,
             [action](const NumericId&) {
@@ -595,7 +599,7 @@ inline StreamDescriptor journal_stream_descriptor(ActionType action, const Strea
     );
 }
 
-void write_journal(
+static void write_journal(
         const std::shared_ptr<Store>& store, const StreamId& symbol, ActionType action, VersionId reference_id
 ) {
     SegmentInMemory seg{journal_stream_descriptor(action, symbol)};
@@ -619,11 +623,11 @@ void write_journal(
     );
 }
 
-void write_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, VersionId reference_id) {
+static void write_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, VersionId reference_id) {
     write_journal(store, symbol, ActionType::ADD, reference_id);
 }
 
-void delete_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, VersionId reference_id) {
+static void delete_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, VersionId reference_id) {
     write_journal(store, symbol, ActionType::DELETE, reference_id);
 }
 
@@ -639,7 +643,7 @@ void SymbolList::clear(const std::shared_ptr<Store>& store) {
     delete_all_keys_of_type(KeyType::SYMBOL_LIST, store, true);
 }
 
-StreamDescriptor add_symbol_stream_descriptor(const StreamId& stream_id, const StreamId& type_holder) {
+static StreamDescriptor add_symbol_stream_descriptor(const StreamId& stream_id, const StreamId& type_holder) {
     auto data_type = std::holds_alternative<StringId>(type_holder) ? DataType::ASCII_DYNAMIC64 : DataType::UINT64;
     return stream_descriptor(
             stream_id,
@@ -650,7 +654,7 @@ StreamDescriptor add_symbol_stream_descriptor(const StreamId& stream_id, const S
     );
 }
 
-StreamDescriptor delete_symbol_stream_descriptor(const StreamId& stream_id, const StreamId& type_holder) {
+static StreamDescriptor delete_symbol_stream_descriptor(const StreamId& stream_id, const StreamId& type_holder) {
     auto data_type = std::holds_alternative<StringId>(type_holder) ? DataType::ASCII_DYNAMIC64 : DataType::UINT64;
     return stream_descriptor(
             stream_id,
@@ -705,7 +709,7 @@ bool SymbolList::needs_compaction(const LoadResult& load_result) const {
     return result;
 }
 
-void write_symbol_at(
+static void write_symbol_at(
         const StreamId& type_holder, SegmentInMemory& list_segment, const SymbolListEntry& entry, position_t column
 ) {
     util::variant_match(
@@ -727,14 +731,14 @@ void write_symbol_at(
     );
 }
 
-void write_entry(const StreamId& type_holder, SegmentInMemory& segment, const SymbolListEntry& entry) {
+static void write_entry(const StreamId& type_holder, SegmentInMemory& segment, const SymbolListEntry& entry) {
     write_symbol_at(type_holder, segment, entry, 0);
     segment.set_scalar(1, entry.reference_id_);
     segment.set_scalar(2, entry.timestamp_);
     segment.end_row();
 }
 
-SegmentInMemory write_entries_to_symbol_segment(
+static SegmentInMemory write_entries_to_symbol_segment(
         const StreamId& stream_id, const StreamId& type_holder, const CollectionType& symbols
 ) {
     SegmentInMemory added_segment{add_symbol_stream_descriptor(stream_id, type_holder)};
@@ -776,12 +780,12 @@ SegmentInMemory write_entries_to_symbol_segment(
     return added_segment;
 }
 
-SegmentInMemory create_empty_segment(const StreamId& stream_id) {
+static SegmentInMemory create_empty_segment(const StreamId& stream_id) {
     SegmentInMemory output{StreamDescriptor{stream_id}};
     return output;
 }
 
-VariantKey write_symbols(
+static VariantKey write_symbols(
         const std::shared_ptr<Store>& store, CollectionType&& symbols, const StreamId& stream_id,
         const StreamId& type_holder
 ) {
@@ -816,7 +820,7 @@ void delete_keys(const std::shared_ptr<Store>& store, std::vector<AtomKey>&& rem
     store->remove_keys_sync(variant_keys);
 }
 
-bool has_recent_compaction(const std::shared_ptr<Store>& store, const std::optional<AtomKey>& compaction_key) {
+static bool has_recent_compaction(const std::shared_ptr<Store>& store, const std::optional<AtomKey>& compaction_key) {
     bool found_last = false;
     bool has_newer = false;
 
@@ -870,7 +874,7 @@ size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
 // remove_keys, which internally chunks it to the storage's delete limit and runs the chunks across
 // the IO threads — so io_thread_count * delete_batch_size keys per batch saturates the IO pool while
 // keeping the reconstructed-key memory bounded. Overridable via config for tuning.
-size_t compaction_delete_batch_size(const std::shared_ptr<Store>& store) {
+static size_t compaction_delete_batch_size(const std::shared_ptr<Store>& store) {
     constexpr size_t default_storage_batch = 1000; // assumed limit when the storage reports none
     const auto io_threads = static_cast<size_t>(async::TaskScheduler::instance()->io_thread_count());
     const auto storage_batch = store->max_delete_batch_size().value_or(default_storage_batch);
@@ -883,7 +887,9 @@ size_t compaction_delete_batch_size(const std::shared_ptr<Store>& store) {
 // keys (typically 0–1) and every journal key, all deleted through one batched flow. The freshly
 // written compaction key is excluded from the deletion (see the corner case below). Consumes
 // journal.compaction_keys and journal.update_map.
-void delete_superseded_keys(const std::shared_ptr<Store>& store, JournalResult& journal, const AtomKey& written_key) {
+static void delete_superseded_keys(
+        const std::shared_ptr<Store>& store, JournalResult& journal, const AtomKey& written_key
+) {
     const size_t batch_size = compaction_delete_batch_size(store);
     std::vector<VariantKey> batch;
     batch.reserve(batch_size);

@@ -30,7 +30,7 @@ struct ResolvedTimezone {
     std::string original_name;
 };
 
-std::optional<sparrow::validity_bitmap> create_validity_bitmap(
+static std::optional<sparrow::validity_bitmap> create_validity_bitmap(
         size_t offset, const Column& column, size_t bitmap_size
 ) {
     if (column.has_extra_buffer(offset, ExtraBufferType::BITMAP)) {
@@ -49,7 +49,7 @@ std::optional<sparrow::validity_bitmap> create_validity_bitmap(
 }
 
 template<typename T>
-sparrow::array create_primitive_array(
+static sparrow::array create_primitive_array(
         T* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
 ) {
     sparrow::u8_buffer<T> buffer(data_ptr, data_size, get_detachable_allocator());
@@ -60,7 +60,7 @@ sparrow::array create_primitive_array(
     }
 }
 
-sparrow::array create_packed_bool_array(
+static sparrow::array create_packed_bool_array(
         TypedBlockData<ScalarTagType<DataTypeTag<DataType::BOOL8>>>& block, const ExternalPackedMemBlock* packed_block,
         std::string_view name, std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
@@ -92,7 +92,7 @@ sparrow::array create_packed_bool_array(
     return arr;
 }
 
-sparrow::array create_timestamp_array(
+static sparrow::array create_timestamp_array(
         timestamp* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap,
         const std::optional<ResolvedTimezone>& timezone = std::nullopt
 ) {
@@ -134,7 +134,7 @@ sparrow::array create_timestamp_array(
 }
 
 template<typename T>
-sparrow::array create_dict_array(
+static sparrow::array create_dict_array(
         sparrow::array&& dict_values_array, sparrow::u8_buffer<T>&& dict_keys_buffer,
         std::optional<sparrow::validity_bitmap>&& validity_bitmap
 ) {
@@ -152,23 +152,23 @@ sparrow::array create_dict_array(
     }
 }
 
-sparrow::u8_buffer<char> minimal_string_buffer() {
+static sparrow::u8_buffer<char> minimal_string_buffer() {
     return sparrow::u8_buffer<char>(nullptr, 0, get_detachable_allocator());
 }
 
 // TODO: This is super hacky. If our string column return type is dictionary encoded, and this should be
 //  consistent when there are zero rows or the validity bitmap is all zeros. But sparrow (or possibly Arrow) requires at
 //  least one key-value pair in the dictionary, even if there are zero rows
-sparrow::big_string_array minimal_strings_for_dict() {
+static sparrow::big_string_array minimal_strings_for_dict() {
     return sparrow::big_string_array(std::vector<std::string>{"a"});
 }
 
 template<typename OffsetType>
-sparrow::array minimal_strings_array() {
+static sparrow::array minimal_strings_array() {
     return sparrow::array(sparrow::string_array_impl<OffsetType>(std::vector<std::string>()));
 }
 
-sparrow::u8_buffer<char> strings_buffer_at_offset(const Column& column, size_t offset) {
+static sparrow::u8_buffer<char> strings_buffer_at_offset(const Column& column, size_t offset) {
     const bool has_string_buffer = column.has_extra_buffer(offset, ExtraBufferType::STRING);
     if (!has_string_buffer) {
         return minimal_string_buffer();
@@ -190,7 +190,7 @@ sparrow::u8_buffer<char> strings_buffer_at_offset(const Column& column, size_t o
 
 template<typename TagType>
 requires(is_sequence_type(TagType::DataTypeTag::data_type))
-sparrow::array string_array_from_block(
+static sparrow::array string_array_from_block(
         TypedBlockData<TagType>& block, const Column& column, std::string_view name,
         std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
@@ -228,7 +228,7 @@ sparrow::array string_array_from_block(
 
 template<typename TagType>
 requires(is_sequence_type(TagType::DataTypeTag::data_type))
-sparrow::array string_dict_from_block(
+static sparrow::array string_dict_from_block(
         TypedBlockData<TagType>& block, const Column& column, std::string_view name,
         std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
@@ -295,7 +295,7 @@ std::optional<ResolvedTimezone> resolve_timezone(const std::optional<ArrowMeta::
 
 template<typename TagType>
 requires(!is_time_type(TagType::DataTypeTag::data_type))
-sparrow::array arrow_array_from_block(
+static sparrow::array arrow_array_from_block(
         TypedBlockData<TagType>& block, std::string_view name, std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
     using DataTagType = typename TagType::DataTypeTag;
@@ -307,7 +307,7 @@ sparrow::array arrow_array_from_block(
     return arr;
 }
 
-sparrow::array empty_arrow_array_for_column(
+static sparrow::array empty_arrow_array_for_column(
         const Column& column, std::string_view name, const std::optional<ArrowMeta::ColumnMeta>& opt_column_meta
 ) {
     auto res = details::visit_scalar(column.type(), [&](auto&& tdt) {
@@ -458,7 +458,7 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(
     return output;
 }
 
-DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
+static DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
     if (auto dictionary = array.dictionary(); dictionary.has_value()) {
         // pyarrow stores dictionary encoded strings with int32 keys
         // polars stores dictionary encoded strings with uint32 keys
@@ -712,7 +712,7 @@ RecordBatchData empty_record_batch_from_descriptor(
     return {arr, schema};
 }
 
-ArrowOutputStringFormat convert_arrow_string_format_enum(
+static ArrowOutputStringFormat convert_arrow_string_format_enum(
         const proto::descriptors::ArrowStringFormat& proto_enum, ArrowOutputFormat output_format
 ) {
     switch (proto_enum) {
@@ -730,7 +730,7 @@ ArrowOutputStringFormat convert_arrow_string_format_enum(
     }
 }
 
-bool check_arrow_config_all_specified(const ArrowOutputConfig& arrow_config) {
+static bool check_arrow_config_all_specified(const ArrowOutputConfig& arrow_config) {
     if (arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED) {
         return false;
     } else {

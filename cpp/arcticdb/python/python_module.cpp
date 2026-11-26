@@ -46,7 +46,7 @@
 
 namespace py = pybind11;
 
-void register_configs_map_api(py::module& m) {
+static void register_configs_map_api(py::module& m) {
     using namespace arcticdb;
 #define EXPOSE_TYPE(LABEL, TYPE)                                                                                       \
     m.def(                                                                                                             \
@@ -105,7 +105,7 @@ rec_call(int i) {
         return rec_call(i - 1);
 }
 
-void register_termination_handler() {
+static void register_termination_handler() {
     std::set_terminate([] {
         auto eptr = std::current_exception();
         try {
@@ -119,7 +119,7 @@ void register_termination_handler() {
     });
 }
 
-void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::ArcticException>& base_exception) {
+static void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::ArcticException>& base_exception) {
     using namespace arcticdb;
 
     auto cat_enum = py::enum_<ErrorCategory>(m, "ErrorCategory");
@@ -214,12 +214,12 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     py::register_local_exception<CodecException>(m, "CodecException", compat_exception.ptr());
 }
 
-void reinit_scheduler() {
+static void reinit_scheduler() {
     ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork, reinitializing the task scheduler");
     arcticdb::async::TaskScheduler::reattach_instance();
 }
 
-void reinit_lmdb_warning() {
+static void reinit_lmdb_warning() {
     ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork in child, resetting LMDB warning counter");
     arcticdb::storage::lmdb::LmdbStorage::reset_warning_counter();
 }
@@ -236,7 +236,7 @@ static std::atomic_flag warned_about_fork;
 
 // Registered as a prepare handler so that it runs in the parent. Logging from a child handler can
 // hang: the sink's mutex may be inherited locked, and an async logger has no flusher thread there.
-void warn_about_fork() {
+static void warn_about_fork() {
     using namespace arcticdb;
     // Importing arcticdb, and even creating libraries, starts no pool threads, so there would be
     // nothing to warn about. This also keeps a multiprocessing forkserver quiet: it forks every
@@ -259,12 +259,12 @@ void warn_about_fork() {
     );
 }
 
-void register_fork_warning() { pthread_atfork(&warn_about_fork, nullptr, nullptr); }
+static void register_fork_warning() { pthread_atfork(&warn_about_fork, nullptr, nullptr); }
 #else
 void register_fork_warning() {}
 #endif
 
-void register_instrumentation(py::module&& m) {
+static void register_instrumentation(py::module&& m) {
     auto remotery = m.def_submodule("remotery");
 #if defined(USE_REMOTERY)
     py::class_<RemoteryInstance, std::shared_ptr<RemoteryInstance>>(remotery, "Instance");

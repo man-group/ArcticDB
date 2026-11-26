@@ -15,7 +15,7 @@
 #include <arcticdb/processing/grouper.hpp>
 
 template<typename T>
-void segment_scalar_assert_all_values_equal(
+static void segment_scalar_assert_all_values_equal(
         const arcticdb::ProcessingUnit& proc_unit, const arcticdb::ColumnName& name,
         const std::unordered_set<T>& expected, size_t expected_row_count
 ) {
@@ -135,7 +135,7 @@ TEST(Clause, AggregationEmptyColumn) {
 
 namespace aggregation_test {
 template<class T, class F>
-void check_column(arcticdb::SegmentInMemory segment, std::string_view column_name, std::size_t ugv, F&& f) {
+static void check_column(arcticdb::SegmentInMemory segment, std::string_view column_name, std::size_t ugv, F&& f) {
     const auto column_index = segment.column_index(column_name);
     ASSERT_TRUE(column_index.has_value());
     const auto& column = segment.column(*column_index);

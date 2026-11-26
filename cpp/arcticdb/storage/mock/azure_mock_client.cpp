@@ -23,7 +23,7 @@ std::string MockAzureClient::get_failure_trigger(
     );
 }
 
-Azure::Core::RequestFailedException get_exception(
+static Azure::Core::RequestFailedException get_exception(
         const std::string& message, const std::string& error_code, Azure::Core::Http::HttpStatusCode status_code
 ) {
     auto rawResponse = std::make_unique<Azure::Core::Http::RawResponse>(0, 0, status_code, message);
@@ -34,7 +34,7 @@ Azure::Core::RequestFailedException get_exception(
     return exception;
 }
 
-std::optional<Azure::Core::RequestFailedException> has_failure_trigger(
+static std::optional<Azure::Core::RequestFailedException> has_failure_trigger(
         const std::string& blob_name, StorageOperation operation
 ) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";

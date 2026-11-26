@@ -99,7 +99,7 @@ struct S3IOStream : public std::iostream {
     std::shared_ptr<Buffer> get_buffer() { return stream_buf_.get_buffer(); }
 };
 
-Aws::IOStreamFactory S3StreamFactory() {
+static Aws::IOStreamFactory S3StreamFactory() {
     return [=]() { return Aws::New<S3IOStream>(""); };
 }
 
@@ -188,7 +188,7 @@ S3Result<std::monostate> S3ClientImpl::put_object(
     return {std::monostate()};
 }
 
-bool delete_objects_request_use_md5_checksum() {
+static bool delete_objects_request_use_md5_checksum() {
     // Defaults to requiring a CRC64-NVME checksum (the SDK behaviour);
     const auto setting = ConfigsMap::instance()->get_string("S3Storage.DeleteObjectsChecksum", "crc64nvme");
     if (setting == "crc64nvme") {

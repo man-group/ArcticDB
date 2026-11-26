@@ -37,7 +37,7 @@ namespace detail {
 // code.
 //  This issue has been raised on the sdk repo https://github.com/Azure/azure-sdk-for-cpp/issues/5369. Once fixed, we
 //  should no longer need the following function and would just read e.ErrorCode.
-std::string get_error_code(const Azure::Core::RequestFailedException& e) {
+static std::string get_error_code(const Azure::Core::RequestFailedException& e) {
     auto error_code = e.ErrorCode;
 
     if (error_code.empty() && e.RawResponse) {
@@ -49,7 +49,7 @@ std::string get_error_code(const Azure::Core::RequestFailedException& e) {
     return error_code;
 }
 
-void raise_azure_exception(const Azure::Core::RequestFailedException& e, const std::string& object_name) {
+static void raise_azure_exception(const Azure::Core::RequestFailedException& e, const std::string& object_name) {
     auto error_code = get_error_code(e);
     auto status_code = e.StatusCode;
     std::string error_message;
@@ -82,13 +82,13 @@ void raise_azure_exception(const Azure::Core::RequestFailedException& e, const s
     raise<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(error_message);
 }
 
-bool is_expected_error_type(const std::string& error_code, Azure::Core::Http::HttpStatusCode status_code) {
+static bool is_expected_error_type(const std::string& error_code, Azure::Core::Http::HttpStatusCode status_code) {
     return status_code == Azure::Core::Http::HttpStatusCode::NotFound &&
            (error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound) ||
             error_code == AzureErrorCode_to_string(AzureErrorCode::ContainerNotFound));
 }
 
-void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e, const std::string& object_name) {
+static void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e, const std::string& object_name) {
     auto error_code = get_error_code(e);
     auto status_code = e.StatusCode;
 
@@ -98,7 +98,7 @@ void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e, con
 }
 
 template<class KeyBucketizer>
-void do_write_impl(
+static void do_write_impl(
         KeySegmentPair& key_seg, const std::string& root_folder, AzureClientWrapper& azure_client,
         KeyBucketizer&& bucketizer, const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
         unsigned int request_timeout
@@ -120,7 +120,7 @@ void do_write_impl(
 }
 
 template<class KeyBucketizer>
-void do_update_impl(
+static void do_update_impl(
         KeySegmentPair& key_seg, const std::string& root_folder, AzureClientWrapper& azure_client,
         KeyBucketizer&& bucketizer, const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
         unsigned int request_timeout
@@ -130,7 +130,7 @@ void do_update_impl(
 }
 
 template<class KeyBucketizer>
-void do_read_impl(
+static void do_read_impl(
         VariantKey&& variant_key, const ReadVisitor& visitor, const std::string& root_folder,
         AzureClientWrapper& azure_client, KeyBucketizer&& bucketizer, ReadKeyOpts opts,
         const Azure::Storage::Blobs::DownloadBlobToOptions& download_option, unsigned int request_timeout
@@ -162,7 +162,7 @@ void do_read_impl(
 }
 
 template<class KeyBucketizer>
-KeySegmentPair do_read_impl(
+static KeySegmentPair do_read_impl(
         VariantKey&& variant_key, const std::string& root_folder, AzureClientWrapper& azure_client,
         KeyBucketizer&& bucketizer, ReadKeyOpts opts,
         const Azure::Storage::Blobs::DownloadBlobToOptions& download_option, unsigned int request_timeout
@@ -203,7 +203,7 @@ KeySegmentPair do_read_impl(
 }
 
 template<class KeyBucketizer>
-void do_remove_impl(
+static void do_remove_impl(
         std::span<VariantKey> variant_keys, const std::string& root_folder, AzureClientWrapper& azure_client,
         KeyBucketizer&& bucketizer, unsigned int request_timeout
 ) {
@@ -231,13 +231,13 @@ void do_remove_impl(
     }
 }
 
-std::string prefix_handler(
+static std::string prefix_handler(
         const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType
 ) {
     return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
 }
 
-bool do_iterate_type_impl(
+static bool do_iterate_type_impl(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& root_folder,
         AzureClientWrapper& azure_client, const std::string& prefix = std::string{}
 ) {
@@ -279,7 +279,9 @@ bool do_iterate_type_impl(
     return false;
 }
 
-bool do_key_exists_impl(const VariantKey& key, const std::string& root_folder, AzureClientWrapper& azure_client) {
+static bool do_key_exists_impl(
+        const VariantKey& key, const std::string& root_folder, AzureClientWrapper& azure_client
+) {
     auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));
     auto blob_name = object_path(key_type_dir, key);
     try {

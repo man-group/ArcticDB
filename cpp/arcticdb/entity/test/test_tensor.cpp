@@ -10,7 +10,7 @@
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
 
-auto get_f_tensor(size_t num_rows) {
+static auto get_f_tensor(size_t num_rows) {
     using namespace arcticdb::entity;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<data_t>>(num_rows);
@@ -42,7 +42,7 @@ auto get_f_tensor(size_t num_rows) {
     return std::make_pair(data, tensor);
 }
 
-auto get_c_tensor(size_t num_rows) {
+static auto get_c_tensor(size_t num_rows) {
     using namespace arcticdb::entity;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<data_t>>(num_rows);
@@ -161,7 +161,7 @@ TEST(RowMajorTensor, SubDivide) {
     }
 }
 
-auto get_sparse_array(size_t num_rows) {
+static auto get_sparse_array(size_t num_rows) {
     using namespace arcticdb::entity;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<data_t>>(num_rows * 2);
@@ -235,7 +235,7 @@ TEST(SparseArray, SubDivide) {
     }
 }
 
-auto get_sparse_array_funky_strides() {
+static auto get_sparse_array_funky_strides() {
     using namespace arcticdb::entity;
     const auto num_rows = 100u;
     using data_t = uint32_t;
@@ -310,7 +310,7 @@ TEST(SparseArrayFunkyStrides, SubDivide) {
     }
 }
 
-auto get_sparse_array_uneven(size_t num_rows) {
+static auto get_sparse_array_uneven(size_t num_rows) {
     using namespace arcticdb::entity;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<data_t>>(num_rows * 2);

@@ -30,7 +30,7 @@ std::string MongoStorage::collection_name(KeyType k) { return (fmt::format("{}{}
  * https://www.mongodb.com/docs/manual/reference/error-codes/
  * - some relevant error codes returned by the server are defined in MongoError enum.
  */
-void raise_mongo_exception(const mongocxx::operation_exception& e, const std::string& object_name) {
+static void raise_mongo_exception(const mongocxx::operation_exception& e, const std::string& object_name) {
     auto error_code = e.code().value();
     auto mongo_error_suffix = get_mongo_error_suffix(e, object_name);
 
@@ -49,12 +49,12 @@ void raise_mongo_exception(const mongocxx::operation_exception& e, const std::st
     ));
 }
 
-bool is_expected_error_type(int error_code) {
+static bool is_expected_error_type(int error_code) {
     return error_code == static_cast<int>(MongoError::KeyNotFound) ||
            error_code == static_cast<int>(MongoError::NoSuchKey);
 }
 
-void raise_if_unexpected_error(const mongocxx::operation_exception& e, const std::string& object_name) {
+static void raise_if_unexpected_error(const mongocxx::operation_exception& e, const std::string& object_name) {
     auto error_code = e.code().value();
 
     if (!is_expected_error_type(error_code)) {

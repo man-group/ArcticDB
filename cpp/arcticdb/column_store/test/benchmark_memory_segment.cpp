@@ -17,21 +17,21 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
-std::vector<bool> get_sparse_bits(size_t num_rows, size_t num_set, std::mt19937 g) {
+static std::vector<bool> get_sparse_bits(size_t num_rows, size_t num_set, std::mt19937 g) {
     auto sparse_bits = std::vector<bool>(num_rows, false);
     std::fill(sparse_bits.begin(), sparse_bits.begin() + num_set, true);
     std::shuffle(sparse_bits.begin(), sparse_bits.end(), g);
     return sparse_bits;
 }
 
-std::vector<uint64_t> get_random_permutation(size_t num_rows, std::mt19937 g) {
+static std::vector<uint64_t> get_random_permutation(size_t num_rows, std::mt19937 g) {
     auto result = std::vector<uint64_t>(num_rows);
     std::iota(result.begin(), result.end(), 1);
     std::shuffle(result.begin(), result.end(), g);
     return result;
 }
 
-SegmentInMemory get_shuffled_segment(
+static SegmentInMemory get_shuffled_segment(
         const StreamId& id, size_t num_rows, size_t num_columns, std::optional<float> sparsity_percentage = std::nullopt
 ) {
     // We use a seed to get the same shuffled segment for given arguments.

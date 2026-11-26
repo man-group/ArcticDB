@@ -22,7 +22,7 @@ namespace py = pybind11;
 namespace arcticdb {
 using namespace arcticdb::python_util;
 
-std::vector<FieldWrapper> field_collection_to_ref_vector(const FieldCollection& fields) {
+static std::vector<FieldWrapper> field_collection_to_ref_vector(const FieldCollection& fields) {
     auto result = std::vector<FieldWrapper>{};
     result.reserve(fields.size());
     std::transform(fields.begin(), fields.end(), std::back_inserter(result), [](const Field& field) {

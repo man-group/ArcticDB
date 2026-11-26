@@ -31,7 +31,7 @@ struct VersionStoreTest : arcticdb::TestStore {
     std::string get_name() override { return "test.version_store"; }
 };
 
-auto write_version_frame(
+static auto write_version_frame(
         const arcticdb::StreamId& stream_id, arcticdb::VersionId v_id, arcticdb::version_store::PythonVersionStore& pvs,
         size_t rows = 1000000, bool update_version_map = false, size_t start_val = 0,
         const std::optional<arcticdb::entity::AtomKey>& previous_key = std::nullopt, bool prune_previous = false,

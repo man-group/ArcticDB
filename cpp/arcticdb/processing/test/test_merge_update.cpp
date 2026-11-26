@@ -218,7 +218,7 @@ struct MergeUpdateClauseUpdateStrategyTestBase {
     std::vector<ColRange> col_ranges_;
 };
 
-std::vector<std::vector<EntityId>> structure_entities(
+static std::vector<std::vector<EntityId>> structure_entities(
         const std::span<const std::vector<size_t>> structure_indices, const std::vector<EntityId>& entities
 ) {
     std::vector<std::vector<EntityId>> structured_entities;

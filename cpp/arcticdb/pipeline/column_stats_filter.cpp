@@ -29,7 +29,7 @@ bool ColumnStatsQueryMetadata::should_try_column_stats_read() const {
     return is_column_stats_enabled() && filter_expression != nullptr;
 }
 
-StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation);
+static StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation);
 
 StatsVariantData evaluate_ast_node_against_stats(
         const ExpressionNode& node, const StatsRowIndices& row_indices, const ColumnStatsData& column_stats

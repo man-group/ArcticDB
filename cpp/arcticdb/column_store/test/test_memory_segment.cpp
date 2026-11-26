@@ -33,7 +33,7 @@ TEST(MemSegment, Empty) {
 }
 
 template<typename TDT>
-void test_segment_type(size_t num_values = 20, size_t num_tests = 50, size_t num_columns = 4) {
+static void test_segment_type(size_t num_values = 20, size_t num_tests = 50, size_t num_columns = 4) {
     using namespace arcticdb;
     using TypeDescriptorTag = TDT;
     using DTT = typename TypeDescriptorTag::DataTypeTag;

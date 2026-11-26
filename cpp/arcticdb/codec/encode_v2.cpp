@@ -20,18 +20,18 @@ void add_bitmagic_compressed_size(
 void encode_sparse_map(ColumnData& column_data, EncodedFieldImpl& field, Buffer& out, std::ptrdiff_t& pos);
 
 template<typename MagicType>
-void write_magic(Buffer& buffer, std::ptrdiff_t& pos) {
+static void write_magic(Buffer& buffer, std::ptrdiff_t& pos) {
     new (buffer.data() + pos) MagicType{};
     pos += sizeof(MagicType);
 }
 
-void write_frame_data(Buffer& buffer, std::ptrdiff_t& pos, const FrameDescriptor& frame_desc) {
+static void write_frame_data(Buffer& buffer, std::ptrdiff_t& pos, const FrameDescriptor& frame_desc) {
     auto ptr = new (buffer.data() + pos) FrameDescriptor{};
     *ptr = frame_desc;
     pos += sizeof(FrameDescriptor);
 }
 
-void write_segment_descriptor(Buffer& buffer, std::ptrdiff_t& pos, const SegmentDescriptorImpl& segment_desc) {
+static void write_segment_descriptor(Buffer& buffer, std::ptrdiff_t& pos, const SegmentDescriptorImpl& segment_desc) {
     auto ptr = new (buffer.data() + pos) SegmentDescriptorImpl{};
     *ptr = segment_desc;
     pos += sizeof(SegmentDescriptorImpl);
@@ -188,7 +188,7 @@ static void encode_index_descriptors(
     }
 }
 
-[[nodiscard]] size_t calc_column_blocks_size(const Column& col) {
+[[nodiscard]] static size_t calc_column_blocks_size(const Column& col) {
     const auto has_shapes = col.type().dimension() != entity::Dimension::Dim0;
     const auto bytes = calc_field_bytes(col.num_blocks() + has_shapes);
     ARCTICDB_TRACE(

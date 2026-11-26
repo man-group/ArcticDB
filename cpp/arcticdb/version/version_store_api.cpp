@@ -71,7 +71,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     return {std::move(index_key)};
 }
 
-std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
+static std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
         const std::vector<StreamId>& stream_ids, const std::vector<convert::InputItem>& items,
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas, bool empty_types,
         pipelines::SortednessScan sortedness_scan
@@ -151,7 +151,7 @@ using SymbolVersionToSnapshotInfoMap = std::unordered_map<std::pair<StreamId, Ve
 
 using VersionResultVector = std::vector<VersionResult>;
 
-VersionResultVector list_versions_for_snapshot_without_snapshot_list(
+static VersionResultVector list_versions_for_snapshot_without_snapshot_list(
         const std::shared_ptr<Store>& store, const std::optional<StreamId>& stream_id, const SnapshotId& snap_name
 ) {
     const auto snap = get_snapshot(store, snap_name);
@@ -175,7 +175,7 @@ VersionResultVector list_versions_for_snapshot_without_snapshot_list(
     return res;
 }
 
-VersionResultVector list_versions_for_snapshot_with_snapshot_list(
+static VersionResultVector list_versions_for_snapshot_with_snapshot_list(
         const std::unordered_set<StreamId>& stream_ids, std::optional<SnapshotId> snap_name,
         SnapshotMap&& versions_for_snapshots, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
@@ -211,7 +211,7 @@ VersionResultVector list_versions_for_snapshot_with_snapshot_list(
     return res;
 }
 
-void get_snapshot_version_info(
+static void get_snapshot_version_info(
         const std::shared_ptr<Store>& store, SymbolVersionToSnapshotInfoMap& snapshots_for_symbol,
         std::optional<SnapshotMap>& versions_for_snapshots, const std::optional<StreamId>& stream_id
 ) {
@@ -232,7 +232,7 @@ void get_snapshot_version_info(
         std::sort(std::begin(snapshot_info.snapshots), std::end(snapshot_info.snapshots));
 }
 
-VersionResultVector get_latest_versions_for_symbols(
+static VersionResultVector get_latest_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
         std::vector<StreamId>&& symbols, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
@@ -284,7 +284,7 @@ VersionResultVector get_latest_versions_for_symbols(
     return res;
 }
 
-VersionResultVector get_all_versions_for_symbols(
+static VersionResultVector get_all_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
         std::vector<StreamId>&& symbols, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {

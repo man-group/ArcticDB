@@ -178,7 +178,7 @@ SegmentInMemory build_column_stats_segment(
     return seg;
 }
 
-std::string type_to_operator_string(ColumnStatTypeInternal type) {
+static std::string type_to_operator_string(ColumnStatTypeInternal type) {
     switch (type) {
     case ColumnStatTypeInternal::MIN_V1:
         return "v1_MIN";
@@ -268,7 +268,7 @@ std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& s
     return column_stats_rows;
 }
 
-std::string type_to_name(ColumnStatType type) {
+static std::string type_to_name(ColumnStatType type) {
     switch (type) {
     case ColumnStatType::MINMAX:
         return "MINMAX";

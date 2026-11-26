@@ -20,7 +20,7 @@ std::string MockLmdbClient::get_failure_trigger(
     return fmt::format("{}#Failure_{}_{}", path, operation_to_string(operation_to_fail), error_code);
 }
 
-std::string_view lmdb_operation_string(StorageOperation operation) {
+static std::string_view lmdb_operation_string(StorageOperation operation) {
     switch (operation) {
     case StorageOperation::READ:
         return "mdb_get";
@@ -37,7 +37,7 @@ std::string_view lmdb_operation_string(StorageOperation operation) {
     }
 }
 
-void raise_if_has_failure_trigger(const LmdbKey& key, StorageOperation operation) {
+static void raise_if_has_failure_trigger(const LmdbKey& key, StorageOperation operation) {
     auto path = key.path_;
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = path.rfind(failure_string_for_operation);
@@ -63,7 +63,7 @@ void raise_if_has_failure_trigger(const LmdbKey& key, StorageOperation operation
     }
 }
 
-void raise_key_exists_error(std::string_view lmdb_op) { ::lmdb::error::raise(lmdb_op.data(), MDB_KEYEXIST); }
+static void raise_key_exists_error(std::string_view lmdb_op) { ::lmdb::error::raise(lmdb_op.data(), MDB_KEYEXIST); }
 
 bool MockLmdbClient::has_key(const LmdbKey& key) const { return lmdb_contents_.find(key) != lmdb_contents_.end(); }
 

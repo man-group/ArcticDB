@@ -42,14 +42,14 @@ arcticdb::proto::encoding::SegmentHeader generate_v1_header(const SegmentHeader&
 
 namespace segment_size {
 
-size_t column_fields_size(const SegmentHeader& seg_hdr) {
+static size_t column_fields_size(const SegmentHeader& seg_hdr) {
     if (!seg_hdr.has_column_fields())
         return 0;
 
     return encoding_sizes::ndarray_field_compressed_size(seg_hdr.column_fields().ndarray());
 }
 
-SegmentCompressedSize compressed(
+static SegmentCompressedSize compressed(
         const SegmentHeader& seg_hdr, const std::optional<SegmentHeaderProtoWrapper>& proto_wrapper
 ) {
     size_t string_pool_size = 0;
@@ -87,7 +87,7 @@ SegmentCompressedSize compressed(
 }
 } // namespace segment_size
 
-FieldCollection decode_descriptor_fields(
+static FieldCollection decode_descriptor_fields(
         const SegmentHeader& hdr, const uint8_t* data, const uint8_t* begin ARCTICDB_UNUSED
 ) {
     FieldCollection fields;
@@ -112,7 +112,7 @@ SegmentHeaderProtoWrapper decode_protobuf_header(const uint8_t* data, size_t hea
     return {seg_hdr, std::move(arena)};
 }
 
-void skip_metadata_field(const uint8_t*& src, const SegmentHeader& seg_hdr) {
+static void skip_metadata_field(const uint8_t*& src, const SegmentHeader& seg_hdr) {
     util::check_magic<MetadataMagic>(src);
     if (seg_hdr.has_metadata_field()) {
         const auto metadata_size = encoding_sizes::field_compressed_size(seg_hdr.metadata_field());
@@ -121,7 +121,7 @@ void skip_metadata_field(const uint8_t*& src, const SegmentHeader& seg_hdr) {
     }
 }
 
-FieldCollection deserialize_descriptor_fields_collection(const uint8_t* src, const SegmentHeader& seg_hdr) {
+static FieldCollection deserialize_descriptor_fields_collection(const uint8_t* src, const SegmentHeader& seg_hdr) {
     FieldCollection fields;
 
     util::check_magic<DescriptorFieldsMagic>(src);
@@ -131,7 +131,7 @@ FieldCollection deserialize_descriptor_fields_collection(const uint8_t* src, con
     return fields;
 }
 
-EncodedFieldCollection deserialize_body_fields(const SegmentHeader& hdr, const uint8_t* data) {
+static EncodedFieldCollection deserialize_body_fields(const SegmentHeader& hdr, const uint8_t* data) {
     const auto* encoded_fields_ptr = data;
     util::check(hdr.has_column_fields(), "Expected column fields in v2 encoding");
     util::check_magic<EncodedMagic>(encoded_fields_ptr);
@@ -147,7 +147,7 @@ struct DeserializedSegmentData {
     StreamId stream_id_;
 };
 
-DeserializedSegmentData decode_header_and_fields(const uint8_t*& src, bool copy_data) {
+static DeserializedSegmentData decode_header_and_fields(const uint8_t*& src, bool copy_data) {
     util::check(src != nullptr, "Got null data ptr from segment");
     auto* fixed_hdr = reinterpret_cast<const FixedHeader*>(src);
     ARCTICDB_DEBUG(
@@ -203,7 +203,7 @@ DeserializedSegmentData decode_header_and_fields(const uint8_t*& src, bool copy_
     }
 }
 
-void check_encoding(EncodingVersion encoding_version) {
+static void check_encoding(EncodingVersion encoding_version) {
     util::check(
             encoding_version == EncodingVersion::V1 || encoding_version == EncodingVersion::V2,
             "expected encoding_version < 2, actual {}",
@@ -211,7 +211,9 @@ void check_encoding(EncodingVersion encoding_version) {
     );
 }
 
-void check_size(const FixedHeader* fixed_hdr, size_t buffer_bytes, size_t readable_size, size_t string_pool_size) {
+static void check_size(
+        const FixedHeader* fixed_hdr, size_t buffer_bytes, size_t readable_size, size_t string_pool_size
+) {
     util::check(
             FIXED_HEADER_SIZE + fixed_hdr->header_bytes + buffer_bytes <= readable_size,
             "Size disparity, fixed header size {} + variable header size {} + buffer size {}  (string pool size {}) >= "

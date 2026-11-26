@@ -27,7 +27,7 @@ TEST(Column, Empty) {
 }
 
 template<typename TDT>
-void test_column_type(size_t num_values = 20, size_t num_tests = 50) {
+static void test_column_type(size_t num_values = 20, size_t num_tests = 50) {
     using namespace arcticdb;
     using TypeDescriptorTag = TDT;
     using DTT = typename TypeDescriptorTag::DataTypeTag;
@@ -150,7 +150,7 @@ TEST(Column, ChangeType) {
     }
 }
 
-std::unique_ptr<Column> get_sparse_column(size_t offset = 0, size_t start = 0, size_t num_rows = 10) {
+static std::unique_ptr<Column> get_sparse_column(size_t offset = 0, size_t start = 0, size_t num_rows = 10) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
     auto column = std::make_unique<Column>(
             static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
@@ -161,7 +161,7 @@ std::unique_ptr<Column> get_sparse_column(size_t offset = 0, size_t start = 0, s
     return column;
 }
 
-std::unique_ptr<Column> get_dense_column(size_t offset = 0, size_t start = 0, size_t num_rows = 10) {
+static std::unique_ptr<Column> get_dense_column(size_t offset = 0, size_t start = 0, size_t num_rows = 10) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
     auto column = std::make_unique<Column>(
             static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
@@ -363,7 +363,7 @@ TEST(ColumnData, LowerBound) {
     ASSERT_EQ(std::distance(column.begin<TDT>(), it), 3);
 }
 
-FieldStatsImpl generate_stats_from_column(const Column& column) {
+static FieldStatsImpl generate_stats_from_column(const Column& column) {
     return details::visit_scalar(column.type(), [&column](auto tdt) {
         using TagType = std::decay_t<decltype(tdt)>;
         return generate_column_statistics<TagType>(column.data());

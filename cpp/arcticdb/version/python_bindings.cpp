@@ -104,7 +104,7 @@ requires std::integral<T>
     }
 }
 
-std::vector<timestamp> generate_buckets(
+static std::vector<timestamp> generate_buckets(
         timestamp start, timestamp end, std::string_view rule, ResampleBoundary closed_boundary_arg, timestamp offset,
         const ResampleOrigin& origin
 ) {
@@ -128,7 +128,7 @@ std::vector<timestamp> generate_buckets(
 }
 
 template<ResampleBoundary closed_boundary>
-void declare_resample_clause(py::module& version) {
+static void declare_resample_clause(py::module& version) {
     const char* class_name =
             closed_boundary == ResampleBoundary::LEFT ? "ResampleClauseLeftClosed" : "ResampleClauseRightClosed";
     py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name)

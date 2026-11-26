@@ -259,7 +259,7 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
 //
 // Compare with `append_incomplete_segment`. Keep this function even if it duplicates `append_incomplete_segment` so
 // that we have protection against `append_incomplete_segment` changing how it writes the descriptors in future.
-void append_incomplete_segment_backwards_compat(
+static void append_incomplete_segment_backwards_compat(
         const std::shared_ptr<arcticdb::Store>& store, const arcticdb::StreamId& stream_id,
         arcticdb::SegmentInMemory&& seg
 ) {

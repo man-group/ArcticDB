@@ -92,13 +92,17 @@ struct FieldEncodingResult {
     proto::encoding::EncodedField encoded_field_;
 };
 
-Segment encode_segment(SegmentInMemory segment_in_memory, const py::object& opts, EncodingVersion encoding_version) {
+static Segment encode_segment(
+        SegmentInMemory segment_in_memory, const py::object& opts, EncodingVersion encoding_version
+) {
     proto::encoding::VariantCodec opts_cpp;
     python_util::pb_from_python(opts, opts_cpp);
     return encode_dispatch(std::move(segment_in_memory), opts_cpp, encoding_version);
 }
 
-SegmentInMemory decode_python_segment(Segment& segment) { return decode_segment(segment, AllocationType::DETACHABLE); }
+static SegmentInMemory decode_python_segment(Segment& segment) {
+    return decode_segment(segment, AllocationType::DETACHABLE);
+}
 
 class BufferPairDataSink {
   public:

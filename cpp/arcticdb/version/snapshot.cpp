@@ -191,7 +191,7 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
     return index_keys_in_snapshots;
 }
 
-std::optional<AtomKey> index_key_for_stream_and_version_in_snapshot_segment(
+static std::optional<AtomKey> index_key_for_stream_and_version_in_snapshot_segment(
         SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id, VersionId version_id
 ) {
     if (auto opt_row_idx = row_id_for_stream_in_snapshot_segment(seg, using_ref_key, stream_id, version_id)) {
@@ -258,7 +258,7 @@ std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_part
     return {std::move(all_index_keys), std::move(index_keys_in_snapshot)};
 }
 
-VariantKey get_ref_key(const SnapshotId& snap_name) { return RefKey{snap_name, KeyType::SNAPSHOT_REF}; }
+static VariantKey get_ref_key(const SnapshotId& snap_name) { return RefKey{snap_name, KeyType::SNAPSHOT_REF}; }
 
 std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, const SnapshotId& snap_name) {
     ARCTICDB_SAMPLE(getSnapshot, 0)
@@ -283,7 +283,7 @@ std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, 
     return ret;
 }
 
-std::unordered_map<SnapshotId, std::optional<VariantKey>> all_ref_keys(
+static std::unordered_map<SnapshotId, std::optional<VariantKey>> all_ref_keys(
         const std::vector<SnapshotId>& snap_names, const std::vector<VariantKey>& ref_keys
 ) {
     std::unordered_map<SnapshotId, std::optional<VariantKey>> output;
@@ -294,7 +294,7 @@ std::unordered_map<SnapshotId, std::optional<VariantKey>> all_ref_keys(
     return output;
 }
 
-std::unordered_map<SnapshotId, std::optional<VariantKey>> get_snapshot_keys_via_iteration(
+static std::unordered_map<SnapshotId, std::optional<VariantKey>> get_snapshot_keys_via_iteration(
         const std::vector<bool>& ref_key_exists, const std::vector<SnapshotId>& snap_names,
         const std::vector<VariantKey>& ref_keys, const std::shared_ptr<Store>& store
 ) {

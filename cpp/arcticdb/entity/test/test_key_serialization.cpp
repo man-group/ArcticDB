@@ -11,7 +11,7 @@
 #include <arcticdb/entity/serialized_key.hpp>
 
 namespace arcticdb {
-std::string old_style_key(const AtomKey& key) {
+static std::string old_style_key(const AtomKey& key) {
     return fmt::format(
             "{}|{}|{}|{}|{}|{}|{}",
             key.id(),

@@ -17,9 +17,9 @@
 
 namespace arcticdb::util {
 
-char from_hex(char c) { return std::isdigit(c) != 0 ? c - '0' : c - 'A' + 10; }
+static char from_hex(char c) { return std::isdigit(c) != 0 ? c - '0' : c - 'A' + 10; }
 
-char decode_char(char a, char b) { return from_hex(a) << 4 | from_hex(b); }
+static char decode_char(char a, char b) { return from_hex(a) << 4 | from_hex(b); }
 
 std::string safe_encode(const std::string& value) {
     std::ostringstream escaped;

@@ -508,7 +508,7 @@ TEST(VersionMap, FixRefKey) {
     ASSERT_EQ(result, expected);
 }
 
-AtomKey atom_key_with_version(const StreamId& id, VersionId version_id, timestamp ts) {
+static AtomKey atom_key_with_version(const StreamId& id, VersionId version_id, timestamp ts) {
     return atom_key_builder()
             .version_id(version_id)
             .creation_ts(ts)
@@ -681,7 +681,7 @@ struct VersionChainOperation {
 /**
  * @param operations write operations with their specified version_id in this order.
  */
-std::shared_ptr<VersionMapEntry> write_versions(
+static std::shared_ptr<VersionMapEntry> write_versions(
         const std::shared_ptr<InMemoryStore>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& id,
         const std::vector<VersionChainOperation>& operations
 ) {
@@ -717,7 +717,7 @@ std::shared_ptr<VersionMapEntry> write_versions(
 }
 
 // Produces the following version chain: v0 <- tombstone_all <- v1 <- v2 <- tombstone
-void write_alternating_deleted_undeleted(
+static void write_alternating_deleted_undeleted(
         std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id
 ) {
     using Type = VersionChainOperation::Type;
@@ -729,7 +729,7 @@ void write_alternating_deleted_undeleted(
     );
 }
 
-std::shared_ptr<VersionMapEntry> write_versions(
+static std::shared_ptr<VersionMapEntry> write_versions(
         std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id,
         int number_of_versions
 ) {

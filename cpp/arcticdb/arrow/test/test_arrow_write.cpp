@@ -24,7 +24,7 @@ using namespace arcticdb;
 
 // Duplicated from arrow_utils.cpp to keep build times down until sparrow array formatting is moved out of
 // sparrow/array.hpp
-sparrow::array create_timestamp_array(
+static sparrow::array create_timestamp_array(
         timestamp* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap,
         const date::time_zone* tz = nullptr
 ) {
@@ -443,7 +443,7 @@ struct TrackingAllocator {
     bool operator==(const TrackingAllocator& other) const { return counter_ == other.counter_; }
 };
 
-std::shared_ptr<RecordBatchData> create_record_batch_with_allocation_tracking(
+static std::shared_ptr<RecordBatchData> create_record_batch_with_allocation_tracking(
         AllocationCounter* counter, size_t num_rows = 100
 ) {
     auto allocator = TrackingAllocator<uint8_t>(counter);

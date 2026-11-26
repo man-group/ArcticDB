@@ -66,7 +66,7 @@ struct PositionsAfterTruncation {
     size_t extra_buffer_position;
 };
 
-PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& mapping) {
+static PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& mapping) {
     // If truncation is required, we need to calculate the starting index in the data we are writing after truncation.
     // `truncate_.start_` and `truncate_.end_` are in terms of the full segment, so we need to adjust them to indices in
     // the segment slice we are reading. For example, if we are reading rows 20-29 (mapping.offset_bytes_ = 20 *
@@ -86,7 +86,7 @@ PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& map
 }
 
 template<typename OffsetType>
-void encode_variable_length(
+static void encode_variable_length(
         const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
         const std::shared_ptr<StringPool>& string_pool
 ) {
@@ -206,7 +206,7 @@ void encode_variable_length(
     }
 }
 
-void encode_dictionary(
+static void encode_dictionary(
         const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
         const std::shared_ptr<StringPool>& string_pool
 ) {
