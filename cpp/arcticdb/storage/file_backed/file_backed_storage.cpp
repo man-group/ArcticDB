@@ -88,7 +88,12 @@ struct FileNotFoundException : public std::runtime_error {
 // File name, which is unlikely to collide across consecutive function calls. The pid is useful because a
 // forked process would inherit this particular generator's seed and produce an identical sequence of values.
 std::string generate_tmp_file_name() {
-    static thread_local std::mt19937_64 gen{std::random_device{}()};
+    static thread_local std::mt19937_64 gen = [] {
+        // random_device yields 32 bits per call, so draw twice to seed with 64 bits.
+        std::random_device rd;
+        std::seed_seq seed{rd(), rd()};
+        return std::mt19937_64{seed};
+    }();
     return fmt::format("{}_{}_{}", TMP_FILE_PREFIX, getpid(), gen());
 }
 
