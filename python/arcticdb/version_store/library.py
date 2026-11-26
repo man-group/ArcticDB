@@ -546,6 +546,9 @@ class LazyDataFrame(QueryBuilder):
         """
         Convert this object into a ReadRequest, including any queries applied to this object since the read call.
 
+        If schema discovery has loaded an index, reuse that index in the request.
+        Otherwise, preserve the original as_of selector.
+
         Returns
         -------
         ReadRequest
@@ -553,9 +556,15 @@ class LazyDataFrame(QueryBuilder):
         """
         q = QueryBuilder().prepend(self)
         q._optimisation = self._optimisation
+
+        # Use the loaded index, or keep the original version selector
+        as_of = self.read_request.as_of
+        if self._preloaded_index is not None:
+            as_of = self._preloaded_index
+
         return ReadRequest(
             symbol=self.read_request.symbol,
-            as_of=self.read_request.as_of,
+            as_of=as_of,
             date_range=self.read_request.date_range,
             row_range=self.read_request.row_range,
             columns=self.read_request.columns,
@@ -574,11 +583,8 @@ class LazyDataFrame(QueryBuilder):
         VersionedItem
             Object that contains a .data and .metadata element.
         """
-        if self._preloaded_index is None:
-            return self.lib.read(**self._to_read_request()._asdict())
-        else:
-            read_request = self._to_read_request()._replace(as_of=self._preloaded_index)
-            return self.lib.read(**read_request._asdict())
+        # The generated request already includes any preloaded index
+        return self.lib.read(**self._to_read_request()._asdict())
 
     # Polars is an optional dependency, using pl.Schema here without the quotation marks results in failed imports when
     # Polars is not installed

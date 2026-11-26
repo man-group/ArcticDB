@@ -470,6 +470,33 @@ VersionIdentifier get_version_identifier(
     return *version;
 }
 
+// Prepare an already-loaded index for one read.
+// Give each read its own working copy so the original index can be reused
+static VersionIdentifier prepare_preloaded_index(
+        const std::shared_ptr<PreloadedIndexQuery>& preloaded_index,
+        const std::shared_ptr<ReadQuery>& read_query
+) {
+    std::optional<ColumnStatsSource> column_stats;
+
+    // Keep any statistics that were loaded with the index
+    if (preloaded_index->column_stats_seg_) {
+        column_stats.emplace(ColumnStatsSource{
+                preloaded_index->column_stats_seg_,
+                ColumnStatsQueryMetadata(read_query->clauses_)
+        });
+    }
+
+    // Copy the index segment before processing it.
+    // Do not consume or change the original preloaded index
+    return std::make_shared<IndexInformation>(
+            std::pair{
+                    preloaded_index->index_key_,
+                    preloaded_index->index_seg_.clone()
+            },
+            std::move(column_stats)
+    );
+}
+
 ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
@@ -477,18 +504,14 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
     py::gil_scoped_release release_gil;
     const auto identifier = util::variant_match(
             version_query.content_,
+
+            // Run this branch when the selector contains a preloaded index
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
-                std::optional<ColumnStatsSource> column_stats;
-                if (preloaded_index_query->column_stats_seg_) {
-                    column_stats.emplace(ColumnStatsSource{
-                            preloaded_index_query->column_stats_seg_, ColumnStatsQueryMetadata(read_query->clauses_)
-                    });
-                }
-                return std::make_shared<IndexInformation>(
-                        std::pair{preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
-                        std::move(column_stats)
-                );
+                // Prepare the saved index without looking it up again
+                return prepare_preloaded_index(preloaded_index_query, read_query);
             },
+            
+            // Run this branch for ordinary selectors, such as latest or version 0
             [&](const auto&) -> VersionIdentifier {
                 auto version = get_version_to_read(stream_id, version_query);
                 return get_version_identifier(stream_id, version_query, read_options, version);
@@ -1405,7 +1428,64 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
     if (stream_ids.empty()) {
         return {};
     }
-    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
+
+    // Each symbol must have a matching version selector
+    util::check(
+            stream_ids.size() == version_queries.size(),
+            "Symbol and version query list mismatch: {} != {}",
+            stream_ids.size(),
+            version_queries.size()
+    );
+
+    // Only ordinary selectors need a version lookup
+    std::vector<StreamId> lookup_stream_ids;
+    std::vector<VersionQuery> lookup_version_queries;
+
+    lookup_stream_ids.reserve(stream_ids.size());
+    lookup_version_queries.reserve(version_queries.size());
+
+    for (size_t idx = 0; idx < version_queries.size(); ++idx) {
+        const bool has_preloaded_index =
+                std::holds_alternative<std::shared_ptr<PreloadedIndexQuery>>(
+                        version_queries[idx].content_
+                );
+
+        if (!has_preloaded_index) {
+            lookup_stream_ids.push_back(stream_ids[idx]);
+            lookup_version_queries.push_back(version_queries[idx]);
+        }
+    }
+
+    // Resolve only the requests that do not already have an index
+    auto lookup_key_futs = batch_get_versions_async(
+            store(), version_map(), lookup_stream_ids, lookup_version_queries
+    );
+
+    // Keep one future per original request, in the same order
+    std::vector<folly::Future<std::optional<AtomKey>>> opt_index_key_futs;
+    opt_index_key_futs.reserve(stream_ids.size());
+
+    size_t lookup_idx = 0;
+
+    for (size_t idx = 0; idx < version_queries.size(); ++idx) {
+        const bool has_preloaded_index =
+                std::holds_alternative<std::shared_ptr<PreloadedIndexQuery>>(
+                        version_queries[idx].content_
+                );
+
+        if (has_preloaded_index) {
+            // No lookup is needed. The callback uses the saved index
+            opt_index_key_futs.emplace_back(
+                    folly::makeFuture(std::optional<AtomKey>{})
+            );
+        } else {
+            // Restore the ordinary lookup result to its original position
+            opt_index_key_futs.emplace_back(
+                    std::move(lookup_key_futs[lookup_idx++])
+            );
+        }
+    }
+
     std::vector<folly::Future<ReadVersionWithNodesOutput>> read_versions_futs;
 
     const auto max_batch_size = ConfigsMap::instance()->get_int("BatchRead.MaxConcurrency", 50);
@@ -1424,16 +1504,43 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options = batch_read_options.at(idx),
                                     handler_data](auto&& opt_index_key) {
-                            auto version_info = get_version_identifier(
-                                    stream_ids[idx],
-                                    version_queries[idx],
-                                    read_options,
-                                    opt_index_key.has_value()
-                                            ? std::make_optional<VersionedItem>(std::move(*opt_index_key))
-                                            : std::nullopt
+                            // Choose the index information for this request
+                            auto version_info = util::variant_match(
+                                    version_queries[idx].content_,
+
+                                    // Handle an index already loaded in memory
+                                    [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index)
+                                            -> VersionIdentifier {
+                                        return prepare_preloaded_index(
+                                                preloaded_index, read_query
+                                        );
+                                    },
+
+                                    // Handle a normal version lookup result
+                                    [&](const auto&) -> VersionIdentifier {
+                                        return get_version_identifier(
+                                                stream_ids[idx],
+                                                version_queries[idx],
+                                                read_options,
+                                                opt_index_key.has_value()
+                                                        ? std::make_optional<VersionedItem>(
+                                                                  std::move(*opt_index_key)
+                                                          )
+                                                        : std::nullopt
+                                        );
+                                    }
                             );
-                            return read_frame_for_version(store, version_info, read_query, read_options, handler_data);
+
+                            // Start reading data using the selected index
+                            return read_frame_for_version(
+                                    store,
+                                    version_info,
+                                    read_query,
+                                    read_options,
+                                    handler_data
+                            );
                         })
+
                         .thenValue([this,
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],

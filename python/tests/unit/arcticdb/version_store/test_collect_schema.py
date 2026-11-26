@@ -16,7 +16,9 @@ from arcticdb.exceptions import SchemaException, KeyNotFoundException
 from arcticdb.options import ArrowOutputStringFormat, OutputFormat
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal_with_arrow, config_context, query_stats_operation_count
+from arcticdb import LazyDataFrameCollection
 from tests.util.arrow import create_1d_arrow_structure
+from pandas.testing import assert_frame_equal
 
 
 @pytest.mark.parametrize("num_rows", [0, 1])
@@ -470,3 +472,232 @@ def test_collect_schema_1d(mem_library, input_type):
     schema = lib.read(sym, lazy=True)._collect_schema()
     expected_name = "series_name" if input_type == "NamedSeries" else ""
     assert schema == pl.Schema({expected_name: pl.Int64})
+
+
+@pytest.mark.parametrize(
+    "as_of",
+    [
+        pytest.param(None, id="latest"),
+        pytest.param(0, id="version-zero"),
+        pytest.param("saved", id="snapshot"),
+    ],
+)
+def test_read_request_without_preloaded_index(mem_library, as_of):
+    """Keep the requested version selector before schema discovery."""
+    lib = mem_library
+    lib.write("data", pd.DataFrame({"a": np.arange(6)}))
+    lib.snapshot("saved")
+
+    source = lib.read("data", as_of=as_of, lazy=True)
+    request = source._to_read_request()
+
+    # No index has been loaded yet
+    assert source._preloaded_index is None
+
+    # Building the request must not change the selected version
+    assert request.as_of == as_of
+    assert source.read_request.as_of == as_of
+
+
+@pytest.mark.parametrize(
+    "as_of",
+    [
+        pytest.param(None, id="latest"),
+        pytest.param(0, id="version-zero"),
+        pytest.param("saved", id="snapshot"),
+    ],
+)
+def test_read_request_reuses_preloaded_index(mem_library, clear_query_stats, as_of):
+    """Reuse the loaded index and preserve the existing filter."""
+    lib = mem_library
+    original = pd.DataFrame({"a": np.arange(6, dtype=np.int64)})
+
+    lib.write("data", original)
+    lib.snapshot("saved")
+
+    source = lib.read("data", as_of=as_of, lazy=True)
+    source = source[source["a"] > 1]
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        # Load version 0's index while discovering its schema
+        source._collect_schema()
+        loaded_index = source._preloaded_index
+        assert loaded_index is not None
+
+        # Publish a newer version with different values
+        lib.write("data", original.assign(a=original["a"] + 100))
+
+        request = source._to_read_request()
+
+        # The request must use the index already loaded for the schema
+        assert request.as_of is loaded_index
+
+        # Keep the original selector available for later schema discovery
+        assert source.read_request.as_of == as_of
+
+        qs.reset_stats()
+        with qs.query_stats():
+            # Read through the generated request, without using collect()
+            result = lib.read(**request._asdict())
+            stats = qs.get_query_stats()
+
+        # The loaded index must keep this read on version 0
+        assert result.version == 0
+
+        # Keep the matching values from the original table.
+        # ArcticDB rebuilds the row-count index after filtering, so reset
+        # pandas' retained row labels to match that representation
+        expected = original[original["a"] > 1].reset_index(drop=True)
+        assert_frame_equal(result.data, expected)
+
+        # This small table is stored as one data segment so reading its values should fetch it once
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+
+        # Do not fetch the index or resolve the version again
+        for key_type in ("TABLE_INDEX", "VERSION_REF", "VERSION"):
+            assert query_stats_operation_count(stats, "Memory_GetObject", key_type) == 0
+
+        # A second request must still use the same loaded index
+        assert source._to_read_request().as_of is loaded_index
+
+
+def test_read_request_uses_latest_schema_index(mem_library):
+    """Use the newly loaded index after discovering the schema again."""
+    lib = mem_library
+    original = pd.DataFrame({"a": np.arange(6, dtype=np.int64)})
+    lib.write("data", original)
+
+    source = lib.read("data", lazy=True)
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        # The first schema call resolves version 0
+        source._collect_schema()
+        first_index = source._preloaded_index
+        assert source._to_read_request().as_of is first_index
+
+        # Publish version 1, then deliberately discover the schema again
+        newer = original.assign(a=original["a"] + 100)
+        lib.write("data", newer)
+        source._collect_schema()
+
+        # New requests must use the index from the second schema call
+        second_index = source._preloaded_index
+        assert second_index is not first_index
+
+        # Build a new request using the index loaded by the second schema call
+        request = source._to_read_request()
+        assert request.as_of is second_index
+
+        # Schema discovery must not overwrite the original "latest" instruction.
+        # A future schema call should still be able to choose a newer version
+        assert source.read_request.as_of is None
+
+        # Execute the request directly and check that it reads version 1
+        result = lib.read(**request._asdict())
+        assert result.version == 1
+
+        assert_frame_equal(result.data, newer)
+
+
+@pytest.mark.parametrize(
+    "preload_first",
+    [False, True],
+    ids=["first-unresolved", "first-preloaded"],
+)
+@pytest.mark.parametrize(
+    "preload_second",
+    [False, True],
+    ids=["second-unresolved", "second-preloaded"],
+)
+def test_batch_read_reuses_preloaded_indexes(
+    mem_library,
+    clear_query_stats,
+    preload_first,
+    preload_second,
+):
+    """Reuse loaded indexes and resolve ordinary selectors in the same batch."""
+    lib = mem_library
+    original = pd.DataFrame({"a": np.arange(6, dtype=np.int64)})
+    newer = original.assign(a=original["a"] + 100)
+
+    # Create version 0 for both symbols
+    lib.write("first", original)
+    lib.write("second", original)
+
+    first = lib.read("first", lazy=True)
+    second = lib.read("second", lazy=True)
+
+    # Give each source its own filter
+    first = first[first["a"] > 1]
+    second = second[second["a"] > 2]
+
+    if preload_first:
+        # Resolve the first source while version 0 is latest
+        first._collect_schema()
+
+    if preload_second:
+        # Resolve the second source while version 0 is latest
+        second._collect_schema()
+
+    first_index = first._preloaded_index
+    second_index = second._preloaded_index
+
+    # Publish version 1 after optional schema discovery
+    lib.write("first", newer)
+    lib.write("second", newer)
+
+    # Preloaded sources must keep version 0, unresolved sources should now select version 1
+    first_data = original if preload_first else newer
+    second_data = original if preload_second else newer
+
+    # Include the shared collection filter when calculating expected results
+    expected_first = first_data[
+        (first_data["a"] > 1) & (first_data["a"] < 104)
+    ].reset_index(drop=True)
+
+    expected_second = second_data[
+        (second_data["a"] > 2) & (second_data["a"] < 104)
+    ].reset_index(drop=True)
+
+    collection = LazyDataFrameCollection([first, second])
+
+    # Apply another filter to both sources
+    collection = collection[collection["a"] < 104]
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        # Collect twice to check that loaded indexes remain reusable
+        for _ in range(2):
+            qs.reset_stats()
+
+            with qs.query_stats():
+                results = collection.collect()
+                stats = qs.get_query_stats()
+
+            assert len(results) == 2
+
+            # Results must stay in the same order as the input sources
+            assert results[0].version == (0 if preload_first else 1)
+            assert results[1].version == (0 if preload_second else 1)
+
+            # Both the individual and shared filters must be preserved
+            assert_frame_equal(results[0].data, expected_first)
+            assert_frame_equal(results[1].data, expected_second)
+
+            # Each small table occupies one data segment
+            assert query_stats_operation_count(
+                stats, "Memory_GetObject", "TABLE_DATA"
+            ) == 2
+
+            # Only unresolved sources need to fetch their indexes
+            expected_index_reads = (
+                int(not preload_first) + int(not preload_second)
+            )
+            assert query_stats_operation_count(
+                stats, "Memory_GetObject", "TABLE_INDEX"
+            ) == expected_index_reads
+
+    # Collection must not change the sources' saved indexes or selectors
+    assert first._preloaded_index is first_index
+    assert second._preloaded_index is second_index
+    assert first.read_request.as_of is None
+    assert second.read_request.as_of is None
