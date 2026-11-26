@@ -51,13 +51,15 @@ SliceAndKey IndexSegmentReader::row(std::size_t r) const {
     auto key_type = key_type_from_segment<Fields>(seg_, i);
     auto sid = stream_id_from_segment<Fields>(seg_, i);
 
-    auto k = entity::atom_key_builder()
-                     .gen_id(seg_.scalar_at<VersionId>(i, int(Fields::version_id)).value())
-                     .creation_ts(seg_.scalar_at<timestamp>(i, int(Fields::creation_ts)).value())
-                     .content_hash(seg_.scalar_at<uint64_t>(i, int(Fields::content_hash)).value())
-                     .start_index(index_start_from_segment<SegmentInMemory, Fields>(seg_, i))
-                     .end_index(index_end_from_segment<SegmentInMemory, Fields>(seg_, i))
-                     .build(std::move(sid), key_type);
+    auto k =
+            entity::atom_key_builder()
+                    .gen_id(seg_.scalar_at<VersionId>(i, util::lossless_cast<size_t>(Fields::version_id)).value())
+                    .creation_ts(seg_.scalar_at<timestamp>(i, util::lossless_cast<size_t>(Fields::creation_ts)).value())
+                    .content_hash(seg_.scalar_at<uint64_t>(i, util::lossless_cast<size_t>(Fields::content_hash)).value()
+                    )
+                    .start_index(index_start_from_segment<SegmentInMemory, Fields>(seg_, i))
+                    .end_index(index_end_from_segment<SegmentInMemory, Fields>(seg_, i))
+                    .build(std::move(sid), key_type);
 
     ColRange col_rg{
             column(index::Fields::start_col).scalar_at<std::size_t>(i).value(),

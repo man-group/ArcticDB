@@ -10,6 +10,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/test/test_container.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -54,8 +55,8 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
 
     using IndexTagType = typename IdxType::TypeDescTag;
 
-    const auto& start_idx_col = container.seg().column(position_t(index::Fields::start_index));
-    const auto& end_idx_col = container.seg().column(position_t(index::Fields::end_index));
+    const auto& start_idx_col = container.seg().column(util::lossless_cast<size_t>(index::Fields::start_index));
+    const auto& end_idx_col = container.seg().column(util::lossless_cast<size_t>(index::Fields::end_index));
     ARCTICDB_DEBUG(log::version(), "Searching for match in index range {}", rg);
 
     auto end_index_col_begin = end_idx_col.template begin<IndexTagType>();
