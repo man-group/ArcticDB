@@ -29,7 +29,7 @@ bool ColumnStatsQueryMetadata::should_try_column_stats_read() const {
     return is_column_stats_enabled() && filter_expression != nullptr;
 }
 
-StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation);
+static StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation);
 
 StatsVariantData evaluate_ast_node_against_stats(
         const ExpressionNode& node, const StatsRowIndices& row_indices, const ColumnStatsData& column_stats
@@ -214,7 +214,7 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
                         if (entry.stat_type != MIN_V1 && entry.stat_type != MAX_V1) {
                             continue;
                         }
-                        const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
+                        const auto& column = segment.column(entry.segment_col_idx);
                         const bool is_min = entry.stat_type == MIN_V1;
                         auto& dest = is_min ? stats_for_column.mins : stats_for_column.maxes;
                         for_each_enumerated<typename type_info::TDT>(
@@ -238,7 +238,7 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
                 continue;
             }
             auto& dest = entry.stat_type == NAN_COUNT_V1 ? stats_for_column.nan_counts : stats_for_column.null_counts;
-            const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
+            const auto& column = segment.column(entry.segment_col_idx);
             for_each_enumerated<CountTDT>(column, [&](const ColumnData::Enumeration<uint64_t>& enumerating_it) {
                 auto idx = static_cast<size_t>(enumerating_it.idx());
                 if (idx >= first_kept && idx < last_kept_excl) {

@@ -32,7 +32,7 @@ struct KeyData {
     const char* description_;
 };
 
-KeyData get_key_data(KeyType key_type) {
+static KeyData get_key_data(KeyType key_type) {
 #define NUMERIC_KEY(kt, name, c)                                                                                       \
     case kt:                                                                                                           \
         return KeyData{#name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt};
@@ -87,7 +87,7 @@ char key_type_short_name(KeyType key_type) { return get_key_data(key_type).short
 
 VariantType variant_type_from_key_type(KeyType key_type) { return get_key_data(key_type).variant_type_; }
 
-KeyClass key_class_from_key_type(KeyType key_type) { return get_key_data(key_type).key_class_; }
+static KeyClass key_class_from_key_type(KeyType key_type) { return get_key_data(key_type).key_class_; }
 
 const char* get_key_description(KeyType key_type) { return get_key_data(key_type).description_; }
 

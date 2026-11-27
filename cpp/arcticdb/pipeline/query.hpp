@@ -18,6 +18,7 @@
 #include <arcticdb/util/simple_string_hash.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 #include <algorithm>
 #include <vector>
 #include <string>
@@ -216,7 +217,8 @@ inline FilterQuery<ContainerType> create_index_filter(
     return [rg = range, dynamic_schema, column_groups, is_read_operation](
                    const ContainerType& container, std::unique_ptr<util::BitSet>&& input
            ) mutable {
-        auto maybe_index_type = container.seg().template scalar_at<uint8_t>(0u, int(index::Fields::index_type));
+        auto maybe_index_type =
+                container.seg().template scalar_at<uint8_t>(0u, util::lossless_cast<size_t>(index::Fields::index_type));
         const auto index_type = IndexDescriptor::Type(maybe_index_type.value());
         switch (index_type) {
         case IndexDescriptorImpl::Type::TIMESTAMP: {

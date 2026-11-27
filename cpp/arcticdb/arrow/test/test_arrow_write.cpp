@@ -24,7 +24,7 @@ using namespace arcticdb;
 
 // Duplicated from arrow_utils.cpp to keep build times down until sparrow array formatting is moved out of
 // sparrow/array.hpp
-sparrow::array create_timestamp_array(
+static sparrow::array create_timestamp_array(
         timestamp* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap,
         const date::time_zone* tz = nullptr
 ) {
@@ -443,7 +443,7 @@ struct TrackingAllocator {
     bool operator==(const TrackingAllocator& other) const { return counter_ == other.counter_; }
 };
 
-std::shared_ptr<RecordBatchData> create_record_batch_with_allocation_tracking(
+static std::shared_ptr<RecordBatchData> create_record_batch_with_allocation_tracking(
         AllocationCounter* counter, size_t num_rows = 100
 ) {
     auto allocator = TrackingAllocator<uint8_t>(counter);
@@ -520,6 +520,6 @@ TEST(ArrowWriteMemoryLifetime, InputFrameKeepsBufferAlive) {
     constexpr auto num_rows = num_record_batches * num_rows_per_record_batch;
     ASSERT_EQ(seg.row_count(), num_rows);
     for (size_t i = 0; i < num_rows; ++i) {
-        ASSERT_EQ(*seg.scalar_at<uint8_t>(i, 0), static_cast<uint8_t>(i % num_rows_per_record_batch));
+        ASSERT_EQ(*seg.scalar_at<uint8_t>(i, 0u), static_cast<uint8_t>(i % num_rows_per_record_batch));
     }
 }

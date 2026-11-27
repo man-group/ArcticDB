@@ -61,8 +61,8 @@ std::vector<RangesAndKey> generate_ranges_and_keys(
             if (source_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT) {
                 return {0, 0};
             }
-            return {*segments[i].scalar_at<timestamp>(0, 0),
-                    *segments[i].scalar_at<timestamp>(segments[i].row_count() - 1, 0)};
+            return {*segments[i].scalar_at<timestamp>(0, 0u),
+                    *segments[i].scalar_at<timestamp>(segments[i].row_count() - 1, 0u)};
         }();
         ranges_and_keys.emplace_back(
                 row_ranges[i],
@@ -112,7 +112,7 @@ MergeUpdateClause create_clause(
 ) {
     auto strat = strategy;
     strat.match_na = match_na;
-    OutputSchema source_output_schema = schema_from_input_frame(input_frame);
+    FrameSchema source_output_schema = schema_from_input_frame(input_frame);
     auto frame = std::make_shared<InputFrame>(std::move(input_frame));
     // Same conversion as merge_update_impl. WriteToSegmentTask adds the index column itself.
     FrameSlice full_slice{
@@ -218,7 +218,7 @@ struct MergeUpdateClauseUpdateStrategyTestBase {
     std::vector<ColRange> col_ranges_;
 };
 
-std::vector<std::vector<EntityId>> structure_entities(
+static std::vector<std::vector<EntityId>> structure_entities(
         const std::span<const std::vector<size_t>> structure_indices, const std::vector<EntityId>& entities
 ) {
     std::vector<std::vector<EntityId>> structured_entities;

@@ -85,11 +85,11 @@ void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_r
     }
 }
 
-std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
+static std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, bool via_iteration, bool load_data
 );
 
-inline std::vector<AppendMapEntry> load_via_iteration(
+inline static std::vector<AppendMapEntry> load_via_iteration(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, bool load_data
 ) {
     auto prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
@@ -134,7 +134,7 @@ std::set<StreamId> get_active_incomplete_refs(const std::shared_ptr<Store>& stor
     return output;
 }
 
-TimeseriesDescriptor pack_timeseries_descriptor(
+static TimeseriesDescriptor pack_timeseries_descriptor(
         const StreamDescriptor& descriptor, size_t total_rows, std::optional<AtomKey>&& next_key,
         const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta
 ) {
@@ -192,7 +192,7 @@ SegmentInMemory incomplete_segment_from_frame(
     return output;
 }
 
-void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_columns) {
+static void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_columns) {
     if (sort_columns.size() == 1)
         mutable_seg.sort(sort_columns.at(0));
     else
@@ -214,7 +214,7 @@ static folly::Future<std::vector<AtomKey>> write_empty_incomplete_frame(
             .thenValueInline([](VariantKey&& res) { return std::vector<AtomKey>{to_atom(std::move(res))}; });
 }
 
-[[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
+[[nodiscard]] static folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         const WriteIncompleteOptions& options
 ) {
@@ -302,7 +302,7 @@ static folly::Future<std::vector<AtomKey>> write_empty_incomplete_frame(
     return folly::collect(res).via(&async::io_executor());
 }
 
-[[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
+[[nodiscard]] static folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         const WriteIncompleteOptions& options
 ) {

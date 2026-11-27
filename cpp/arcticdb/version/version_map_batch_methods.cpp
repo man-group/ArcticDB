@@ -48,7 +48,7 @@ void StreamVersionData::do_react(const pipelines::SnapshotVersionQuery& snapshot
     snapshots_.push_back(snapshot_query.name_);
 }
 
-std::optional<AtomKey> get_specific_version_from_entry(
+static std::optional<AtomKey> get_specific_version_from_entry(
         const std::shared_ptr<VersionMapEntry>& version_map_entry,
         const pipelines::SpecificVersionQuery& specific_version, bool include_deleted = false
 ) {
@@ -60,7 +60,7 @@ std::optional<AtomKey> get_specific_version_from_entry(
     return find_index_key_for_version_id(*opt_version_id, version_map_entry, include_deleted);
 }
 
-std::optional<AtomKey> get_version_map_entry_by_timestamp(
+static std::optional<AtomKey> get_version_map_entry_by_timestamp(
         const std::shared_ptr<VersionMapEntry>& version_map_entry,
         const pipelines::TimestampVersionQuery& timestamp_version
 ) {
@@ -73,7 +73,7 @@ std::optional<AtomKey> get_version_map_entry_by_timestamp(
     }
 }
 
-inline std::optional<AtomKey> get_key_for_version_query(
+inline static std::optional<AtomKey> get_key_for_version_query(
         const std::shared_ptr<VersionMapEntry>& version_map_entry, const pipelines::VersionQuery& version_query
 ) {
     return util::variant_match(
@@ -125,7 +125,7 @@ using VersionEntryOrSnapshot = std::variant<std::shared_ptr<VersionMapEntry>, st
 using SplitterType = folly::FutureSplitter<VersionEntryOrSnapshot>;
 using SnapshotKeyMap = std::unordered_map<SnapshotId, std::optional<VariantKey>>;
 
-folly::Future<VersionEntryOrSnapshot> set_up_snapshot_future(
+static folly::Future<VersionEntryOrSnapshot> set_up_snapshot_future(
         ankerl::unordered_dense::map<StreamId, SplitterType>& snapshot_futures,
         const std::shared_ptr<SnapshotCountMap>& snapshot_count_map,
         const std::shared_ptr<SnapshotKeyMap>& snapshot_key_map, const pipelines::SnapshotVersionQuery& snapshot_query,
@@ -170,7 +170,7 @@ folly::Future<VersionEntryOrSnapshot> set_up_snapshot_future(
     }
 }
 
-folly::Future<VersionEntryOrSnapshot> set_up_version_future(
+static folly::Future<VersionEntryOrSnapshot> set_up_version_future(
         const StreamId& symbol, const StreamVersionData& version_data,
         ankerl::unordered_dense::map<StreamId, SplitterType>& version_futures, const std::shared_ptr<Store>& store,
         const std::shared_ptr<VersionMap>& version_map

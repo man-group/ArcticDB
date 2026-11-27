@@ -26,12 +26,12 @@ void FixedSchema::check(std::size_t pos, TypeDescriptor td) const {
 
 [[nodiscard]] StreamDescriptor FixedSchema::default_descriptor() const { return desc_.clone(); }
 
-position_t FixedSchema::get_column_idx_by_name(
+size_t FixedSchema::get_column_idx_by_name(
         SegmentInMemory& seg, std::string_view col_name, TypeDescriptor, size_t, size_t
 ) {
     auto opt_col = seg.column_index(col_name);
     util::check(static_cast<bool>(opt_col), "Column {} not found", col_name);
-    return static_cast<position_t>(opt_col.value());
+    return opt_col.value();
 }
 
 const Index& FixedSchema::index() const { return index_; }
@@ -55,18 +55,18 @@ DynamicSchema DynamicSchema::default_schema(const Index& index, const StreamId& 
 
 void DynamicSchema::check(std::size_t, TypeDescriptor) const {}
 
-position_t DynamicSchema::get_column_idx_by_name(
+size_t DynamicSchema::get_column_idx_by_name(
         SegmentInMemory& seg, std::string_view col_name, TypeDescriptor desc, size_t expected_size, size_t existing_size
 ) {
     auto opt_col = seg.column_index(col_name);
     if (!opt_col) {
         const size_t init_size = expected_size > existing_size ? expected_size - existing_size : 0;
         FieldWrapper new_field(desc, col_name);
-        position_t pos = seg.add_column(new_field.field(), init_size, AllocationType::DYNAMIC);
+        size_t pos = seg.add_column(new_field.field(), init_size, AllocationType::DYNAMIC);
         ARCTICDB_TRACE(log::version(), "Added column {} to position: {}", col_name, pos);
         return pos;
     } else {
-        return static_cast<position_t>(*opt_col);
+        return *opt_col;
     }
 }
 

@@ -15,7 +15,7 @@ namespace arcticdb {
 
 using namespace arcticdb::entity;
 
-inline arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedValue sorted) {
+inline static arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedValue sorted) {
     switch (sorted) {
     case SortedValue::UNSORTED:
         return arcticdb::proto::descriptors::SortedValue::UNSORTED;

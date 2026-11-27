@@ -18,7 +18,7 @@
 namespace arcticdb {
 
 template<bool arguments_reversed = false>
-inline std::string ternary_operation_column_name(std::string_view left, std::string_view right) {
+inline static std::string ternary_operation_column_name(std::string_view left, std::string_view right) {
     if constexpr (arguments_reversed) {
         return fmt::format("(COND ? {} : {})", right, left);
     } else {
@@ -27,7 +27,7 @@ inline std::string ternary_operation_column_name(std::string_view left, std::str
 }
 
 template<bool arguments_reversed = false>
-inline std::string ternary_operation_with_types_to_string(
+inline static std::string ternary_operation_with_types_to_string(
         std::string_view left, const TypeDescriptor& type_left, std::string_view right, const TypeDescriptor& type_right
 ) {
     if constexpr (arguments_reversed) {
@@ -491,7 +491,9 @@ VariantData ternary_operator(const util::BitSet& condition, bool left, bool righ
     return output_bitset;
 }
 
-VariantData visit_ternary_operator(const VariantData& condition, const VariantData& left, const VariantData& right) {
+static VariantData visit_ternary_operator(
+        const VariantData& condition, const VariantData& left, const VariantData& right
+) {
     if (std::holds_alternative<FullResult>(condition)) {
         return left;
     } else if (std::holds_alternative<EmptyResult>(condition)) {

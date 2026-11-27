@@ -13,7 +13,7 @@ using namespace arcticdb;
 // existing row count and so the only part combine_schema cannot do. Rewrites the incoming metadata's start so that it
 // spans both, and so has to run before the schemas are combined.
 void align_rowrange_norm_for_append(
-        entity::OutputSchema& existing, size_t existing_total_rows, entity::OutputSchema& incoming
+        entity::FrameSchema& existing, size_t existing_total_rows, entity::FrameSchema& incoming
 ) {
     if (existing.inferred_from_empty_frame() || incoming.inferred_from_empty_frame()) {
         // A RangeIndex normalized from an empty frame needs no alignment. It will be skipped by `combine_schema`
@@ -38,7 +38,7 @@ void align_rowrange_norm_for_append(
 
 namespace arcticdb {
 
-entity::OutputSchema combine_existing_tsd_with_frame(
+entity::FrameSchema combine_existing_tsd_with_frame(
         NormalizationOperation operation, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
         pipelines::InputFrame& new_frame
 ) {
@@ -55,7 +55,7 @@ entity::OutputSchema combine_existing_tsd_with_frame(
 }
 
 IncompleteSchemas combine_incomplete_schemas(
-        const std::optional<entity::OutputSchema>& existing, size_t existing_total_rows,
+        const std::optional<entity::FrameSchema>& existing, size_t existing_total_rows,
         std::span<const AppendMapEntry> incompletes, const ReadIncompletesFlags& flags, const StreamId& stream_id
 ) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -79,10 +79,10 @@ IncompleteSchemas combine_incomplete_schemas(
             // Reaching a timezone decision through the sparsify flag is a bug. Monday ref 11198274752.
             label_index_utc_if_unlabelled(norm, descriptor.index().type());
         }
-        return entity::OutputSchema{std::move(descriptor), std::move(norm), entry.empty()};
+        return entity::FrameSchema{std::move(descriptor), std::move(norm), entry.empty()};
     };
 
-    auto staged_schemas = util::reserve_vector<entity::OutputSchema>(incompletes.size());
+    auto staged_schemas = util::reserve_vector<entity::FrameSchema>(incompletes.size());
     for (const auto& entry : incompletes) {
         staged_schemas.emplace_back(schema_of(entry));
     }

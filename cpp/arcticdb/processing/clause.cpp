@@ -98,7 +98,7 @@ struct SegmentWrapper {
     const StreamId& id() const { return id_; }
 };
 
-OutputSchema modify_schema(OutputSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses) {
+FrameSchema modify_schema(FrameSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses) {
     for (const auto& clause : clauses) {
         schema = clause->modify_schema(std::move(schema));
     }
@@ -140,13 +140,13 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
     return output;
 }
 
-OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, clause_info_.input_columns_, "Filter");
-    std::variant<BitSetTag, DataType> return_type = expression_context_->root_->compute(output_schema.column_types());
+FrameSchema FilterClause::modify_schema(FrameSchema&& schema) const {
+    check_column_presence(schema, clause_info_.input_columns_, "Filter");
+    std::variant<BitSetTag, DataType> return_type = expression_context_->root_->compute(schema.column_types());
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset"
     );
-    return output_schema;
+    return schema;
 }
 
 std::string FilterClause::to_string() const {
@@ -213,20 +213,20 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
     return output;
 }
 
-OutputSchema ProjectClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, clause_info_.input_columns_, "Project");
+FrameSchema ProjectClause::modify_schema(FrameSchema&& schema) const {
+    check_column_presence(schema, clause_info_.input_columns_, "Project");
     const auto& root = *expression_context_->root_;
     if (root.is_value()) {
         const auto& value = std::get<std::shared_ptr<Value>>(std::get<ExpressionNode::Leaf>(root.kind_));
-        output_schema.add_field(output_column_, value->descriptor().data_type());
+        schema.add_field(output_column_, value->descriptor().data_type());
     } else {
-        std::variant<BitSetTag, DataType> return_type = root.compute(output_schema.column_types());
+        std::variant<BitSetTag, DataType> return_type = root.compute(schema.column_types());
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 std::holds_alternative<DataType>(return_type), "ProjectClause AST would produce a bitset, not a column"
         );
-        output_schema.add_field(output_column_, std::get<DataType>(return_type));
+        schema.add_field(output_column_, std::get<DataType>(return_type));
     }
-    return output_schema;
+    return schema;
 }
 
 [[nodiscard]] std::string ProjectClause::to_string() const {
@@ -527,10 +527,10 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg)));
 }
 
-OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, clause_info_.input_columns_, "Aggregation");
-    output_schema.clear_default_values();
-    const auto& input_stream_desc = output_schema.stream_descriptor();
+FrameSchema AggregationClause::modify_schema(FrameSchema&& schema) const {
+    check_column_presence(schema, clause_info_.input_columns_, "Aggregation");
+    schema.clear_default_values();
+    const auto& input_stream_desc = schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
     stream_desc.add_field(input_stream_desc.field(*input_stream_desc.find_field(grouping_column_)));
     stream_desc.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
@@ -538,23 +538,23 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
     for (const auto& agg : aggregators_) {
         const auto& input_column_name = agg.get_input_column_name().value;
         const auto& output_column_name = agg.get_output_column_name().value;
-        const auto& input_column_type = output_schema.column_types()[input_column_name];
+        const auto& input_column_type = schema.column_types()[input_column_name];
         auto agg_data = agg.get_aggregator_data();
         agg_data.add_data_type(input_column_type);
         const DataType output_column_type = agg_data.get_output_data_type();
         stream_desc.add_scalar_field(output_column_type, output_column_name);
         const std::optional<Value>& default_value = agg_data.get_default_value();
         if (default_value) {
-            output_schema.set_default_value_for_column(output_column_name, *default_value);
+            schema.set_default_value_for_column(output_column_name, *default_value);
         }
     }
 
-    output_schema.set_stream_descriptor(std::move(stream_desc));
-    auto mutable_index = output_schema.norm_metadata_.mutable_df()->mutable_common()->mutable_index();
+    schema.set_stream_descriptor(std::move(stream_desc));
+    auto mutable_index = schema.norm_metadata_.mutable_df()->mutable_common()->mutable_index();
     mutable_index->set_name(grouping_column_);
     mutable_index->clear_fake_name();
     mutable_index->set_is_physically_stored(true);
-    return output_schema;
+    return schema;
 }
 
 [[nodiscard]] std::string AggregationClause::to_string() const { return str_; }
@@ -640,7 +640,7 @@ std::vector<EntityId> SortClause::process(std::vector<EntityId>&& entity_ids) co
 }
 
 template<typename IndexType, typename DensityPolicy, typename QueueType, bool dynamic_schema>
-void merge_impl(
+static void merge_impl(
         std::shared_ptr<ComponentManager> component_manager, std::vector<std::vector<EntityId>>& ret,
         QueueType& input_streams, bool add_symbol_column, const RowRange& row_range, const ColRange& col_range,
         IndexType index, const StreamDescriptor& stream_descriptor
@@ -693,9 +693,9 @@ void MergeClause::set_component_manager(std::shared_ptr<ComponentManager> compon
 
 const ClauseInfo& MergeClause::clause_info() const { return clause_info_; }
 
-OutputSchema MergeClause::modify_schema(OutputSchema&& output_schema) const {
-    check_is_timeseries(output_schema.stream_descriptor(), "Merge");
-    return output_schema;
+FrameSchema MergeClause::modify_schema(FrameSchema&& schema) const {
+    check_is_timeseries(schema.stream_descriptor(), "Merge");
+    return schema;
 }
 
 std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(
@@ -1013,10 +1013,10 @@ std::vector<EntityId> DateRangeClause::process(std::vector<EntityId>&& entity_id
         size_t start_row{0};
         size_t end_row{row_range->diff()};
         if (start_ > start_index && start_ <= end_index) {
-            start_row = lower_bound_idx<timestamp>(*proc.segments_->at(0)->column_ptr(0), start_);
+            start_row = lower_bound_idx<timestamp>(*proc.segments_->at(0)->column_ptr(0u), start_);
         }
         if (end_ >= start_index && end_ <= end_index) {
-            end_row = upper_bound_idx<timestamp>(*proc.segments_->at(0)->column_ptr(0), end_);
+            end_row = upper_bound_idx<timestamp>(*proc.segments_->at(0)->column_ptr(0u), end_);
         }
         proc.truncate(start_row, end_row);
     } // else all rows in the processing unit are required, do nothing
@@ -1027,9 +1027,9 @@ void DateRangeClause::set_processing_config(const ProcessingConfig& processing_c
     processing_config_ = processing_config;
 }
 
-OutputSchema DateRangeClause::modify_schema(OutputSchema&& output_schema) const {
-    check_is_timeseries(output_schema.stream_descriptor(), "DateRange");
-    return output_schema;
+FrameSchema DateRangeClause::modify_schema(FrameSchema&& schema) const {
+    check_is_timeseries(schema.stream_descriptor(), "DateRange");
+    return schema;
 }
 
 std::string DateRangeClause::to_string() const { return fmt::format("DATE RANGE {} - {}", start_, end_); }
@@ -1086,7 +1086,7 @@ std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(
 
 std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) const { return std::move(entity_ids); }
 
-OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& input_schemas) const {
+FrameSchema ConcatClause::join_schemas(std::vector<FrameSchema>&& input_schemas) const {
     return combine_schema(input_schemas, concat_options(join_type_));
 }
 
@@ -1201,9 +1201,9 @@ void WriteClause::set_component_manager(std::shared_ptr<ComponentManager> compon
     component_manager_ = std::move(component_manager);
 }
 
-OutputSchema WriteClause::modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+FrameSchema WriteClause::modify_schema(FrameSchema&& schema) const { return schema; }
 
-OutputSchema WriteClause::join_schemas(std::vector<OutputSchema>&&) const {
+FrameSchema WriteClause::join_schemas(std::vector<FrameSchema>&&) const {
     util::raise_rte("WriteClause::join_schemas should never be called");
 }
 

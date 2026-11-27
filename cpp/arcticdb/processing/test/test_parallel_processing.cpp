@@ -19,9 +19,9 @@ using namespace arcticdb;
 using namespace arcticdb::pipelines;
 
 // Initialising devices is costly. Create one and reuse it.
-std::random_device device{};
+static std::random_device device{};
 
-std::shared_ptr<ComponentManager> set_component_manager(const std::span<std::shared_ptr<Clause>> clauses) {
+static std::shared_ptr<ComponentManager> set_component_manager(const std::span<std::shared_ptr<Clause>> clauses) {
     auto component_manager = std::make_shared<ComponentManager>();
     for (auto& clause : clauses) {
         clause->set_component_manager(component_manager);
@@ -29,7 +29,7 @@ std::shared_ptr<ComponentManager> set_component_manager(const std::span<std::sha
     return component_manager;
 }
 
-std::shared_ptr<version_store::ProcessingUnitAdmissionHandler> make_admission_handler(
+static std::shared_ptr<version_store::ProcessingUnitAdmissionHandler> make_admission_handler(
         const std::span<folly::Promise<SegmentAndSlice>> segment_and_slice_promises
 ) {
     const size_t num_segments = segment_and_slice_promises.size();
@@ -51,7 +51,7 @@ std::shared_ptr<version_store::ProcessingUnitAdmissionHandler> make_admission_ha
     );
 }
 
-void push_segments(const std::span<folly::Promise<SegmentAndSlice>> segment_and_slice_promises) {
+static void push_segments(const std::span<folly::Promise<SegmentAndSlice>> segment_and_slice_promises) {
     for (size_t idx = 0; idx < segment_and_slice_promises.size(); ++idx) {
         SegmentInMemory segment;
         segment.descriptor().set_id(static_cast<int64_t>(idx));
@@ -63,7 +63,7 @@ void push_segments(const std::span<folly::Promise<SegmentAndSlice>> segment_and_
 }
 
 template<size_t index, typename CurrentClause, typename... RestClauses>
-std::shared_ptr<Clause> create_clause(const size_t n) {
+static std::shared_ptr<Clause> create_clause(const size_t n) {
     if (index == n) {
         return std::make_shared<Clause>(CurrentClause{});
     } else if constexpr (sizeof...(RestClauses) > 0) {
@@ -74,7 +74,7 @@ std::shared_ptr<Clause> create_clause(const size_t n) {
 }
 
 template<typename... Clauses>
-std::shared_ptr<Clause> create_clause(const size_t n) {
+static std::shared_ptr<Clause> create_clause(const size_t n) {
     util::check(
             n < sizeof...(Clauses),
             "Trying to create clause with index {} but only {} clause types provided",
@@ -87,7 +87,7 @@ std::shared_ptr<Clause> create_clause(const size_t n) {
 /// Given the type of clauses as a template parameter pack, generate a vector composed of random selection of the
 /// clauses
 template<typename... ClauseTypes>
-std::shared_ptr<std::vector<std::shared_ptr<Clause>>> generate_random_clauses(int clause_count) {
+static std::shared_ptr<std::vector<std::shared_ptr<Clause>>> generate_random_clauses(int clause_count) {
     if constexpr (sizeof...(ClauseTypes) == 1) {
         using ClauseToCreate = std::tuple_element_t<0, std::tuple<ClauseTypes...>>;
         return std::make_shared<std::vector<std::shared_ptr<Clause>>>(
@@ -157,9 +157,9 @@ struct RowSliceClause {
         component_manager_ = std::move(component_manager);
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const { return {}; }
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const { return {}; }
 };
 
 struct RestructuringClause {
@@ -212,9 +212,9 @@ struct RestructuringClause {
         component_manager_ = std::move(component_manager);
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+    FrameSchema modify_schema(FrameSchema&& schema) const { return schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const { return {}; }
+    FrameSchema join_schemas(std::vector<FrameSchema>&&) const { return {}; }
 };
 
 TEST(Clause, ScheduleClauseProcessingStress) {

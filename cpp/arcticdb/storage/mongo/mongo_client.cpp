@@ -26,7 +26,7 @@ namespace arcticdb::storage::mongo {
 namespace detail {
 
 template<typename ElementType>
-std::string get_string_element(const ElementType& element) {
+static std::string get_string_element(const ElementType& element) {
 #if (MONGOCXX_VERSION_MAJOR * 1000 + MONGOCXX_VERSION_MINOR) >= 3007
     return bsoncxx::string::to_string(element.get_string().value);
 #else
@@ -35,7 +35,7 @@ std::string get_string_element(const ElementType& element) {
 }
 
 template<typename DocType>
-StreamId stream_id_from_document(DocType& doc, KeyType key_type) {
+static StreamId stream_id_from_document(DocType& doc, KeyType key_type) {
     StreamId stream_id;
     if (is_string_key_type(key_type))
         stream_id = get_string_element(doc["stream_id"]);
@@ -46,7 +46,7 @@ StreamId stream_id_from_document(DocType& doc, KeyType key_type) {
 }
 
 template<typename DocType>
-AtomKey atom_key_from_document(DocType& doc, KeyType key_type) {
+static AtomKey atom_key_from_document(DocType& doc, KeyType key_type) {
     auto index_type = IndexDescriptorImpl::Type(doc["index_type"].get_int32().value);
     IndexValue start_index, end_index;
     if (index_type == IndexDescriptorImpl::Type::TIMESTAMP) {
@@ -69,14 +69,14 @@ AtomKey atom_key_from_document(DocType& doc, KeyType key_type) {
 }
 
 template<typename DocType>
-RefKey ref_key_from_document(DocType& doc, KeyType key_type) {
+static RefKey ref_key_from_document(DocType& doc, KeyType key_type) {
     auto stream_id = stream_id_from_document(doc, key_type);
     bool is_old_type = key_type == KeyType::VERSION;
     return RefKey{stream_id, key_type, is_old_type};
 }
 
 template<typename DocType>
-entity::VariantKey variant_key_from_document(DocType& doc, const VariantKey& key) {
+static entity::VariantKey variant_key_from_document(DocType& doc, const VariantKey& key) {
     auto key_type = variant_key_type(key);
     if (std::holds_alternative<AtomKey>(key)) {
         return detail::atom_key_from_document(doc, key_type);
@@ -86,7 +86,7 @@ entity::VariantKey variant_key_from_document(DocType& doc, const VariantKey& key
 }
 
 template<typename KeyType>
-void add_common_key_values(bsoncxx::builder::basic::document& basic_builder, const KeyType& key) {
+static void add_common_key_values(bsoncxx::builder::basic::document& basic_builder, const KeyType& key) {
     using namespace bsoncxx::builder::basic;
     using namespace mongocxx;
     using namespace bsoncxx;
@@ -100,7 +100,7 @@ void add_common_key_values(bsoncxx::builder::basic::document& basic_builder, con
         basic_builder.append(kvp("stream_id", types::b_int64{int64_t(std::get<NumericId>(key.id()))}));
 }
 
-void add_atom_key_values(bsoncxx::builder::basic::document& basic_builder, const AtomKey& key) {
+static void add_atom_key_values(bsoncxx::builder::basic::document& basic_builder, const AtomKey& key) {
     using namespace bsoncxx::builder::basic;
     using namespace mongocxx;
     using namespace bsoncxx;
@@ -121,7 +121,7 @@ void add_atom_key_values(bsoncxx::builder::basic::document& basic_builder, const
     }
 }
 
-auto build_document(storage::KeySegmentPair& kv) {
+static auto build_document(storage::KeySegmentPair& kv) {
     using namespace bsoncxx::builder::basic;
     using namespace mongocxx;
     using namespace bsoncxx;

@@ -300,7 +300,7 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 template<typename T, typename U>
-std::optional<T> random_choice(const std::set<T>& set, U& gen) {
+static std::optional<T> random_choice(const std::set<T>& set, U& gen) {
     if (set.empty()) {
         return std::nullopt;
     }
@@ -412,9 +412,9 @@ TEST_F(SymbolListSuite, AddDeleteReadd) {
     state.do_list_symbols(symbol_list);
 }
 
-constexpr timestamp operator""_s(unsigned long long t) { return static_cast<timestamp>(t) * 1000'000'000; }
+constexpr static timestamp operator""_s(unsigned long long t) { return static_cast<timestamp>(t) * 1000'000'000; }
 
-bool result_equals(const ProblematicResult& got, const SymbolEntryData& expected) {
+static bool result_equals(const ProblematicResult& got, const SymbolEntryData& expected) {
     return got.reference_id() == expected.reference_id_ && got.action() == expected.action_ &&
            got.time() == expected.timestamp_;
 }
@@ -650,13 +650,15 @@ TEST(Problematic, RealTimestamps) {
     ASSERT_EQ(result_equals(result, expected), true);
 }
 
-bool is_compacted(const std::shared_ptr<Store>& store) {
+static bool is_compacted(const std::shared_ptr<Store>& store) {
     std::vector<AtomKey> symbol_keys;
     store->iterate_type(KeyType::SYMBOL_LIST, [&symbol_keys](const auto& key) { symbol_keys.push_back(to_atom(key)); });
     return symbol_keys.size() == 1 && symbol_keys[0].id() == StreamId{std::string{CompactionId}};
 }
 
-bool all_symbols_match(const std::shared_ptr<Store>& store, SymbolList& symbol_list, std::vector<StreamId>& expected) {
+static bool all_symbols_match(
+        const std::shared_ptr<Store>& store, SymbolList& symbol_list, std::vector<StreamId>& expected
+) {
     auto symbols = symbol_list.get_symbols(store, true);
     if (symbols != expected)
         return false;

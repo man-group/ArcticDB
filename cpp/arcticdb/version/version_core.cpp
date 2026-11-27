@@ -92,7 +92,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     return write_frame(std::move(partial_key), frame, slicing_policy, store, de_dup_map, sparsify_floats);
 }
 
-void sorted_data_check_append(const InputFrame& frame, const TimeseriesDescriptor& existing_tsd) {
+static void sorted_data_check_append(const InputFrame& frame, const TimeseriesDescriptor& existing_tsd) {
     if (frame.empty()) {
         // Nothing to be out of order, and the index it was normalized with is not the one it was given, so neither
         // side's sortedness has anything to say about it.
@@ -227,16 +227,16 @@ folly::Future<AtomKey> async_append_impl(
             });
 }
 
-OutputSchema select_columns(OutputSchema&& output_schema, const std::unordered_set<std::string_view>& columns) {
-    const auto& fields = output_schema.stream_descriptor().fields();
+FrameSchema select_columns(FrameSchema&& schema, const std::unordered_set<std::string_view>& columns) {
+    const auto& fields = schema.stream_descriptor().fields();
     auto fields_to_use = std::make_shared<FieldCollection>(fields.size(), fields.buffer().bytes());
     for (const Field& field : fields) {
         if (columns.contains(field.name())) {
             fields_to_use->add(field.ref());
         }
     }
-    output_schema.mutable_stream_descriptor().set_fields(std::move(fields_to_use));
-    return output_schema;
+    schema.mutable_stream_descriptor().set_fields(std::move(fields_to_use));
+    return schema;
 }
 
 namespace {
@@ -531,7 +531,7 @@ void write_sparse_column_for_merge_update_row_range_insert(
         const MergeUpdateSliceInfo& insert_info, const size_t new_column_pos, const size_t new_column_size,
         SegmentInMemory& new_segment
 ) {
-    const Column& source_column = source.column(static_cast<position_t>(source_column_pos));
+    const Column& source_column = source.column(source_column_pos);
     ColumnData source_column_data = source_column.data();
     const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
     // Source rows are appended in order to the target. In case the number of source rows to
@@ -608,7 +608,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
         const Field& field = slice_descriptor.field(column_in_segment);
         const size_t source_field_pos = first_col_idx + column_in_segment;
         details::visit_scalar(field.type(), [&]<util::type_descriptor_tag TDT>(TDT) {
-            const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
+            const Column& source_column = source.column(source_field_pos);
             ColumnData source_column_data = source_column.data();
             if (source_column.is_sparse()) {
                 write_sparse_column_for_merge_update_row_range_insert<TDT>(
@@ -756,7 +756,7 @@ StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext
     // q = QueryBuilder()
     // q = q["col1" < 1]
     // lib.read(columns=["col2", query_builder=q)
-    // We want to read only col2 but the filtering requires col1, thus the OutputSchema must contain both col1 and col2
+    // We want to read only col2 but the filtering requires col1, thus the FrameSchema must contain both col1 and col2
     // in order to satisfy the filter clause.
     if (pipeline_context.overall_column_bitset_) {
         FieldCollection fields_to_use;
@@ -771,7 +771,7 @@ StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext
     return desc;
 }
 
-OutputSchema create_initial_output_schema(PipelineContext& pipeline_context) {
+FrameSchema create_initial_output_schema(PipelineContext& pipeline_context) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             pipeline_context.has_normalization(), "Normalization metadata should not be missing during read_and_process"
     );
@@ -780,14 +780,14 @@ OutputSchema create_initial_output_schema(PipelineContext& pipeline_context) {
     const bool inferred_from_empty_frame =
             (pipeline_context.tsd().total_rows() == 0 && !pipeline_context.incompletes_after_.has_value()) ||
             pipeline_context.tsd().index().type() == IndexDescriptor::Type::EMPTY;
-    return OutputSchema{
+    return FrameSchema{
             generate_initial_output_schema_descriptor(pipeline_context),
             pipeline_context.normalization(),
             inferred_from_empty_frame
     };
 }
 
-OutputSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
+FrameSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
     auto output_schema = modify_schema(create_initial_output_schema(pipeline_context), read_query.clauses_);
     if (read_query.columns) {
         std::unordered_set<std::string_view> selected_columns(read_query.columns->begin(), read_query.columns->end());
@@ -1270,7 +1270,7 @@ folly::Future<AtomKey> async_write_metadata_impl(
             .thenValueInline([](VariantKey&& key) { return to_atom(std::move(key)); });
 }
 
-folly::Future<ReadVersionOutput> read_multi_key(
+static folly::Future<ReadVersionOutput> read_multi_key(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
         std::shared_ptr<std::any> handler_data, AtomKey&& key
 ) {
@@ -1298,7 +1298,7 @@ folly::Future<ReadVersionOutput> read_multi_key(
             });
 }
 
-void add_slice_to_component_manager(
+static void add_slice_to_component_manager(
         EntityId entity_id, pipelines::SegmentAndSlice&& segment_and_slice, ComponentManager& component_manager,
         EntityFetchCount fetch_count
 ) {
@@ -1328,7 +1328,7 @@ void add_slice_to_component_manager(
     );
 }
 
-size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
+static size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
     if (clauses.empty()) {
         return 0UL;
     }
@@ -1345,7 +1345,7 @@ size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& cla
     return res;
 }
 
-void remove_processed_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
+static void remove_processed_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
     // Erase all the clauses we have already scheduled to run
     ARCTICDB_SAMPLE_DEFAULT(RemoveProcessedClauses)
     if (!clauses.empty()) {
@@ -1362,7 +1362,7 @@ void remove_processed_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
     }
 }
 
-std::pair<std::vector<std::vector<EntityId>>, std::shared_ptr<ankerl::unordered_dense::map<EntityId, size_t>>>
+static std::pair<std::vector<std::vector<EntityId>>, std::shared_ptr<ankerl::unordered_dense::map<EntityId, size_t>>>
 get_entity_ids_and_position_map(
         std::shared_ptr<ComponentManager>& component_manager, size_t num_segments,
         const std::vector<std::vector<size_t>>& processing_unit_indexes
@@ -1394,7 +1394,7 @@ get_entity_ids_and_position_map(
     return std::make_pair(std::move(entity_work_units), std::move(id_to_pos));
 }
 
-std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_first_iteration(
+static std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_first_iteration(
         std::shared_ptr<ComponentManager> component_manager, size_t num_segments,
         std::vector<std::vector<EntityId>>&& entities_by_work_unit,
         std::shared_ptr<std::vector<EntityFetchCount>>&& segment_fetch_counts,
@@ -1587,7 +1587,7 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
  * Where possible (generally, when there is no column slicing), clauses are processed in the same folly thread as the
  * decompression without context switching to try and optimise cache access.
  */
-folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
+static folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
 ) {
@@ -1603,7 +1603,7 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
             });
 }
 
-static void add_index_columns_to_query(const ReadQuery& read_query, const OutputSchema& schema) {
+static void add_index_columns_to_query(const ReadQuery& read_query, const FrameSchema& schema) {
     if (read_query.columns.has_value()) {
         auto index_columns = stream::get_index_columns_from_descriptor(schema);
         if (index_columns.empty())
@@ -1624,7 +1624,7 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
     return add_index_columns_to_query(read_query, schema_from_tsd(desc));
 }
 
-FrameAndDescriptor read_segment_impl(const std::shared_ptr<Store>& store, const VariantKey& key) {
+static FrameAndDescriptor read_segment_impl(const std::shared_ptr<Store>& store, const VariantKey& key) {
     auto seg = store->read_compressed_sync(key).segment_ptr();
     return frame_and_descriptor_from_segment(decode_segment(*seg, AllocationType::DETACHABLE));
 }
@@ -1633,7 +1633,7 @@ FrameAndDescriptor read_index_impl(const std::shared_ptr<Store>& store, const Ve
     return read_segment_impl(store, version.key_);
 }
 
-std::optional<index::IndexSegmentReader> get_index_segment_reader(
+static std::optional<index::IndexSegmentReader> get_index_segment_reader(
         const std::shared_ptr<PipelineContext>& pipeline_context, std::pair<VariantKey, SegmentInMemory>&& index_key_seg
 ) {
     if (variant_key_type(index_key_seg.first) == KeyType::MULTI_KEY) {
@@ -1643,7 +1643,7 @@ std::optional<index::IndexSegmentReader> get_index_segment_reader(
     return std::make_optional<index::IndexSegmentReader>(std::move(index_key_seg.second));
 }
 
-void check_can_read_index_only_if_required(
+static void check_can_read_index_only_if_required(
         const index::IndexSegmentReader& index_segment_reader, const ReadQuery& read_query
 ) {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -1657,14 +1657,14 @@ void check_can_read_index_only_if_required(
     );
 }
 
-void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, const ReadQuery& read_query) {
+static void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, const ReadQuery& read_query) {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !read_query.columns || (!pipeline_context.only_index_columns_selected() && !read_query.columns->empty()),
             "Reading the index column is not supported when recursive or custom normalizers are used."
     );
 }
 
-void check_can_perform_processing(
+static void check_can_perform_processing(
         const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query
 ) {
     if (pipeline_context->multi_key_) {
@@ -1806,7 +1806,7 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         return false;
     }
 
-    std::optional<OutputSchema> existing;
+    std::optional<FrameSchema> existing;
     if (pipeline_context->has_on_disk_descriptor()) {
         arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
         if (pipeline_context->has_normalization()) {
@@ -1931,7 +1931,7 @@ static void check_incompletes_index_ranges_dont_overlap(
     }
 }
 
-void init_sparse_dst_column_before_copy(
+static void init_sparse_dst_column_before_copy(
         Column& dst_column, size_t offset, size_t num_rows, size_t dst_rawtype_size, OutputFormat output_format,
         const std::optional<util::BitSet>& src_sparse_map, const std::optional<Value>& default_value
 ) {
@@ -1950,7 +1950,7 @@ void init_sparse_dst_column_before_copy(
     }
 }
 
-void copy_frame_data_to_buffer(
+static void copy_frame_data_to_buffer(
         SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index,
         const RowRange& row_range, DecodePathData shared_data, std::any& handler_data, const ReadOptions& read_options,
         const std::optional<Value>& default_value
@@ -1959,8 +1959,8 @@ void copy_frame_data_to_buffer(
     if (num_rows == 0) {
         return;
     }
-    auto& src_column = source.column(static_cast<position_t>(source_index));
-    auto& dst_column = destination.column(static_cast<position_t>(target_index));
+    auto& src_column = source.column(source_index);
+    auto& dst_column = destination.column(target_index);
     auto dst_rawtype_size = data_type_size(dst_column.type());
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     const auto total_size = dst_rawtype_size * num_rows;
@@ -2202,7 +2202,7 @@ struct CopyToBufferTask : async::BaseTask {
     }
 };
 
-folly::Future<folly::Unit> copy_segments_to_frame(
+static folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         SegmentInMemory frame, std::shared_ptr<std::any> handler_data, const ReadOptions& read_options
 ) {
@@ -2271,7 +2271,9 @@ folly::Future<IndexInformation> read_index_key_without_column_stats(
     });
 }
 
-IndexInformation read_index_key_without_column_stats_sync(const std::shared_ptr<Store>& store, const AtomKey& key) {
+static IndexInformation read_index_key_without_column_stats_sync(
+        const std::shared_ptr<Store>& store, const AtomKey& key
+) {
     try {
         auto column_stats = std::nullopt;
         return IndexInformation{store->read_sync(key), column_stats};
@@ -2417,7 +2419,7 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
         auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
         const auto num_rows = segment_in_memory.row_count();
         for (auto i = 0u; i < segment_in_memory.num_columns(); ++i) {
-            auto& column = segment_in_memory.column(static_cast<position_t>(i));
+            auto& column = segment_in_memory.column(i);
             if (column.is_sparse()) {
                 auto sparse_map = column.sparse_map();
                 sparse_map.resize(num_rows);
@@ -2456,7 +2458,7 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
     }
 }
 
-folly::Future<SegmentInMemory> do_direct_read_or_process(
+static folly::Future<SegmentInMemory> do_direct_read_or_process(
         const std::shared_ptr<Store>& store, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, const std::shared_ptr<PipelineContext>& pipeline_context,
         const DecodePathData& shared_data, std::shared_ptr<std::any> handler_data
@@ -2480,7 +2482,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     }
 }
 
-VersionedItem collate_and_write(
+static VersionedItem collate_and_write(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::vector<FrameSlice>& slices, std::vector<VariantKey> keys, size_t append_after,
         const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta
@@ -3070,7 +3072,7 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
             });
 }
 
-void set_row_id_if_index_only(
+static void set_row_id_if_index_only(
         const PipelineContext& pipeline_context, SegmentInMemory& frame, const ReadQuery& read_query
 ) {
     if (read_query.columns && read_query.columns->empty() &&
@@ -3132,7 +3134,7 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
     return pipeline_context;
 }
 
-VersionedItem generate_result_versioned_item(const VersionIdentifier& version_info) {
+static VersionedItem generate_result_versioned_item(const VersionIdentifier& version_info) {
     return util::variant_match(
             version_info,
             [](const StreamId& stream_id) {
@@ -3325,7 +3327,7 @@ folly::Future<AtomKey> merge_update_impl(
     align_multi_index_names(
             schema_from_tsd(index_information->index_.second.index_descriptor()), source->desc(), source->norm_meta
     );
-    OutputSchema source_output_schema = schema_from_input_frame(*source);
+    FrameSchema source_output_schema = schema_from_input_frame(*source);
     // Pipeline setup needs only the source schema. The source segment is set after the empty target check, because an
     // empty target converts the data to SegmentInMemory before writing it, thus converting it here would make two
     // conversions, one of which is redundant.
@@ -3794,7 +3796,7 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                                 variant_key_type(index_information.index_.first) == KeyType::TABLE_INDEX,
                                 "rename_columns_arrow_compat not supported with recursively normalized data"
                         );
-                        OutputSchema original_schema{original_tsd.as_stream_descriptor(), original_tsd.normalization()};
+                        FrameSchema original_schema{original_tsd.as_stream_descriptor(), original_tsd.normalization()};
                         auto arrow_transformed_schema = make_schema_arrow_compatible(original_schema, index_columns);
                         if (!arrow_transformed_schema.has_value()) {
                             return std::nullopt;
@@ -3921,7 +3923,7 @@ folly::Future<SymbolProcessingResult> read_and_process(
                                 !pipeline_context->is_pickled(), "Cannot perform multi-symbol join on pickled data"
                         );
 
-                        OutputSchema output_schema = generate_output_schema(*pipeline_context, *read_query);
+                        FrameSchema output_schema = generate_output_schema(*pipeline_context, *read_query);
                         ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
                         return read_and_schedule_processing(

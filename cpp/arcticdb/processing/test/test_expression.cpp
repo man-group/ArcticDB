@@ -40,9 +40,9 @@ TEST(ExpressionNode, AddBasic) {
     const auto& result_col = std::get<ColumnWithStrings>(ret).column_;
 
     for (auto j = 0; j < 20; ++j) {
-        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 0);
+        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 0u);
         ASSERT_EQ(v1.value(), j);
-        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1);
+        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1u);
         ASSERT_EQ(v2.value(), j + 1);
         ASSERT_EQ(result_col->scalar_at<uint64_t>(j), v1.value() + v2.value());
     }
@@ -74,8 +74,8 @@ TEST(ExpressionNode, SubexpressionMemoized) {
     const auto& result_col = std::get<ColumnWithStrings>(ret).column_;
 
     for (auto j = 0; j < 20; ++j) {
-        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 0).value();
-        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1).value();
+        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 0u).value();
+        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1u).value();
         ASSERT_EQ(result_col->scalar_at<uint64_t>(j), (v1 + v2) * (v1 + v2));
     }
 

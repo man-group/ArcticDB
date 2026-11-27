@@ -109,7 +109,7 @@ TEST(OutputFrame, AllocateMixedNumpyArrow) {
     read_options.set_output_config(PandasOutputConfig{PandasStringFormat::ARROW_LARGE_STRING});
     auto frame = allocate_frame(context, read_options);
     ASSERT_EQ(frame.row_count(), 60);
-    ASSERT_EQ(frame.column(0).num_blocks(), 1);
-    ASSERT_EQ(frame.column(1).num_blocks(), 3);
-    ASSERT_EQ(frame.column(2).num_blocks(), 1);
+    ASSERT_EQ(frame.column(0u).num_blocks(), 1);
+    ASSERT_EQ(frame.column(1u).num_blocks(), 3);
+    ASSERT_EQ(frame.column(2u).num_blocks(), 1);
 }

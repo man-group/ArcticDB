@@ -84,7 +84,7 @@ struct Loggers::Impl {
     spdlog::logger& logger_ref(std::unique_ptr<spdlog::logger>& src);
 };
 
-constexpr auto get_default_log_level() { return spdlog::level::info; }
+constexpr static auto get_default_log_level() { return spdlog::level::info; }
 
 spdlog::logger& storage() { return Loggers::instance().storage(); }
 

@@ -51,11 +51,7 @@ class SegmentInMemoryImpl {
                 using DataTypeTag = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 using RawType = typename DataTypeTag::raw_type;
                 if constexpr (is_sequence_type(DataTypeTag::data_type))
-                    return c(
-                            parent_->string_at(row_id_, position_t(column_id_)),
-                            std::string_view{field.name()},
-                            type_desc_tag
-                    );
+                    return c(parent_->string_at(row_id_, column_id_), std::string_view{field.name()}, type_desc_tag);
                 else if constexpr (is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type))
                     return c(
                             parent_->scalar_at<RawType>(row_id_, column_id_),
@@ -161,7 +157,7 @@ class SegmentInMemoryImpl {
         template<class IndexType>
         [[nodiscard]] auto index() const {
             using RawType = typename IndexType::TypeDescTag::DataTypeTag::raw_type;
-            return parent_->scalar_at<RawType>(row_id_, 0).value();
+            return parent_->scalar_at<RawType>(row_id_, 0u).value();
         }
 
         friend void swap(Row& left, Row& right) noexcept;
@@ -326,40 +322,40 @@ class SegmentInMemoryImpl {
 
     void push_back(const Row& row);
 
-    void set_value(position_t idx, const Location& loc);
+    void set_value(size_t idx, const Location& loc);
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_scalar(position_t idx, T val) {
+    void set_scalar(size_t idx, T val) {
         ARCTICDB_TRACE(log::version(), "Segment setting scalar {} at row {} column {}", val, row_id_ + 1, idx);
         column(idx).set_scalar(row_id_ + 1, val);
     }
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_dense_block(position_t idx, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
+    void set_dense_block(size_t idx, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
         column_unchecked(idx).set_dense_block(row_id_ + 1, val, size, copy_mode);
     }
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_sparse_block(position_t idx, T* val, size_t rows_to_write) {
+    void set_sparse_block(size_t idx, T* val, size_t rows_to_write) {
         column_unchecked(idx).set_sparse_block(row_id_ + 1, val, rows_to_write);
     }
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset);
+    void set_sparse_block(size_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset);
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset);
+    void set_sparse_block(size_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset);
 
     template<class T>
     requires std::same_as<std::decay_t<T>, std::string>
-    void set_scalar(position_t idx, const T& val) {
+    void set_scalar(size_t idx, const T& val) {
         set_string(idx, val);
     }
 
     template<class T, template<class> class Tensor>
     requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, Tensor<T>& val) {
+    void set_array(size_t pos, Tensor<T>& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
         column_unchecked(pos).set_array(row_id_ + 1, val);
@@ -367,32 +363,32 @@ class SegmentInMemoryImpl {
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, py::array_t<T>& val) {
+    void set_array(size_t pos, py::array_t<T>& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
         column_unchecked(pos).set_array(row_id_ + 1, val);
     }
 
-    void set_string(position_t pos, std::string_view str);
+    void set_string(size_t pos, std::string_view str);
 
-    void set_string_at(position_t col, position_t row, const char* str, size_t size);
+    void set_string_at(size_t col, position_t row, const char* str, size_t size);
 
-    void set_string_array(position_t idx, size_t string_size, size_t num_strings, char* data);
+    void set_string_array(size_t idx, size_t string_size, size_t num_strings, char* data);
 
-    void set_string_list(position_t idx, const std::vector<std::string>& input);
+    void set_string_list(size_t idx, const std::vector<std::string>& input);
 
     // pybind11 can't resolve const and non-const version of column()
-    Column& column_ref(position_t idx);
+    Column& column_ref(size_t idx);
 
-    Column& column(position_t idx);
+    Column& column(size_t idx);
 
-    const Column& column(position_t idx) const;
+    const Column& column(size_t idx) const;
 
-    Column& column_unchecked(position_t idx);
+    Column& column_unchecked(size_t idx);
 
-    std::shared_ptr<Column> column_ptr(position_t idx) const;
+    std::shared_ptr<Column> column_ptr(size_t idx) const;
 
-    const Column& column_unchecked(position_t idx) const;
+    const Column& column_unchecked(size_t idx) const;
 
     std::vector<std::shared_ptr<Column>>& columns();
 
@@ -409,24 +405,24 @@ class SegmentInMemoryImpl {
     void concatenate(SegmentInMemoryImpl&& other, bool unique_column_names);
 
     void sort(const std::string& column);
-    void sort(position_t idx);
+    void sort(size_t idx);
     void sort(const std::vector<std::string>& column_names);
     void sort(const std::vector<position_t>& columns);
 
-    position_t add_column(const Field& field, const std::shared_ptr<Column>& column);
+    size_t add_column(const Field& field, const std::shared_ptr<Column>& column);
 
-    position_t add_column(const Field& field, size_t num_rows, AllocationType presize);
+    size_t add_column(const Field& field, size_t num_rows, AllocationType presize);
 
-    position_t add_column(FieldRef field, size_t num_rows, AllocationType presize);
+    size_t add_column(FieldRef field, size_t num_rows, AllocationType presize);
 
-    position_t add_column(std::string_view name, const std::shared_ptr<Column>& column);
+    size_t add_column(std::string_view name, const std::shared_ptr<Column>& column);
 
-    position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
+    size_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
 
     void change_schema(StreamDescriptor descriptor);
 
     template<typename T>
-    std::optional<T> scalar_at(position_t row, position_t col) const {
+    std::optional<T> scalar_at(position_t row, size_t col) const {
         util::check_arg(size_t(row) < row_count(), "Segment index {} out of bounds in scalar", row);
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 !is_empty_type(column(col).type().data_type()), "scalar_at called with empty-type column"
@@ -434,23 +430,23 @@ class SegmentInMemoryImpl {
         return column(col).scalar_at<T>(row);
     }
 
-    bool has_value_at(position_t row, position_t col) const;
+    bool has_value_at(position_t row, size_t col) const;
 
     template<typename T>
-    T& reference_at(position_t row, position_t col) {
+    T& reference_at(position_t row, size_t col) {
         util::check_arg(size_t(row) < row_count(), "Segment index {} out of bounds in scalar ref", row);
         return column(col).reference_at<T>(row);
     }
 
     template<typename T>
-    std::optional<TensorType<T>> tensor_at(position_t row, position_t col) const {
+    std::optional<TensorType<T>> tensor_at(position_t row, size_t col) const {
         util::check_arg(size_t(row) < row_count(), "Segment index {} out of bounds in tensor", row);
         return column(col).tensor_at<T>(row);
     }
 
-    std::optional<std::string_view> string_at(position_t row, position_t col) const;
+    std::optional<std::string_view> string_at(position_t row, size_t col) const;
 
-    std::optional<Column::StringArrayData> string_array_at(position_t row, position_t col);
+    std::optional<Column::StringArrayData> string_array_at(position_t row, size_t col);
 
     size_t num_blocks() const;
 
@@ -470,7 +466,7 @@ class SegmentInMemoryImpl {
 
     const std::shared_ptr<StringPool>& string_pool_ptr() const;
 
-    void check_column_index(position_t idx) const;
+    void check_column_index(size_t idx) const;
 
     void init_column_map() const;
 

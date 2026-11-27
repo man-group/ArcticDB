@@ -20,7 +20,7 @@
 
 using namespace arcticdb;
 
-SegmentInMemory get_detachable_segment(
+static SegmentInMemory get_detachable_segment(
         std::span<const FieldRef> fields, size_t num_rows, size_t chunk_size, const ReadOptions& read_options
 ) {
     auto desc = get_test_descriptor<stream::TimeseriesIndex>("symbol", fields);
@@ -56,7 +56,7 @@ SegmentInMemory get_detachable_segment(
 }
 
 // Populates a column with strings as if using OutputFormat::ARROW. Assumes column is already allocated.
-void fill_chunked_string_column(
+static void fill_chunked_string_column(
         Column& column, std::string_view col_name, size_t num_rows, size_t chunk_size,
         std::shared_ptr<StringPool> string_pool, const std::vector<std::string>& values, const ReadOptions& read_options
 ) {
@@ -296,7 +296,7 @@ TEST(ArrowRead, ConvertSegmentBasic) {
     };
     auto segment = get_detachable_segment(fields, num_rows, chunk_size, ReadOptions{});
     // Verify the index column has the expected number of chunks
-    EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
+    EXPECT_EQ(segment.column(0u).num_blocks(), num_chunks);
 
     proto::descriptors::NormalizationMetadata norm_meta;
     auto arrow_data = segment_to_arrow_data(segment, norm_meta);
@@ -332,7 +332,7 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
     };
     auto segment = get_detachable_segment(fields, num_rows, chunk_size, ReadOptions{});
     // Verify the index column has the expected number of chunks
-    EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
+    EXPECT_EQ(segment.column(0u).num_blocks(), num_chunks);
 
     std::string tz_str{"Europe/Amsterdam"};
     proto::descriptors::NormalizationMetadata norm_meta;
@@ -378,7 +378,7 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
     }
 }
 
-void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std::span<std::string>& expected) {
+static void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std::span<std::string>& expected) {
     EXPECT_EQ(arr.size(), expected.size());
     for (auto i = 0u; i < arr.size(); i++) {
         const auto value = std::get<sparrow::nullable<std::string_view>>(arr[i]);
@@ -413,10 +413,10 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
     auto segment = get_detachable_segment(fields, num_rows, chunk_size, read_options);
     auto string_pool = std::make_shared<StringPool>();
     fill_chunked_string_column(
-            segment.column(2), "str_1", num_rows, chunk_size, string_pool, string_values[0], read_options
+            segment.column(2u), "str_1", num_rows, chunk_size, string_pool, string_values[0], read_options
     );
     fill_chunked_string_column(
-            segment.column(3), "str_2", num_rows, chunk_size, string_pool, string_values[1], read_options
+            segment.column(3u), "str_2", num_rows, chunk_size, string_pool, string_values[1], read_options
     );
     segment.set_string_pool(string_pool);
 

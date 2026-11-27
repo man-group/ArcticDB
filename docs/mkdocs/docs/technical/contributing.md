@@ -263,6 +263,10 @@ python -m pip install arcticdb[Testing]
 python -m pytest python/tests
 ```
 
+The moto S3 and GCP simulators used by the tests do not log each HTTP request, including 4xx/5xx responses;
+malformed requests and unhandled server exceptions are still printed to stderr. Set `ARCTICDB_MOTO_VERBOSE=1`
+to get the per-request log back when debugging a storage test.
+
 Running C++ tests
 -----------------
 

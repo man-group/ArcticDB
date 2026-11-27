@@ -16,6 +16,7 @@
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 
 namespace arcticdb::pipelines::index {
 // TODO: change the name - something like KeysSegmentWriter or KeyAggragator or  better
@@ -51,35 +52,46 @@ class IndexWriter {
 
     void add_unchecked(const arcticdb::entity::AtomKey& key, const FrameSlice& slice) {
         auto add_to_row ARCTICDB_UNUSED = [&](auto& rb) {
-            rb.set_scalar(int(Fields::version_id), key.version_id());
-            rb.set_scalar(int(Fields::creation_ts), key.creation_ts());
-            rb.set_scalar(int(Fields::content_hash), key.content_hash());
-            rb.set_scalar(int(Fields::index_type), static_cast<uint8_t>(stream::get_index_value_type(key)));
+            rb.set_scalar(util::lossless_cast<size_t>(Fields::version_id), key.version_id());
+            rb.set_scalar(util::lossless_cast<size_t>(Fields::creation_ts), key.creation_ts());
+            rb.set_scalar(util::lossless_cast<size_t>(Fields::content_hash), key.content_hash());
+            rb.set_scalar(
+                    util::lossless_cast<size_t>(Fields::index_type),
+                    static_cast<uint8_t>(stream::get_index_value_type(key))
+            );
 
-            std::visit([&rb](auto&& val) { rb.set_scalar(int(Fields::stream_id), val); }, key.id());
+            std::visit(
+                    [&rb](auto&& val) { rb.set_scalar(util::lossless_cast<size_t>(Fields::stream_id), val); }, key.id()
+            );
 
             // note that we don't se the start index since its presence is index type specific
-            std::visit([&rb](auto&& val) { rb.set_scalar(int(Fields::end_index), val); }, key.end_index());
+            std::visit(
+                    [&rb](auto&& val) { rb.set_scalar(util::lossless_cast<size_t>(Fields::end_index), val); },
+                    key.end_index()
+            );
 
-            rb.set_scalar(int(Fields::key_type), static_cast<char>(key.type()));
+            rb.set_scalar(util::lossless_cast<size_t>(Fields::key_type), static_cast<char>(key.type()));
 
-            rb.set_scalar(int(Fields::start_col), slice.col_range.first);
-            rb.set_scalar(int(Fields::end_col), slice.col_range.second);
-            rb.set_scalar(int(Fields::start_row), slice.row_range.first);
-            rb.set_scalar(int(Fields::end_row), slice.row_range.second);
+            rb.set_scalar(util::lossless_cast<size_t>(Fields::start_col), slice.col_range.first);
+            rb.set_scalar(util::lossless_cast<size_t>(Fields::end_col), slice.col_range.second);
+            rb.set_scalar(util::lossless_cast<size_t>(Fields::start_row), slice.row_range.first);
+            rb.set_scalar(util::lossless_cast<size_t>(Fields::end_row), slice.row_range.second);
 
             if (bucketize_columns_) {
                 util::check(
                         static_cast<bool>(slice.hash_bucket()) && static_cast<bool>(slice.num_buckets()),
                         "Found no hash bucket in an index writer with bucketizing"
                 );
-                rb.set_scalar(int(Fields::hash_bucket), *slice.hash_bucket());
-                rb.set_scalar(int(Fields::num_buckets), *slice.num_buckets());
+                rb.set_scalar(util::lossless_cast<size_t>(Fields::hash_bucket), *slice.hash_bucket());
+                rb.set_scalar(util::lossless_cast<size_t>(Fields::num_buckets), *slice.num_buckets());
             }
         };
 
         agg_.start_row()([&](auto& rb) {
-            std::visit([&rb](auto&& val) { rb.set_scalar(int(Fields::start_index), val); }, key.start_index());
+            std::visit(
+                    [&rb](auto&& val) { rb.set_scalar(util::lossless_cast<size_t>(Fields::start_index), val); },
+                    key.start_index()
+            );
             add_to_row(rb);
         });
     }

@@ -430,6 +430,7 @@ set(arcticdb_srcs
         util/spinlock.hpp
         util/key_utils.hpp
         util/lock_table.hpp
+        util/lossless_cast.hpp
         util/lru_cache.hpp
         util/magic_num.hpp
         util/movable_priority_queue.hpp
@@ -1158,10 +1159,10 @@ if(${TEST})
             processing/test/test_min_max_aggregator_strings.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
-            processing/test/test_output_schema_aggregator_types.cpp
-            processing/test/test_output_schema_ast_validity.cpp
+            processing/test/test_modify_schema_aggregator_types.cpp
+            processing/test/test_modify_schema_ast_validity.cpp
             processing/test/test_query_planner.cpp
-            processing/test/test_output_schema_basic.cpp
+            processing/test/test_modify_schema_basic.cpp
             processing/test/test_parallel_processing.cpp
             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
@@ -1207,6 +1208,7 @@ if(${TEST})
             util/test/test_hash.cpp
             util/test/test_id_transformation.cpp
             util/test/test_key_utils.cpp
+            util/test/test_lossless_cast.cpp
             util/test/test_ranges_from_future.cpp
             util/test/test_reliable_storage_lock.cpp
             util/test/test_slab_allocator.cpp

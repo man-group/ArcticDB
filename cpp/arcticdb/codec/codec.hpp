@@ -24,6 +24,12 @@ Segment encode_dispatch(
         EncodingVersion encoding_version
 );
 
+void add_bitmagic_compressed_size(
+        const ColumnData& column_data, size_t& max_compressed_bytes, size_t& uncompressed_bytes
+);
+
+void encode_sparse_map(ColumnData& column_data, EncodedFieldImpl& field, Buffer& out, std::ptrdiff_t& pos);
+
 Segment encode_v2(SegmentInMemory&& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts);
 
 Segment encode_v1(SegmentInMemory&& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts);

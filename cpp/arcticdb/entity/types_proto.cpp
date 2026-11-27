@@ -18,32 +18,6 @@ bool operator==(const FieldProto& left, const FieldProto& right) {
 
 bool operator<(const FieldProto& left, const FieldProto& right) { return left.name() < right.name(); }
 
-arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedValue sorted) {
-    switch (sorted) {
-    case SortedValue::UNSORTED:
-        return arcticdb::proto::descriptors::SortedValue::UNSORTED;
-    case SortedValue::DESCENDING:
-        return arcticdb::proto::descriptors::SortedValue::DESCENDING;
-    case SortedValue::ASCENDING:
-        return arcticdb::proto::descriptors::SortedValue::ASCENDING;
-    default:
-        return arcticdb::proto::descriptors::SortedValue::UNKNOWN;
-    }
-}
-
-SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedValue sorted_proto) {
-    switch (sorted_proto) {
-    case arcticdb::proto::descriptors::SortedValue::UNSORTED:
-        return SortedValue::UNSORTED;
-    case arcticdb::proto::descriptors::SortedValue::DESCENDING:
-        return SortedValue::DESCENDING;
-    case arcticdb::proto::descriptors::SortedValue::ASCENDING:
-        return SortedValue::ASCENDING;
-    default:
-        return SortedValue::UNKNOWN;
-    }
-}
-
 void set_data_type(DataType data_type, arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
     type_desc.set_size_bits(size_bits_proto_from_data_type(data_type));
     type_desc.set_value_type(value_proto_from_data_type(data_type));

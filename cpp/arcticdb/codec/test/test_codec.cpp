@@ -51,7 +51,6 @@ struct ColumnEncoderV2 {
     );
 };
 
-size_t calc_column_blocks_size(const Column& col);
 } // namespace arcticdb
 
 using namespace arcticdb;
@@ -291,8 +290,8 @@ TYPED_TEST_SUITE(SegmentStringEncodingTest, EncodingVersions);
 TYPED_TEST(SegmentStringEncodingTest, EncodeSingleString) {
     const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>("thing", 1);
     SegmentInMemory s(StreamDescriptor{tsd});
-    s.set_scalar(0, timestamp(123));
-    s.set_string(1, "happy");
+    s.set_scalar(0u, timestamp(123));
+    s.set_string(1u, "happy");
     s.end_row();
     arcticdb::proto::encoding::VariantCodec opt;
     auto lz4ptr = opt.mutable_lz4();
@@ -302,24 +301,24 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeSingleString) {
     Segment seg = encode_dispatch(s.clone(), opt, encoding_version);
 
     SegmentInMemory res = decode_segment(seg);
-    ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
-    ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
+    ASSERT_EQ(copy.string_at(0, 1u), res.string_at(0, 1u));
+    ASSERT_EQ(std::string("happy"), res.string_at(0, 1u));
 }
 
 TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
     const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>();
     SegmentInMemory s(StreamDescriptor{tsd});
-    s.set_scalar(0, timestamp(123));
-    s.set_string(1, "happy");
-    s.set_string(2, "muppets");
-    s.set_string(3, "happy");
-    s.set_string(4, "trousers");
+    s.set_scalar(0u, timestamp(123));
+    s.set_string(1u, "happy");
+    s.set_string(2u, "muppets");
+    s.set_string(3u, "happy");
+    s.set_string(4u, "trousers");
     s.end_row();
-    s.set_scalar(0, timestamp(124));
-    s.set_string(1, "soggy");
-    s.set_string(2, "muppets");
-    s.set_string(3, "baggy");
-    s.set_string(4, "trousers");
+    s.set_scalar(0u, timestamp(124));
+    s.set_string(1u, "soggy");
+    s.set_string(2u, "muppets");
+    s.set_string(3u, "baggy");
+    s.set_string(4u, "trousers");
     s.end_row();
     arcticdb::proto::encoding::VariantCodec opt;
     auto lz4ptr = opt.mutable_lz4();
@@ -329,10 +328,10 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
     Segment seg = encode_dispatch(SegmentInMemory{s}, opt, encoding_version);
 
     SegmentInMemory res = decode_segment(seg);
-    ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
-    ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
-    ASSERT_EQ(copy.string_at(1, 3), res.string_at(1, 3));
-    ASSERT_EQ(std::string("baggy"), res.string_at(1, 3));
+    ASSERT_EQ(copy.string_at(0, 1u), res.string_at(0, 1u));
+    ASSERT_EQ(std::string("happy"), res.string_at(0, 1u));
+    ASSERT_EQ(copy.string_at(1, 3u), res.string_at(1, 3u));
+    ASSERT_EQ(std::string("baggy"), res.string_at(1, 3u));
 }
 
 using namespace arcticdb;
@@ -405,7 +404,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorV1) {
     const auto stream_desc =
             stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
-    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.set_scalar<uint8_t>(0u, 23);
     in_mem_seg.end_row();
     TimeseriesDescriptor tsd;
     tsd.set_total_rows(23);
@@ -423,7 +422,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
     const auto stream_desc =
             stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
-    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.set_scalar<uint8_t>(0u, 23);
     in_mem_seg.end_row();
     TimeseriesDescriptor tsd;
     tsd.set_total_rows(23);
@@ -446,7 +445,7 @@ TEST(Segment, RoundtripStringsWriteToBufferV1) {
     const auto stream_desc =
             stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
-    in_mem_seg.set_string(0, "kismet");
+    in_mem_seg.set_string(0u, "kismet");
     in_mem_seg.end_row();
     auto copy = in_mem_seg.clone();
     auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
@@ -457,7 +456,7 @@ TEST(Segment, RoundtripStringsWriteToBufferV1) {
     auto unserialized = Segment::from_bytes(vec.data(), bytes);
     SegmentInMemory decoded{stream_desc.clone()};
     decode_v1(unserialized, unserialized.header(), decoded, unserialized.descriptor());
-    ASSERT_EQ(decoded.string_at(0, 0).value(), "kismet");
+    ASSERT_EQ(decoded.string_at(0, 0u).value(), "kismet");
     ASSERT_EQ(decoded, copy);
 }
 
@@ -465,7 +464,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorV2) {
     const auto stream_desc =
             stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
-    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.set_scalar<uint8_t>(0u, 23);
     in_mem_seg.end_row();
     TimeseriesDescriptor tsd;
     tsd.set_total_rows(23);
@@ -483,7 +482,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
     const auto stream_desc =
             stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
-    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.set_scalar<uint8_t>(0u, 23);
     in_mem_seg.end_row();
     TimeseriesDescriptor tsd;
     tsd.set_total_rows(23);
@@ -514,8 +513,8 @@ TEST(Segment, RoundtripStatisticsV1) {
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     constexpr size_t num_rows = 10;
     for (auto i = 0UL; i < num_rows; ++i) {
-        in_mem_seg.set_scalar<uint8_t>(0, static_cast<uint8_t>(i));
-        in_mem_seg.set_scalar<double>(1, static_cast<double>(i * 2));
+        in_mem_seg.set_scalar<uint8_t>(0u, static_cast<uint8_t>(i));
+        in_mem_seg.set_scalar<double>(1u, static_cast<double>(i * 2));
         in_mem_seg.end_row();
     }
     in_mem_seg.calculate_statistics();
@@ -528,14 +527,14 @@ TEST(Segment, RoundtripStatisticsV1) {
     auto unserialized = Segment::from_bytes(vec.data(), bytes);
     SegmentInMemory decoded{stream_desc.clone()};
     decode_v1(unserialized, unserialized.header(), decoded, unserialized.descriptor());
-    auto col1_stats = decoded.column(0).get_statistics();
+    auto col1_stats = decoded.column(0u).get_statistics();
     ASSERT_TRUE(col1_stats.has_max());
     ASSERT_EQ(col1_stats.get_max<uint8_t>(), 9);
     ASSERT_TRUE(col1_stats.has_max());
     ASSERT_EQ(col1_stats.get_min<uint8_t>(), 0);
     ASSERT_TRUE(col1_stats.has_unique());
     ASSERT_EQ(col1_stats.get_unique_count(), 10);
-    auto col2_stats = decoded.column(1).get_statistics();
+    auto col2_stats = decoded.column(1u).get_statistics();
     ASSERT_TRUE(col2_stats.has_max());
     ASSERT_EQ(col2_stats.get_max<double>(), 18.0);
     ASSERT_TRUE(col2_stats.has_max());
@@ -555,8 +554,8 @@ TEST(Segment, RoundtripStatisticsV2) {
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     constexpr size_t num_rows = 10;
     for (auto i = 0UL; i < num_rows; ++i) {
-        in_mem_seg.set_scalar<uint8_t>(0, static_cast<uint8_t>(i));
-        in_mem_seg.set_scalar<double>(1, static_cast<double>(i * 2));
+        in_mem_seg.set_scalar<uint8_t>(0u, static_cast<uint8_t>(i));
+        in_mem_seg.set_scalar<double>(1u, static_cast<double>(i * 2));
         in_mem_seg.end_row();
     }
     in_mem_seg.calculate_statistics();
@@ -569,14 +568,14 @@ TEST(Segment, RoundtripStatisticsV2) {
     auto unserialized = Segment::from_bytes(vec.data(), bytes);
     SegmentInMemory decoded{stream_desc.clone()};
     decode_v2(unserialized, unserialized.header(), decoded, unserialized.descriptor());
-    auto col1_stats = decoded.column(0).get_statistics();
+    auto col1_stats = decoded.column(0u).get_statistics();
     ASSERT_TRUE(col1_stats.has_max());
     ASSERT_EQ(col1_stats.get_max<uint8_t>(), 9);
     ASSERT_TRUE(col1_stats.has_max());
     ASSERT_EQ(col1_stats.get_min<uint8_t>(), 0);
     ASSERT_TRUE(col1_stats.has_unique());
     ASSERT_EQ(col1_stats.get_unique_count(), 10);
-    auto col2_stats = decoded.column(1).get_statistics();
+    auto col2_stats = decoded.column(1u).get_statistics();
     ASSERT_TRUE(col2_stats.has_max());
     ASSERT_EQ(col2_stats.get_max<double>(), 18.0);
     ASSERT_TRUE(col2_stats.has_max());
@@ -598,11 +597,11 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
-    in_mem_seg_1.set_scalar(0, uint8_t(0));
-    in_mem_seg_1.set_scalar(1, uint8_t(0));
-    in_mem_seg_1.set_scalar(2, uint8_t(0));
-    in_mem_seg_1.set_scalar(3, uint8_t(0));
-    in_mem_seg_1.set_scalar(4, uint8_t(0));
+    in_mem_seg_1.set_scalar(0u, uint8_t(0));
+    in_mem_seg_1.set_scalar(1u, uint8_t(0));
+    in_mem_seg_1.set_scalar(2u, uint8_t(0));
+    in_mem_seg_1.set_scalar(3u, uint8_t(0));
+    in_mem_seg_1.set_scalar(4u, uint8_t(0));
     in_mem_seg_1.end_row();
 
     const auto stream_desc_2 = stream_descriptor(
@@ -617,11 +616,11 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
 
     SegmentInMemory in_mem_seg_2{stream_desc_2.clone()};
 
-    in_mem_seg_2.set_scalar(0, uint8_t(0));
-    in_mem_seg_2.set_scalar(1, uint8_t(0));
-    in_mem_seg_2.set_scalar(2, uint8_t(0));
-    in_mem_seg_2.set_scalar(3, uint8_t(0));
-    in_mem_seg_2.set_scalar(4, uint8_t(0));
+    in_mem_seg_2.set_scalar(0u, uint8_t(0));
+    in_mem_seg_2.set_scalar(1u, uint8_t(0));
+    in_mem_seg_2.set_scalar(2u, uint8_t(0));
+    in_mem_seg_2.set_scalar(3u, uint8_t(0));
+    in_mem_seg_2.set_scalar(4u, uint8_t(0));
     in_mem_seg_2.end_row();
 
     auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V1);
@@ -680,11 +679,11 @@ TEST(Segment, ColumnNamesProduceDifferentHashesV2) {
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
-    in_mem_seg_1.set_scalar(0, uint8_t(0));
-    in_mem_seg_1.set_scalar(1, uint8_t(0));
-    in_mem_seg_1.set_scalar(2, uint8_t(0));
-    in_mem_seg_1.set_scalar(3, uint8_t(0));
-    in_mem_seg_1.set_scalar(4, uint8_t(0));
+    in_mem_seg_1.set_scalar(0u, uint8_t(0));
+    in_mem_seg_1.set_scalar(1u, uint8_t(0));
+    in_mem_seg_1.set_scalar(2u, uint8_t(0));
+    in_mem_seg_1.set_scalar(3u, uint8_t(0));
+    in_mem_seg_1.set_scalar(4u, uint8_t(0));
     in_mem_seg_1.end_row();
 
     const auto stream_desc_2 = stream_descriptor(
@@ -699,11 +698,11 @@ TEST(Segment, ColumnNamesProduceDifferentHashesV2) {
 
     SegmentInMemory in_mem_seg_2{stream_desc_2.clone()};
 
-    in_mem_seg_2.set_scalar(0, uint8_t(0));
-    in_mem_seg_2.set_scalar(1, uint8_t(0));
-    in_mem_seg_2.set_scalar(2, uint8_t(0));
-    in_mem_seg_2.set_scalar(3, uint8_t(0));
-    in_mem_seg_2.set_scalar(4, uint8_t(0));
+    in_mem_seg_2.set_scalar(0u, uint8_t(0));
+    in_mem_seg_2.set_scalar(1u, uint8_t(0));
+    in_mem_seg_2.set_scalar(2u, uint8_t(0));
+    in_mem_seg_2.set_scalar(3u, uint8_t(0));
+    in_mem_seg_2.set_scalar(4u, uint8_t(0));
     in_mem_seg_2.end_row();
 
     auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V2);
@@ -762,20 +761,20 @@ TEST(Segment, TestIdenticalProduceSameHashes) {
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
-    in_mem_seg_1.set_scalar(0, uint8_t(0));
-    in_mem_seg_1.set_scalar(1, uint8_t(0));
-    in_mem_seg_1.set_scalar(2, uint8_t(0));
-    in_mem_seg_1.set_scalar(3, uint8_t(0));
-    in_mem_seg_1.set_scalar(4, uint8_t(0));
+    in_mem_seg_1.set_scalar(0u, uint8_t(0));
+    in_mem_seg_1.set_scalar(1u, uint8_t(0));
+    in_mem_seg_1.set_scalar(2u, uint8_t(0));
+    in_mem_seg_1.set_scalar(3u, uint8_t(0));
+    in_mem_seg_1.set_scalar(4u, uint8_t(0));
     in_mem_seg_1.end_row();
 
     SegmentInMemory in_mem_seg_2{stream_desc_1.clone()};
 
-    in_mem_seg_2.set_scalar(0, uint8_t(0));
-    in_mem_seg_2.set_scalar(1, uint8_t(0));
-    in_mem_seg_2.set_scalar(2, uint8_t(0));
-    in_mem_seg_2.set_scalar(3, uint8_t(0));
-    in_mem_seg_2.set_scalar(4, uint8_t(0));
+    in_mem_seg_2.set_scalar(0u, uint8_t(0));
+    in_mem_seg_2.set_scalar(1u, uint8_t(0));
+    in_mem_seg_2.set_scalar(2u, uint8_t(0));
+    in_mem_seg_2.set_scalar(3u, uint8_t(0));
+    in_mem_seg_2.set_scalar(4u, uint8_t(0));
     in_mem_seg_2.end_row();
 
     auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V1);
@@ -800,20 +799,20 @@ TEST(Segment, TestIdenticalProduceSameHashesV2) {
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
-    in_mem_seg_1.set_scalar(0, uint8_t(0));
-    in_mem_seg_1.set_scalar(1, uint8_t(0));
-    in_mem_seg_1.set_scalar(2, uint8_t(0));
-    in_mem_seg_1.set_scalar(3, uint8_t(0));
-    in_mem_seg_1.set_scalar(4, uint8_t(0));
+    in_mem_seg_1.set_scalar(0u, uint8_t(0));
+    in_mem_seg_1.set_scalar(1u, uint8_t(0));
+    in_mem_seg_1.set_scalar(2u, uint8_t(0));
+    in_mem_seg_1.set_scalar(3u, uint8_t(0));
+    in_mem_seg_1.set_scalar(4u, uint8_t(0));
     in_mem_seg_1.end_row();
 
     SegmentInMemory in_mem_seg_2{stream_desc_1.clone()};
 
-    in_mem_seg_2.set_scalar(0, uint8_t(0));
-    in_mem_seg_2.set_scalar(1, uint8_t(0));
-    in_mem_seg_2.set_scalar(2, uint8_t(0));
-    in_mem_seg_2.set_scalar(3, uint8_t(0));
-    in_mem_seg_2.set_scalar(4, uint8_t(0));
+    in_mem_seg_2.set_scalar(0u, uint8_t(0));
+    in_mem_seg_2.set_scalar(1u, uint8_t(0));
+    in_mem_seg_2.set_scalar(2u, uint8_t(0));
+    in_mem_seg_2.set_scalar(3u, uint8_t(0));
+    in_mem_seg_2.set_scalar(4u, uint8_t(0));
     in_mem_seg_2.end_row();
 
     auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V2);

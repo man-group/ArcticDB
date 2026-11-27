@@ -340,7 +340,7 @@ std::optional<char> LmdbStorage::do_verify_library_suffix(std::string_view path 
     return std::nullopt;
 }
 
-void remove_db_files(const fs::path& lib_path) {
+static void remove_db_files(const fs::path& lib_path) {
     std::array<std::string, 2> files = {"lock.mdb", "data.mdb"};
 
     for (const auto& file : files) {

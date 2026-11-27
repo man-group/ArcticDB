@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <limits>
 #include <type_traits>
 
 TEST(MemSegment, Empty) {
@@ -25,15 +26,26 @@ TEST(MemSegment, Empty) {
     SegmentInMemory s;
     ASSERT_EQ(s.row_count(), 0);
     ASSERT_EQ(s.num_columns(), 0);
-    ASSERT_THROW(s.column(12), ArcticCategorizedException<ErrorCategory::INTERNAL>);
+    ASSERT_THROW(s.column(12u), ArcticCategorizedException<ErrorCategory::INTERNAL>);
     //  ASSERT_THROW(s.scalar_at<uint16_t>(3, 6), std::invalid_argument);
     ASSERT_NO_THROW(s.clear());
     // Even though this index is out of bounds it will not throw as there are no columns to visit
     //    ASSERT_NO_THROW(s.visit(5, [] (auto&& ) { std::cout << "testing" << std::endl;}));
 }
 
+TEST(MemSegment, ColumnIndexOutOfBounds) {
+    using namespace arcticdb;
+
+    auto frame_wrapper = get_test_timeseries_frame("test_column_index_out_of_bounds", 10, 0);
+    auto& segment = frame_wrapper.segment_;
+    ASSERT_GT(segment.num_columns(), 0u);
+    ASSERT_NO_THROW(segment.column(segment.num_columns() - 1));
+    ASSERT_THROW(segment.column(segment.num_columns()), ArcticCategorizedException<ErrorCategory::INTERNAL>);
+    ASSERT_THROW(segment.column(std::numeric_limits<size_t>::max()), ArcticCategorizedException<ErrorCategory::INTERNAL>);
+}
+
 template<typename TDT>
-void test_segment_type(size_t num_values = 20, size_t num_tests = 50, size_t num_columns = 4) {
+static void test_segment_type(size_t num_values = 20, size_t num_tests = 50, size_t num_columns = 4) {
     using namespace arcticdb;
     using TypeDescriptorTag = TDT;
     using DTT = typename TypeDescriptorTag::DataTypeTag;
@@ -46,7 +58,7 @@ void test_segment_type(size_t num_values = 20, size_t num_tests = 50, size_t num
     for (size_t i = 0; i < num_tests; ++i) {
         auto ts = timestamp(i);
         TestRow<decltype(typeDescriptorTag)> test_row{ts, num_columns, raw_type(i), num_values};
-        s.set_scalar(0, ts);
+        s.set_scalar(0u, ts);
         for (size_t j = 1; j < num_columns; ++j) {
             if constexpr (dimensions == Dimension::Dim0) {
                 auto v = test_row[j - 1].get_scalar();
@@ -64,7 +76,7 @@ void test_segment_type(size_t num_values = 20, size_t num_tests = 50, size_t num
     for (size_t i = 0; i < num_tests; ++i) {
         auto ts = timestamp(i);
         TestRow<decltype(typeDescriptorTag)> test_row{ts, num_columns, raw_type(i)};
-        ASSERT_EQ(s.scalar_at<timestamp>(i, 0), i);
+        ASSERT_EQ(s.scalar_at<timestamp>(i, 0u), i);
         for (size_t j = 1; j < num_columns; ++j) {
             if constexpr (dimensions == Dimension::Dim0) {
                 auto v = s.scalar_at<raw_type>(i, j);
@@ -266,9 +278,9 @@ TEST(MemSegment, SplitSegment) {
         ASSERT_EQ(split.row_count(), 10);
 
     for (auto i = 0u; i < 100; ++i) {
-        ASSERT_EQ(split_segs[i / 10].scalar_at<int8_t>(i % 10, 1), segment.scalar_at<int8_t>(i, 1));
-        ASSERT_EQ(split_segs[i / 10].scalar_at<uint64_t>(i % 10, 2), segment.scalar_at<uint64_t>(i, 2));
-        ASSERT_EQ(split_segs[i / 10].string_at(i % 10, 3), segment.string_at(i, 3));
+        ASSERT_EQ(split_segs[i / 10].scalar_at<int8_t>(i % 10, 1u), segment.scalar_at<int8_t>(i, 1u));
+        ASSERT_EQ(split_segs[i / 10].scalar_at<uint64_t>(i % 10, 2u), segment.scalar_at<uint64_t>(i, 2u));
+        ASSERT_EQ(split_segs[i / 10].string_at(i % 10, 3u), segment.string_at(i, 3u));
     }
 }
 
@@ -314,17 +326,17 @@ TEST(MemSegment, SplitSparseSegment) {
         ASSERT_EQ(split.row_count(), 10);
 
     for (auto i = 0u; i < 100; ++i) {
-        ASSERT_EQ(split_segs[i / 10].scalar_at<uint32_t>(i % 10, 1), sparse_segment.scalar_at<uint32_t>(i, 1));
-        ASSERT_EQ(split_segs[i / 10].scalar_at<uint64_t>(i % 10, 2), sparse_segment.scalar_at<uint64_t>(i, 2));
+        ASSERT_EQ(split_segs[i / 10].scalar_at<uint32_t>(i % 10, 1u), sparse_segment.scalar_at<uint32_t>(i, 1u));
+        ASSERT_EQ(split_segs[i / 10].scalar_at<uint64_t>(i % 10, 2u), sparse_segment.scalar_at<uint64_t>(i, 2u));
         if (i % 4 == 0) {
-            ASSERT_EQ(split_segs[i / 10].scalar_at<uint64_t>(i % 10, 3), sparse_segment.scalar_at<uint64_t>(i, 3));
+            ASSERT_EQ(split_segs[i / 10].scalar_at<uint64_t>(i % 10, 3u), sparse_segment.scalar_at<uint64_t>(i, 3u));
         } else {
-            ASSERT_FALSE(static_cast<bool>(split_segs[i / 10].scalar_at<uint64_t>(i % 10, 3)));
+            ASSERT_FALSE(static_cast<bool>(split_segs[i / 10].scalar_at<uint64_t>(i % 10, 3u)));
         }
         if (i % 4 == 2) {
-            ASSERT_EQ(split_segs[i / 10].string_at(i % 10, 4), sparse_segment.string_at(i, 4));
+            ASSERT_EQ(split_segs[i / 10].string_at(i % 10, 4u), sparse_segment.string_at(i, 4u));
         } else {
-            ASSERT_FALSE(static_cast<bool>(split_segs[i / 10].string_at(i % 10, 4)));
+            ASSERT_FALSE(static_cast<bool>(split_segs[i / 10].string_at(i % 10, 4u)));
         }
     }
 }
@@ -439,13 +451,13 @@ TEST(MemSegment, Append) {
         for (int col = 0; col < 3; ++col) {
             switch (col) {
             case 0:
-                s1.set_scalar<timestamp>(col, row + col);
+                s1.set_scalar<timestamp>(0u, row + col);
                 break;
             case 1:
-                s1.set_scalar<uint8_t>(col, row + col);
+                s1.set_scalar<uint8_t>(1u, row + col);
                 break;
             case 2:
-                s1.set_scalar<uint32_t>(col, row + col);
+                s1.set_scalar<uint32_t>(2u, row + col);
                 break;
             default:
                 break;
@@ -459,13 +471,13 @@ TEST(MemSegment, Append) {
         for (int col = 0; col < 3; ++col) {
             switch (col) {
             case 0:
-                s2.set_scalar<timestamp>(col, row + col);
+                s2.set_scalar<timestamp>(0u, row + col);
                 break;
             case 1:
-                s2.set_scalar<uint8_t>(col, row + col);
+                s2.set_scalar<uint8_t>(1u, row + col);
                 break;
             case 2:
-                s2.set_scalar<uint32_t>(col, row + col);
+                s2.set_scalar<uint32_t>(2u, row + col);
                 break;
             default:
                 break;
@@ -476,13 +488,13 @@ TEST(MemSegment, Append) {
 
     s1.append(s2);
     for (int row = 0; row < 20; ++row) {
-        ASSERT_EQ(s1.scalar_at<timestamp>(row, 0).value(), row);
+        ASSERT_EQ(s1.scalar_at<timestamp>(row, 0u).value(), row);
     }
     for (int row = 0; row < 20; ++row) {
-        ASSERT_EQ(s1.scalar_at<uint8_t>(row, 1).value(), row + 1);
+        ASSERT_EQ(s1.scalar_at<uint8_t>(row, 1u).value(), row + 1);
     }
     for (int row = 0; row < 20; ++row) {
-        ASSERT_EQ(s1.scalar_at<uint32_t>(row, 2).value(), row + 2);
+        ASSERT_EQ(s1.scalar_at<uint32_t>(row, 2u).value(), row + 2);
     }
 }
 

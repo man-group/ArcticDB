@@ -15,7 +15,9 @@
 
 namespace arcticdb {
 
-StreamId stream_id_from_column_entry(uint64_t column_entry, bool is_sequence_type, const StringPool& string_pool) {
+static StreamId stream_id_from_column_entry(
+        uint64_t column_entry, bool is_sequence_type, const StringPool& string_pool
+) {
     if (is_sequence_type) {
         // String columns are stored as uint64s (offsets into the string pool), but StringPool::get_const_view expects
         // an int64 Hence the static cast
@@ -25,7 +27,9 @@ StreamId stream_id_from_column_entry(uint64_t column_entry, bool is_sequence_typ
     }
 }
 
-IndexValue index_value_from_column_entry(int64_t column_entry, bool is_sequence_type, const StringPool& string_pool) {
+static IndexValue index_value_from_column_entry(
+        int64_t column_entry, bool is_sequence_type, const StringPool& string_pool
+) {
     if (is_sequence_type) {
         // String columns are stored as uint64s, whereas timestamp index start/end values are stored as int64s
         // (nanoseconds since epoch) We could add another if statement based on index_is_sequence_type, but as these

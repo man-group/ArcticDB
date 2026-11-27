@@ -18,7 +18,7 @@
 
 using namespace arcticdb;
 
-auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
+static auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
     return [bucket_boundaries = std::move(bucket_boundaries)](
                    timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin
            ) mutable { return bucket_boundaries; };

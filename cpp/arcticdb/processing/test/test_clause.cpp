@@ -15,7 +15,7 @@
 #include <arcticdb/processing/grouper.hpp>
 
 template<typename T>
-void segment_scalar_assert_all_values_equal(
+static void segment_scalar_assert_all_values_equal(
         const arcticdb::ProcessingUnit& proc_unit, const arcticdb::ColumnName& name,
         const std::unordered_set<T>& expected, size_t expected_row_count
 ) {
@@ -26,24 +26,6 @@ void segment_scalar_assert_all_values_equal(
     for (const auto& row : segment) {
         if (auto maybe_val = row.scalar_at<T>(column_index); maybe_val) {
             ASSERT_THAT(expected, testing::Contains(maybe_val.value()));
-            row_counter++;
-        }
-    }
-
-    ASSERT_EQ(expected_row_count, row_counter);
-}
-
-void segment_string_assert_all_values_equal(
-        const arcticdb::ProcessingUnit& proc_unit, const arcticdb::ColumnName& name, std::string_view expected,
-        size_t expected_row_count
-) {
-    auto segment = *proc_unit.segments_->front();
-    segment.init_column_map();
-    auto column_index = segment.column_index(name.value).value();
-    size_t row_counter = 0;
-    for (auto row : segment) {
-        if (auto maybe_val = row.string_at(column_index); maybe_val) {
-            ASSERT_EQ(maybe_val.value(), expected);
             row_counter++;
         }
     }
@@ -135,7 +117,7 @@ TEST(Clause, AggregationEmptyColumn) {
 
 namespace aggregation_test {
 template<class T, class F>
-void check_column(arcticdb::SegmentInMemory segment, std::string_view column_name, std::size_t ugv, F&& f) {
+static void check_column(arcticdb::SegmentInMemory segment, std::string_view column_name, std::size_t ugv, F&& f) {
     const auto column_index = segment.column_index(column_name);
     ASSERT_TRUE(column_index.has_value());
     const auto& column = segment.column(*column_index);

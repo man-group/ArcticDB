@@ -59,7 +59,7 @@ def make_matching_source(
 
 
 # Merge update stress tests use a lot of memory and can OOM if run in parallel. The shared stress_heavy group
-# keeps them off the same worker as the other memory-heavy stress tests (see PYTEST_XDIST_MODE in build_steps.yml).
+# keeps them from running at the same time as the other memory-heavy stress tests (tests/util/stress_heavy_lock.py).
 @pytest.mark.xdist_group(name="stress_heavy")
 class TestStressTimeseriesMergeUpdate:
 

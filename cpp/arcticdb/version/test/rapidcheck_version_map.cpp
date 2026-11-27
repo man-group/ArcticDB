@@ -22,7 +22,7 @@
 #include <arcticdb/version/version_functions.hpp>
 
 template<typename Model>
-void check_latest_versions(const Model& s0, MapStorePair& sut, std::string symbol) {
+static void check_latest_versions(const Model& s0, MapStorePair& sut, std::string symbol) {
     using namespace arcticdb;
     auto prev = get_latest_version(sut.store_, sut.map_, symbol).first;
     auto sut_version_id = prev ? prev->version_id() : 0;
@@ -32,7 +32,7 @@ void check_latest_versions(const Model& s0, MapStorePair& sut, std::string symbo
 }
 
 template<typename Model>
-void check_latest_undeleted_versions(const Model& s0, MapStorePair& sut, std::string symbol) {
+static void check_latest_undeleted_versions(const Model& s0, MapStorePair& sut, std::string symbol) {
     using namespace arcticdb;
     auto prev = get_latest_undeleted_version(sut.store_, sut.map_, symbol);
     auto sut_version_id = prev ? prev->version_id() : 0;

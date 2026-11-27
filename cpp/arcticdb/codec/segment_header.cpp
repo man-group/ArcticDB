@@ -11,13 +11,13 @@
 
 namespace arcticdb {
 
-size_t field_collection_encoded_field_bytes(const FieldCollection& fields) {
+static size_t field_collection_encoded_field_bytes(const FieldCollection& fields) {
     return calc_field_bytes(
             fields.num_blocks() == 0 ? 0 : fields.num_blocks() + 1
     ); // Non-empty field collection always has shapes buffer
 }
 
-void check_expected_bytes_match(std::optional<size_t> expected_bytes, size_t bytes_written) {
+static void check_expected_bytes_match(std::optional<size_t> expected_bytes, size_t bytes_written) {
     util::check(
             !expected_bytes || (bytes_written == *expected_bytes),
             "Mismatch between actual and expected bytes: {} != {}",
@@ -48,7 +48,7 @@ size_t SegmentHeader::serialize_to_bytes(uint8_t* dst, std::optional<size_t> exp
     return bytes_written;
 }
 
-size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg) {
+static size_t calc_required_header_fields_bytes(const SegmentInMemory& in_mem_seg) {
     size_t required = 0UL;
     if (in_mem_seg.has_index_descriptor()) {
         const auto index_descriptor_size =

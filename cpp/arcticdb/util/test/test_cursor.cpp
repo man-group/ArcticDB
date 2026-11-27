@@ -37,7 +37,7 @@ TEST(Cursor, Behaviour) {
 }
 
 template<typename BufferType>
-void test_cursor_backing() {
+static void test_cursor_backing() {
     using namespace arcticdb;
     CursoredBuffer<BufferType> b;
     std::vector<uint64_t> v(100);

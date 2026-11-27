@@ -36,7 +36,7 @@ void QueryStats::disable() { is_enabled_ = false; }
 
 bool QueryStats::is_enabled() const { return is_enabled_; }
 
-std::string task_type_to_string(TaskType task_type) {
+static std::string task_type_to_string(TaskType task_type) {
     switch (task_type) {
     case TaskType::S3_ListObjectsV2:
         return "S3_ListObjectsV2";
@@ -66,7 +66,7 @@ std::string task_type_to_string(TaskType task_type) {
     }
 }
 
-std::string stat_type_to_string(StatType stat_type) {
+static std::string stat_type_to_string(StatType stat_type) {
     switch (stat_type) {
     case StatType::TOTAL_TIME_MS:
         return "total_time_ms";
@@ -80,7 +80,7 @@ std::string stat_type_to_string(StatType stat_type) {
     }
 }
 
-std::string get_key_type_str(entity::KeyType key) {
+static std::string get_key_type_str(entity::KeyType key) {
     const std::string token = "::";
     std::string key_type_str = entity::get_key_description(key);
     auto token_pos = key_type_str.find(token); // KeyType::SYMBOL_LIST -> SYMBOL_LIST

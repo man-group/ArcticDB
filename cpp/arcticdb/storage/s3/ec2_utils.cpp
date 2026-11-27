@@ -1,3 +1,4 @@
+#include <arcticdb/storage/s3/ec2_utils.hpp>
 #include <aws/core/platform/Environment.h>
 #include <curl/curl.h>
 #include <arcticdb/log/log.hpp>
@@ -5,7 +6,7 @@
 
 namespace arcticdb::storage::s3 {
 // We only care about the response codes, so we just pass a dummy write function to libcurl to not print the responses.
-size_t write_callback([[maybe_unused]] void* buffer, size_t size, size_t nmemb, [[maybe_unused]] void* userp) {
+static size_t write_callback([[maybe_unused]] void* buffer, size_t size, size_t nmemb, [[maybe_unused]] void* userp) {
     return size * nmemb;
 }
 
@@ -16,7 +17,7 @@ size_t write_callback([[maybe_unused]] void* buffer, size_t size, size_t nmemb, 
 // Since there are two versions IMDSv1 and IMDSv2 we first try to connect to v2 and if we fail then attempt the legacy
 // v1 connection. If both fail we're most likely running outside of EC2 (unless IMDS is under heavy load and takes more
 // than 100ms to respond)
-bool has_connection_to_ec2_imds() {
+static bool has_connection_to_ec2_imds() {
     CURL* curl = curl_easy_init();
     if (!curl) {
         return false;

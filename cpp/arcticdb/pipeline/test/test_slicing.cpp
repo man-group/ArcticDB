@@ -15,7 +15,7 @@
 using namespace arcticdb;
 using namespace arcticdb::pipelines;
 
-InputFrame create_frame(
+static InputFrame create_frame(
         const StreamId& symbol, size_t offset, size_t num_rows, size_t num_columns, const IndexDescriptorImpl& index
 ) {
     InputFrame frame;

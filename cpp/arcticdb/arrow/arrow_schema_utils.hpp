@@ -18,13 +18,13 @@ namespace arcticdb {
 class SegmentInMemory;
 
 struct ArrowTransformedSchema {
-    OutputSchema schema_;
+    FrameSchema schema_;
     ankerl::unordered_dense::map<std::string, std::string, util::TransparentStringHash, std::equal_to<>>
             column_renames_;
 };
 
 std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
-        const OutputSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns = std::nullopt
+        const FrameSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns = std::nullopt
 );
 
 /// Renames the fields of pandas data read as Arrow to valid and unique Arrow column names, first converting pandas

@@ -59,10 +59,10 @@ PartialKey WriteToSegmentTask::generate_partial_key(const SegmentInMemory& seg) 
         return {};
     }
     const auto start_index = frame_->has_index()
-                                     ? *seg.column(0).scalar_at<timestamp>(0)
+                                     ? *seg.column(0u).scalar_at<timestamp>(0)
                                      : entity::safe_convert_to_numeric_index(slice_.row_range.first, "Rows");
     const auto end_index = frame_->has_index()
-                                   ? end_index_generator(*seg.column(0).scalar_at<timestamp>(seg.row_count() - 1))
+                                   ? end_index_generator(*seg.column(0u).scalar_at<timestamp>(seg.row_count() - 1))
                                    : entity::safe_convert_to_numeric_index(slice_.row_range.second, "Rows");
     return {typed_stream_version_->type,
             typed_stream_version_->version_id,
@@ -83,7 +83,9 @@ struct ArrowInputContiguousSlice {
     std::optional<ExternalMemBlock*> strings_block;
 };
 
-std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Column& col, size_t from, size_t to) {
+static std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(
+        const Column& col, size_t from, size_t to
+) {
     auto slices = std::vector<ArrowInputContiguousSlice>();
     const auto& buffer = col.buffer();
     const auto type_size = get_type_size(col.type().data_type());
@@ -159,7 +161,7 @@ std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Co
     return slices;
 }
 
-util::BitSet construct_sparse_map(const std::vector<ArrowInputContiguousSlice>& slices, size_t num_rows) {
+static util::BitSet construct_sparse_map(const std::vector<ArrowInputContiguousSlice>& slices, size_t num_rows) {
     // Construct sparse map by populating inverse bitset
     // This way construction for fully dense columns is fast
     util::BitSet dest_bitset;
@@ -185,7 +187,7 @@ util::BitSet construct_sparse_map(const std::vector<ArrowInputContiguousSlice>& 
 
 template<typename DestTypeInfo>
 requires(!is_bool_type(DestTypeInfo::data_type) && !is_sequence_type(DestTypeInfo::data_type))
-void merge_arrow_slices_into_column(
+static void merge_arrow_slices_into_column(
         const Column& source_column, const std::vector<ArrowInputContiguousSlice>& slices, Column& dest,
         [[maybe_unused]] StringPool& string_pool
 ) {
@@ -216,7 +218,7 @@ void merge_arrow_slices_into_column(
 
 template<typename DestTypeInfo>
 requires(is_bool_type(DestTypeInfo::data_type))
-void merge_arrow_slices_into_column(
+static void merge_arrow_slices_into_column(
         [[maybe_unused]] const Column& source_column, const std::vector<ArrowInputContiguousSlice>& slices,
         Column& dest, [[maybe_unused]] StringPool& string_pool
 ) {
@@ -260,7 +262,7 @@ void merge_arrow_slices_into_column(
 
 template<typename DestTypeInfo>
 requires(is_sequence_type(DestTypeInfo::data_type))
-void merge_arrow_slices_into_column(
+static void merge_arrow_slices_into_column(
         const Column& source_column, const std::vector<ArrowInputContiguousSlice>& slices, Column& dest,
         StringPool& string_pool
 ) {
@@ -623,7 +625,7 @@ folly::Future<folly::Unit> remove_slice_and_keys(std::vector<SliceAndKey>&& slic
     return sink.remove_keys(std::move(keys)).thenValue([](auto&&) { return folly::makeFuture(); });
 }
 
-folly::Future<folly::Unit> remove_slice_and_keys_batches(
+static folly::Future<folly::Unit> remove_slice_and_keys_batches(
         std::vector<std::vector<SliceAndKey>>&& slices_batches, StreamSink& sink
 ) {
     return folly::collect(folly::window(

@@ -11,6 +11,7 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 
 #include <folly/Function.h>
 
@@ -19,21 +20,33 @@ namespace arcticdb::stream {
 inline void write_key_to_segment(SegmentInMemory& segment, const entity::AtomKey& key) {
     ARCTICDB_DEBUG(log::storage(), "Writing key row {}", key.view());
     std::visit(
-            [&segment](auto&& val) { segment.set_scalar(int(pipelines::index::Fields::start_index), val); },
+            [&segment](auto&& val) {
+                segment.set_scalar(util::lossless_cast<size_t>(pipelines::index::Fields::start_index), val);
+            },
             key.start_index()
     );
     std::visit(
-            [&segment](auto&& val) { segment.set_scalar(int(pipelines::index::Fields::end_index), val); },
+            [&segment](auto&& val) {
+                segment.set_scalar(util::lossless_cast<size_t>(pipelines::index::Fields::end_index), val);
+            },
             key.end_index()
     );
-    segment.set_scalar(int(pipelines::index::Fields::version_id), key.version_id());
-    std::visit([&segment](auto&& val) { segment.set_scalar(int(pipelines::index::Fields::stream_id), val); }, key.id());
-    segment.set_scalar(int(pipelines::index::Fields::creation_ts), key.creation_ts());
-    segment.set_scalar(int(pipelines::index::Fields::content_hash), key.content_hash());
-    segment.set_scalar(
-            int(pipelines::index::Fields::index_type), static_cast<uint8_t>(stream::get_index_value_type(key))
+    segment.set_scalar(util::lossless_cast<size_t>(pipelines::index::Fields::version_id), key.version_id());
+    std::visit(
+            [&segment](auto&& val) {
+                segment.set_scalar(util::lossless_cast<size_t>(pipelines::index::Fields::stream_id), val);
+            },
+            key.id()
     );
-    segment.set_scalar(int(pipelines::index::Fields::key_type), static_cast<uint8_t>(key.type()));
+    segment.set_scalar(util::lossless_cast<size_t>(pipelines::index::Fields::creation_ts), key.creation_ts());
+    segment.set_scalar(util::lossless_cast<size_t>(pipelines::index::Fields::content_hash), key.content_hash());
+    segment.set_scalar(
+            util::lossless_cast<size_t>(pipelines::index::Fields::index_type),
+            static_cast<uint8_t>(stream::get_index_value_type(key))
+    );
+    segment.set_scalar(
+            util::lossless_cast<size_t>(pipelines::index::Fields::key_type), static_cast<uint8_t>(key.type())
+    );
     segment.end_row();
 }
 

@@ -69,56 +69,54 @@ bool SegmentInMemory::has_index_descriptor() const { return impl_->has_index_des
 
 void SegmentInMemory::init_column_map() const { impl_->init_column_map(); }
 
-void SegmentInMemory::set_string(position_t pos, std::string_view str) { impl_->set_string(pos, str); }
+void SegmentInMemory::set_string(size_t pos, std::string_view str) { impl_->set_string(pos, str); }
 
-void SegmentInMemory::set_string_at(position_t col, position_t row, const char* str, size_t size) {
+void SegmentInMemory::set_string_at(size_t col, position_t row, const char* str, size_t size) {
     impl_->set_string_at(col, row, str, size);
 }
 
-void SegmentInMemory::set_string_array(position_t idx, size_t string_size, size_t num_strings, char* data) {
+void SegmentInMemory::set_string_array(size_t idx, size_t string_size, size_t num_strings, char* data) {
     impl_->set_string_array(idx, string_size, num_strings, data);
 }
 
-void SegmentInMemory::set_string_list(position_t idx, const std::vector<std::string>& input) {
+void SegmentInMemory::set_string_list(size_t idx, const std::vector<std::string>& input) {
     impl_->set_string_list(idx, input);
 }
 
-void SegmentInMemory::set_value(position_t idx, const SegmentInMemoryImpl::Location& loc) {
-    impl_->set_value(idx, loc);
-}
+void SegmentInMemory::set_value(size_t idx, const SegmentInMemoryImpl::Location& loc) { impl_->set_value(idx, loc); }
 
 // pybind11 can't resolve const and non-const version of column()
-Column& SegmentInMemory::column_ref(position_t idx) { return impl_->column_ref(idx); }
+Column& SegmentInMemory::column_ref(size_t idx) { return impl_->column_ref(idx); }
 
-Column& SegmentInMemory::column(position_t idx) { return impl_->column(idx); }
+Column& SegmentInMemory::column(size_t idx) { return impl_->column(idx); }
 
-const Column& SegmentInMemory::column(position_t idx) const { return impl_->column(idx); }
+const Column& SegmentInMemory::column(size_t idx) const { return impl_->column(idx); }
 
 std::vector<std::shared_ptr<Column>>& SegmentInMemory::columns() { return impl_->columns(); }
 
 const std::vector<std::shared_ptr<Column>>& SegmentInMemory::columns() const { return impl_->columns(); }
 
-position_t SegmentInMemory::add_column(const Field& field, size_t num_rows, AllocationType presize) {
+size_t SegmentInMemory::add_column(const Field& field, size_t num_rows, AllocationType presize) {
     return impl_->add_column(field, num_rows, presize);
 }
 
-position_t SegmentInMemory::add_column(const Field& field, const std::shared_ptr<Column>& column) {
+size_t SegmentInMemory::add_column(const Field& field, const std::shared_ptr<Column>& column) {
     return impl_->add_column(field, column);
 }
 
-position_t SegmentInMemory::add_column(FieldRef field_ref, const std::shared_ptr<Column>& column) {
+size_t SegmentInMemory::add_column(FieldRef field_ref, const std::shared_ptr<Column>& column) {
     return impl_->add_column(field_ref, column);
 }
 
-position_t SegmentInMemory::add_column(std::string_view name, const std::shared_ptr<Column>& column) {
+size_t SegmentInMemory::add_column(std::string_view name, const std::shared_ptr<Column>& column) {
     return impl_->add_column(name, column);
 }
 
-position_t SegmentInMemory::add_column(FieldRef field_ref, size_t num_rows, AllocationType presize) {
+size_t SegmentInMemory::add_column(FieldRef field_ref, size_t num_rows, AllocationType presize) {
     return impl_->add_column(field_ref, num_rows, presize);
 }
 
-position_t SegmentInMemory::add_column(const Field& field, Column&& column) {
+size_t SegmentInMemory::add_column(const Field& field, Column&& column) {
     return impl_->add_column(field, std::make_shared<Column>(std::move(column)));
 }
 
@@ -132,11 +130,11 @@ void SegmentInMemory::concatenate(SegmentInMemory&& other, bool unique_column_na
 
 void SegmentInMemory::drop_column(std::string_view name) { impl_->drop_column(name); }
 
-std::optional<std::string_view> SegmentInMemory::string_at(position_t row, position_t col) const {
+std::optional<std::string_view> SegmentInMemory::string_at(position_t row, size_t col) const {
     return impl_->string_at(row, col);
 }
 
-std::optional<Column::StringArrayData> SegmentInMemory::string_array_at(position_t row, position_t col) {
+std::optional<Column::StringArrayData> SegmentInMemory::string_array_at(position_t row, size_t col) {
     return impl_->string_array_at(row, col);
 }
 
@@ -163,11 +161,11 @@ const arcticdb::proto::descriptors::UserDefinedMetadata& SegmentInMemory::user_m
 
 void SegmentInMemory::sparsify() { impl_->sparsify(); }
 
-void SegmentInMemory::set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+void SegmentInMemory::set_sparse_block(size_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
     impl_->set_sparse_block(idx, std::move(buffer), std::move(shapes), std::move(bitset));
 }
 
-void SegmentInMemory::set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+void SegmentInMemory::set_sparse_block(size_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
     impl_->set_sparse_block(idx, std::move(buffer), std::move(bitset));
 }
 
@@ -223,7 +221,7 @@ void SegmentInMemory::sort(const std::vector<std::string>& columns) { return imp
 
 void SegmentInMemory::sort(const std::vector<position_t>& columns) { return impl_->sort(columns); }
 
-void SegmentInMemory::sort(position_t column) { impl_->sort(column); }
+void SegmentInMemory::sort(size_t column) { impl_->sort(column); }
 
 SegmentInMemory SegmentInMemory::clone() const {
     return SegmentInMemory(std::make_shared<SegmentInMemoryImpl>(impl_->clone()));
@@ -275,7 +273,7 @@ void SegmentInMemory::check_magic() const { impl_->check_magic(); }
 // Not currently used but might be useful in the future
 void SegmentInMemory::compact_blocks() { impl_->compact_blocks(); }
 
-std::shared_ptr<Column> SegmentInMemory::column_ptr(position_t idx) const { return impl_->column_ptr(idx); }
+std::shared_ptr<Column> SegmentInMemory::column_ptr(size_t idx) const { return impl_->column_ptr(idx); }
 
 bool SegmentInMemory::allow_sparse() const { return impl_->allow_sparse(); }
 

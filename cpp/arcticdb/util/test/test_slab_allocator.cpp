@@ -26,11 +26,11 @@ using pointer_set = std::unordered_set<typename MemoryChunk::pointer>;
 // We limit the number of concurrent threads to 8 to avoid the slab allocator poor performance with large amounts of
 // threads:
 // https://manwiki.maninvestments.com/display/AlphaTech/Slab+Allocator+poor+multi-threaded+performance+with+aggressive+allocations
-size_t num_threads = std::min(std::thread::hardware_concurrency() - 1, 8u);
+static size_t num_threads = std::min(std::thread::hardware_concurrency() - 1, 8u);
 std::size_t const num_blocks_per_thread = 10000;
 
 template<typename MemoryChunk>
-pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& execution_time_ms) {
+static pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& execution_time_ms) {
 
     pointer_set<MemoryChunk> mcps;
     mcps.reserve(n);
@@ -46,7 +46,7 @@ pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& exe
 }
 
 template<typename MemoryChunk>
-void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChunk>& s2) {
+static void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChunk>& s2) {
     auto end = std::cend(s2);
     for (auto* p : s1)
         if (s2.find(p) != end)
@@ -54,7 +54,7 @@ void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChun
 }
 
 template<typename MemoryChunk>
-void run_test(MemoryChunk& mc, unsigned int K) {
+static void run_test(MemoryChunk& mc, unsigned int K) {
     std::vector<int64_t> execution_times(num_threads);
     int64_t avg = 0;
     for (size_t k = 0; k < K; ++k) {
@@ -178,7 +178,7 @@ TEST(SlabAlloc, AddrInSlab) {
 }
 
 using SlabAllocType = SlabAllocator<std::byte[4096], 64>;
-std::vector<SlabAllocType::pointer> perform_allocations_with_latches(
+static std::vector<SlabAllocType::pointer> perform_allocations_with_latches(
         SlabAllocType& mc, size_t num, std::shared_ptr<std::latch> decrease_available_blocks_done,
         std::shared_ptr<std::latch> start_callbacks
 ) {
@@ -189,7 +189,7 @@ std::vector<SlabAllocType::pointer> perform_allocations_with_latches(
     return res;
 }
 
-std::vector<SlabAllocType::pointer> perform_allocations(SlabAllocType& mc, size_t num) {
+static std::vector<SlabAllocType::pointer> perform_allocations(SlabAllocType& mc, size_t num) {
     std::vector<SlabAllocType::pointer> res;
     for (size_t i = 0; i < num; i++) {
         res.push_back(mc.allocate());

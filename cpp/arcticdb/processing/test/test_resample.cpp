@@ -16,14 +16,14 @@
 
 using namespace arcticdb;
 
-auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
+static auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
     return [bucket_boundaries = std::move(bucket_boundaries)](
                    timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin
            ) { return bucket_boundaries; };
 }
 
 template<ResampleBoundary resample_boundary>
-ResampleClause<resample_boundary> generate_resample_clause(
+static ResampleClause<resample_boundary> generate_resample_clause(
         ResampleBoundary label_boundary, std::vector<timestamp>&& bucket_boundaries,
         ResampleOrigin origin = timestamp{0}
 ) {
@@ -419,8 +419,8 @@ TEST(Resample, ProcessMultipleSegments) {
                     *component_manager, resample.process(std::move(ids_0))
             );
     auto resampled_seg_0 = *resampled_0.segments_.value()[0];
-    auto& resampled_index_column_0 = resampled_seg_0.column(0);
-    auto& resampled_sum_column_0 = resampled_seg_0.column(1);
+    auto& resampled_index_column_0 = resampled_seg_0.column(0u);
+    auto& resampled_sum_column_0 = resampled_seg_0.column(1u);
     ASSERT_EQ(-5, resampled_index_column_0.scalar_at<int64_t>(0));
     ASSERT_EQ(6, resampled_index_column_0.scalar_at<int64_t>(1));
     ASSERT_EQ(0, resampled_sum_column_0.scalar_at<int64_t>(0));
@@ -431,8 +431,8 @@ TEST(Resample, ProcessMultipleSegments) {
                     *component_manager, resample.process(std::move(ids_1))
             );
     auto resampled_seg_1 = *resampled_1.segments_.value()[0];
-    auto& resampled_index_column_1 = resampled_seg_1.column(0);
-    auto& resampled_sum_column_1 = resampled_seg_1.column(1);
+    auto& resampled_index_column_1 = resampled_seg_1.column(0u);
+    auto& resampled_sum_column_1 = resampled_seg_1.column(1u);
     ASSERT_EQ(25, resampled_index_column_1.scalar_at<int64_t>(0));
     ASSERT_EQ(35, resampled_index_column_1.scalar_at<int64_t>(1));
     ASSERT_EQ(30, resampled_sum_column_1.scalar_at<int64_t>(0));
@@ -443,8 +443,8 @@ TEST(Resample, ProcessMultipleSegments) {
                     *component_manager, resample.process(std::move(ids_2))
             );
     auto resampled_seg_2 = *resampled_2.segments_.value()[0];
-    auto& resampled_index_column_2 = resampled_seg_2.column(0);
-    auto& resampled_sum_column_2 = resampled_seg_2.column(1);
+    auto& resampled_index_column_2 = resampled_seg_2.column(0u);
+    auto& resampled_sum_column_2 = resampled_seg_2.column(1u);
     ASSERT_EQ(46, resampled_index_column_2.scalar_at<int64_t>(0));
     ASSERT_EQ(50, resampled_sum_column_2.scalar_at<int64_t>(0));
 }
@@ -460,14 +460,16 @@ template<typename AggregatorAndLabel>
 class SortedAggregatorSparseStructure : public ::testing::Test {};
 
 template<typename T, size_t count>
-constexpr std::array<T, count> linear_range(T start, T step) {
+constexpr static std::array<T, count> linear_range(T start, T step) {
     std::array<T, start> arr;
     std::generate_n(arr.begin(), count, [i = T{0}, start, step]() mutable { return start + (i++) * step; });
     return arr;
 }
 
 template<typename T, size_t bucket_count>
-constexpr std::array<T, bucket_count - 1> generate_labels(std::array<T, bucket_count> buckets, ResampleBoundary label) {
+constexpr static std::array<T, bucket_count - 1> generate_labels(
+        std::array<T, bucket_count> buckets, ResampleBoundary label
+) {
     std::array<T, bucket_count - 1> result;
     if (label == ResampleBoundary::LEFT) {
         std::copy_n(buckets.begin(), bucket_count - 1, result.begin());
@@ -477,20 +479,20 @@ constexpr std::array<T, bucket_count - 1> generate_labels(std::array<T, bucket_c
     return result;
 }
 
-void assert_column_is_dense(const Column& c) {
+static void assert_column_is_dense(const Column& c) {
     ASSERT_FALSE(c.sparse_permitted());
     ASSERT_FALSE(c.is_sparse());
     ASSERT_FALSE(c.opt_sparse_map().has_value());
 }
 
-void assert_column_is_sparse(const Column& c) {
+static void assert_column_is_sparse(const Column& c) {
     ASSERT_TRUE(c.sparse_permitted());
     ASSERT_TRUE(c.is_sparse());
     ASSERT_TRUE(c.opt_sparse_map().has_value());
 }
 
 template<ResampleBoundary closed_boundary, typename AggregatorT>
-std::optional<Column> compute_output_column(
+static std::optional<Column> compute_output_column(
         const AggregatorT& aggregator, std::span<const std::shared_ptr<Column>> input_index_columns,
         std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
         const std::vector<timestamp>& bucket_boundaries, ResampleBoundary label_boundary

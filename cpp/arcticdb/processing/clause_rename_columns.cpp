@@ -90,9 +90,9 @@ void RenameColumnsClause::set_component_manager(std::shared_ptr<ComponentManager
     component_manager_ = std::move(component_manager);
 }
 
-OutputSchema RenameColumnsClause::modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+FrameSchema RenameColumnsClause::modify_schema(FrameSchema&& schema) const { return schema; }
 
-OutputSchema RenameColumnsClause::join_schemas(std::vector<OutputSchema>&&) const {
+FrameSchema RenameColumnsClause::join_schemas(std::vector<FrameSchema>&&) const {
     util::raise_rte("RenameColumnsClause::join_schemas should never be called");
 }
 

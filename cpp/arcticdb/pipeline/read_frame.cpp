@@ -44,7 +44,7 @@ void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
 
 using BlockConfigPerColumn = SegmentInMemory::BlockConfigPerColumn;
 
-std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
+static std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
         StreamDescriptor&& descriptor, const ReadOptions& read_options,
         const std::shared_ptr<FieldCollection>& filter_columns
 ) {
@@ -81,7 +81,7 @@ std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_bl
     );
 }
 
-std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
+static std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
         const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
 ) {
     return get_filtered_descriptor_and_block_config(
@@ -89,21 +89,21 @@ std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_bl
     );
 }
 
-void handle_modified_descriptor(const std::shared_ptr<PipelineContext>& context, SegmentInMemory& output) {
+static void handle_modified_descriptor(const std::shared_ptr<PipelineContext>& context, SegmentInMemory& output) {
     if (context->are_string_fields_coerced()) {
         for (const auto& field : context->on_disk_descriptor().fields()) {
             auto col_index = output.column_index(field.name());
             if (!col_index)
                 continue;
 
-            auto& column = output.column(static_cast<position_t>(*col_index));
+            auto& column = output.column(*col_index);
             if (field.type().data_type() != column.type().data_type())
                 column.set_orig_type(field.type());
         }
     }
 }
 
-void finalize_segment_setup(
+static void finalize_segment_setup(
         SegmentInMemory& output, size_t offset, size_t row_count, const std::shared_ptr<PipelineContext>& context
 ) {
     output.set_offset(static_cast<position_t>(offset));
@@ -145,7 +145,7 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, 
 
 size_t get_index_field_count(const SegmentInMemory& frame) { return frame.descriptor().index().field_count(); }
 
-const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& data) {
+const static uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& data) {
     const auto has_magic_numbers = hdr.encoding_version() == EncodingVersion::V2;
     const auto start [[maybe_unused]] = data;
     if (has_magic_numbers)
@@ -182,7 +182,7 @@ const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& dat
     return data;
 }
 
-const uint8_t* skip_to_string_pool(const SegmentHeader& hdr, const uint8_t* data) {
+const static uint8_t* skip_to_string_pool(const SegmentHeader& hdr, const uint8_t* data) {
     const uint8_t* output = data;
     const auto& body_fields = hdr.body_fields();
     const auto magic_number_size = hdr.encoding_version() == EncodingVersion::V2 ? sizeof(ColumnMagic) : 0;
@@ -192,7 +192,7 @@ const uint8_t* skip_to_string_pool(const SegmentHeader& hdr, const uint8_t* data
     return output;
 }
 
-void decode_string_pool(
+static void decode_string_pool(
         const SegmentHeader& hdr, const uint8_t*& data, const uint8_t* begin ARCTICDB_UNUSED, const uint8_t* end,
         PipelineContextRow& context
 ) {
@@ -220,7 +220,7 @@ void decode_string_pool(
     }
 }
 
-void decode_index_field(
+static void decode_index_field(
         SegmentInMemory& frame, const EncodedFieldImpl& field, const uint8_t*& data,
         const uint8_t* begin ARCTICDB_UNUSED, const uint8_t* end ARCTICDB_UNUSED, PipelineContextRow& context,
         EncodingVersion encoding_version
@@ -234,7 +234,7 @@ void decode_index_field(
 
             data += size;
         } else {
-            auto& buffer = frame.column(0).data().buffer();
+            auto& buffer = frame.column(0u).data().buffer();
             auto& frame_field_descriptor = frame.field(0);
             auto sz = data_type_size(frame_field_descriptor.type());
             const auto& slice_and_key = context.slice_and_key();
@@ -266,7 +266,7 @@ void decode_index_field(
     }
 }
 
-bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
+static bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
 
 // If the source and destination types are different, then sizeof(destination type) >= sizeof(source type).
 // We have decoded the column of source type directly onto the output buffer above.
@@ -274,7 +274,7 @@ bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_typ
 // type to avoid overwriting values we haven't cast yet.
 template<typename SourceType, typename DestinationType>
 requires(sizeof(SourceType) <= sizeof(DestinationType))
-void promote_integral_type(const ColumnMapping& m, Column& column) {
+static void promote_integral_type(const ColumnMapping& m, Column& column) {
     const auto src_data_type_size = data_type_size(m.source_type_desc_);
     const auto dest_data_type_size = data_type_size(m.dest_type_desc_);
 
@@ -287,7 +287,7 @@ void promote_integral_type(const ColumnMapping& m, Column& column) {
     }
 }
 
-void handle_type_promotion(const ColumnMapping& m, Column& column) {
+static void handle_type_promotion(const ColumnMapping& m, Column& column) {
     if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty(m)) {
         m.dest_type_desc_.visit_tag([&column, &m](auto dest_desc_tag) {
             using DestinationType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
@@ -311,7 +311,7 @@ void handle_type_promotion(const ColumnMapping& m, Column& column) {
     }
 }
 
-void decode_or_expand(
+static void decode_or_expand(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info, // type of the column.
         // encoded_field_info is the type of the data key. and dest_column may need to be promoted if types are
         // differrent between data keys
@@ -405,7 +405,7 @@ void decode_or_expand(
     }
 }
 
-ColumnTruncation get_truncate_range_from_rows(
+static ColumnTruncation get_truncate_range_from_rows(
         const RowRange& slice_range, size_t row_filter_start, size_t row_filter_end
 ) {
     util::check(
@@ -429,7 +429,7 @@ ColumnTruncation get_truncate_range_from_rows(
     return {truncate_start, truncate_end};
 }
 
-ColumnTruncation get_truncate_range_from_index(
+static ColumnTruncation get_truncate_range_from_index(
         const Column& column, const RowRange& slice_range, const TimestampRange& timestamp_range
 ) {
     auto start_row = lower_bound_idx<timestamp>(column, timestamp_range.first, slice_range.start(), slice_range.end());
@@ -447,7 +447,7 @@ ColumnTruncation get_truncate_range_from_index(
     return get_truncate_range_from_rows(slice_range, start_row, end_row);
 }
 
-ColumnTruncation get_truncate_range(
+static ColumnTruncation get_truncate_range(
         const SegmentInMemory& frame, const PipelineContextRow& context, const ReadQuery& read_query,
         EncodingVersion encoding_version, const EncodedFieldImpl& index_field, const uint8_t* index_field_offset
 ) {
@@ -470,7 +470,7 @@ ColumnTruncation get_truncate_range(
                     timestamp _first_ts;
                     timestamp _last_ts;
                     if (context.fetch_index()) {
-                        _index_column = frame.column_ptr(0);
+                        _index_column = frame.column_ptr(0u);
                         _first_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.first);
                         _last_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.second - 1);
                     } else {
@@ -526,7 +526,7 @@ ColumnTruncation get_truncate_range(
     return truncate_rows;
 };
 
-size_t get_field_range_compressed_size(
+static size_t get_field_range_compressed_size(
         size_t start_idx, size_t num_fields, const SegmentHeader& hdr, const EncodedFieldCollection& fields
 ) {
     size_t total = 0ULL;
@@ -546,12 +546,12 @@ size_t get_field_range_compressed_size(
     return total;
 }
 
-void advance_field_size(const EncodedFieldImpl& field, const uint8_t*& data, bool has_magic_numbers) {
+static void advance_field_size(const EncodedFieldImpl& field, const uint8_t*& data, bool has_magic_numbers) {
     const size_t magic_num_size = has_magic_numbers ? sizeof(ColumnMagic) : 0ULL;
     data += encoding_sizes::ndarray_field_compressed_size(field.ndarray()) + magic_num_size;
 }
 
-void advance_skipped_cols(
+static void advance_skipped_cols(
         const uint8_t*& data, const StaticColumnMappingIterator& it, const EncodedFieldCollection& fields,
         const SegmentHeader& hdr
 ) {
@@ -565,7 +565,7 @@ void advance_skipped_cols(
     }
 }
 
-void advance_to_end(
+static void advance_to_end(
         const uint8_t*& data, const StaticColumnMappingIterator& it, const EncodedFieldCollection& fields,
         const SegmentHeader& hdr
 ) {
@@ -580,7 +580,7 @@ void advance_to_end(
 }
 
 template<typename IteratorType>
-bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) {
+static bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) {
     while (it.has_next()) {
         const StreamDescriptor& stream_desc = context.descriptor();
         const Field& field = stream_desc.fields(it.source_field_pos());
@@ -592,7 +592,9 @@ bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) 
     return true;
 }
 
-void check_type_compatibility(const ColumnMapping& m, std::string_view field_name, size_t source_col, size_t dest_col) {
+static void check_type_compatibility(
+        const ColumnMapping& m, std::string_view field_name, size_t source_col, size_t dest_col
+) {
 
     const bool types_trivially_compatible = trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_);
     const bool any_type_is_empty =
@@ -609,7 +611,7 @@ void check_type_compatibility(const ColumnMapping& m, std::string_view field_nam
     );
 }
 
-void check_data_left_for_subsequent_fields(
+static void check_data_left_for_subsequent_fields(
         const uint8_t* data, const uint8_t* end, const StaticColumnMappingIterator& it,
         const PipelineContextRow& context
 ) {
@@ -666,7 +668,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
         };
 
         if (context.fetch_index() && index_fieldcount > 0) {
-            handle_truncation(frame.column(0), truncate_range_for(frame.column(0).type()));
+            handle_truncation(frame.column(0u), truncate_range_for(frame.column(0u).type()));
         }
 
         StaticColumnMappingIterator it(context, index_fieldcount);
@@ -686,7 +688,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
                     fields.size()
             );
             auto field_name = context.descriptor().fields(it.source_field_pos()).name();
-            auto& column = frame.column(static_cast<ssize_t>(it.dest_col()));
+            auto& column = frame.column(it.dest_col());
             ColumnMapping mapping{
                     frame, it.dest_col(), it.source_field_pos(), context
             }; // where to write in the output frame
@@ -724,7 +726,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
     ARCTICDB_TRACE(log::codec(), "Frame decoded into static schema");
 }
 
-void check_mapping_type_compatibility(const ColumnMapping& m) {
+static void check_mapping_type_compatibility(const ColumnMapping& m) {
     util::check(
             is_valid_type_promotion_to_target(m.source_type_desc_, m.dest_type_desc_),
             "Can't promote type {} to type {} in field {}",
@@ -734,7 +736,7 @@ void check_mapping_type_compatibility(const ColumnMapping& m) {
     );
 }
 
-void decode_into_frame_dynamic(
+static void decode_into_frame_dynamic(
         SegmentInMemory& frame, PipelineContextRow& context, const storage::KeySegmentPair& key_seg,
         const DecodePathData& shared_data, std::any& handler_data, const ReadQuery& read_query,
         const ReadOptions& read_options
@@ -779,7 +781,7 @@ void decode_into_frame_dynamic(
 
         // Index-only frames have no columns
         if (index_fieldcount > 0) {
-            handle_truncation(frame.column(0), truncate_range_for(frame.column(0).type()));
+            handle_truncation(frame.column(0u), truncate_range_for(frame.column(0u).type()));
         }
         auto truncated_column_indices = std::unordered_set<size_t>{};
 
@@ -794,7 +796,7 @@ void decode_into_frame_dynamic(
             }
 
             auto dst_col = *column_output_destination;
-            auto& column = frame.column(static_cast<position_t>(dst_col));
+            auto& column = frame.column(dst_col);
             ColumnMapping mapping{frame, dst_col, field_col, context};
             check_mapping_type_compatibility(mapping);
             const auto& column_truncation = truncate_range_for(mapping.dest_type_desc_);
@@ -833,7 +835,7 @@ void decode_into_frame_dynamic(
         if (!std::holds_alternative<std::monostate>(read_query.row_filter)) {
             for (auto frame_col = index_fieldcount; frame_col < frame.descriptor().field_count(); ++frame_col) {
                 if (!truncated_column_indices.contains(frame_col)) {
-                    auto& column = frame.column(static_cast<position_t>(frame_col));
+                    auto& column = frame.column(frame_col);
                     handle_truncation(column, truncate_range_for(column.type()));
                 }
             }
@@ -990,7 +992,7 @@ struct ReduceColumnTask : async::BaseTask {
     folly::Unit operator()() {
         const auto& frame_field = frame_.field(column_index_);
         const auto field_type = frame_field.type().data_type();
-        auto& column = frame_.column(static_cast<position_t>(column_index_));
+        auto& column = frame_.column(column_index_);
         const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
         const auto column_data = slice_map_->columns_.find(frame_field.name());
         const auto& name = frame_field.name();

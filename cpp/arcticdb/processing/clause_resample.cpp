@@ -41,11 +41,11 @@ void ResampleClause<closed_boundary>::set_component_manager(std::shared_ptr<Comp
 }
 
 template<ResampleBoundary closed_boundary>
-OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& output_schema) const {
-    check_is_timeseries(output_schema.stream_descriptor(), "Resample");
-    output_schema.clear_default_values();
-    check_column_presence(output_schema, clause_info_.input_columns_, "Resample");
-    const auto& input_stream_desc = output_schema.stream_descriptor();
+FrameSchema ResampleClause<closed_boundary>::modify_schema(FrameSchema&& schema) const {
+    check_is_timeseries(schema.stream_descriptor(), "Resample");
+    schema.clear_default_values();
+    check_column_presence(schema, clause_info_.input_columns_, "Resample");
+    const auto& input_stream_desc = schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
     stream_desc.add_field(input_stream_desc.field(0));
     stream_desc.set_index(IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
@@ -53,19 +53,19 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
     for (const auto& agg : aggregators_) {
         const auto& input_column_name = agg.get_input_column_name().value;
         const auto& output_column_name = agg.get_output_column_name().value;
-        const auto& input_column_type = output_schema.column_types()[input_column_name];
+        const auto& input_column_type = schema.column_types()[input_column_name];
         agg.check_aggregator_supported_with_data_type(input_column_type);
         auto output_column_type = agg.generate_output_data_type(input_column_type);
         stream_desc.add_scalar_field(output_column_type, output_column_name);
         const std::optional<Value>& default_value = agg.get_default_value(input_column_type);
         if (default_value) {
-            output_schema.set_default_value_for_column(output_column_name, *default_value);
+            schema.set_default_value_for_column(output_column_name, *default_value);
         }
     }
-    output_schema.set_stream_descriptor(std::move(stream_desc));
+    schema.set_stream_descriptor(std::move(stream_desc));
 
-    if (output_schema.norm_metadata_.df().common().has_multi_index()) {
-        const auto& multi_index = output_schema.norm_metadata_.mutable_df()->mutable_common()->multi_index();
+    if (schema.norm_metadata_.df().common().has_multi_index()) {
+        const auto& multi_index = schema.norm_metadata_.mutable_df()->mutable_common()->multi_index();
         auto name = multi_index.name();
         auto tz = multi_index.tz();
         bool fake_name{false};
@@ -75,13 +75,13 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
                 break;
             }
         }
-        auto mutable_index = output_schema.norm_metadata_.mutable_df()->mutable_common()->mutable_index();
+        auto mutable_index = schema.norm_metadata_.mutable_df()->mutable_common()->mutable_index();
         mutable_index->set_tz(tz);
         mutable_index->set_is_physically_stored(true);
         mutable_index->set_name(name);
         mutable_index->set_fake_name(fake_name);
     }
-    return output_schema;
+    return schema;
 }
 
 template<ResampleBoundary closed_boundary>
@@ -308,7 +308,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // to process is responsible for calculating All segments in a given row slice contain the same index column, so
     // just grab info from the first one
     const auto& index_column_name = front_slice.segments_->at(0)->field(0).name();
-    const auto& first_row_slice_index_col = front_slice.segments_->at(0)->column(0);
+    const auto& first_row_slice_index_col = front_slice.segments_->at(0)->column(0u);
     // Resampling only makes sense for timestamp indexes
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             is_time_type(first_row_slice_index_col.type().data_type()),
@@ -323,7 +323,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
             row_slices.size() == 1
                     ? first_row_slice_index_col.template scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1)
                               .value()
-                    : row_slices.back().segments_->at(0)->column(0).template scalar_at<timestamp>(0).value();
+                    : row_slices.back().segments_->at(0)->column(0u).template scalar_at<timestamp>(0).value();
     auto bucket_boundaries = generate_bucket_boundaries(first_ts, last_ts, responsible_for_first_overlapping_bucket);
     if (bucket_boundaries.size() < 2) {
         return {};
@@ -331,7 +331,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     std::vector<std::shared_ptr<Column>> input_index_columns;
     input_index_columns.reserve(row_slices.size());
     for (const auto& row_slice : row_slices) {
-        input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
+        input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0u));
     }
     const auto [output_index_column, mapping] = generate_output_index_column<closed_boundary>(
             input_index_columns, bucket_boundaries, *date_range_, label_boundary_

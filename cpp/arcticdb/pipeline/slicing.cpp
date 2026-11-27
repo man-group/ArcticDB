@@ -13,7 +13,7 @@
 
 namespace arcticdb::pipelines {
 
-std::pair<size_t, size_t> get_index_and_field_count(const arcticdb::pipelines::InputFrame& frame) {
+static std::pair<size_t, size_t> get_index_and_field_count(const arcticdb::pipelines::InputFrame& frame) {
     return {frame.desc().index().field_count(), frame.desc().fields().size()};
 }
 
@@ -44,14 +44,14 @@ std::vector<FrameSlice> slice(InputFrame& frame, const SlicingPolicy& arg) {
     );
 }
 
-void add_index_fields(const arcticdb::pipelines::InputFrame& frame, FieldCollection& current_fields) {
+static void add_index_fields(const arcticdb::pipelines::InputFrame& frame, FieldCollection& current_fields) {
     for (auto i = 0u; i < frame.desc().index().field_count(); ++i) {
         const auto& field = frame.desc().fields(0);
         current_fields.add({field.type(), field.name()});
     }
 }
 
-std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::InputFrame& frame) {
+static std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::InputFrame& frame) {
     return {frame.offset, frame.num_rows + frame.offset};
 }
 

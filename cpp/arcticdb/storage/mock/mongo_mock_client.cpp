@@ -21,7 +21,7 @@ std::string MockMongoClient::get_failure_trigger(
 }
 
 template<typename exception_type>
-MongoFailure create_failure(const std::string& message, MongoError error_code) {
+static MongoFailure create_failure(const std::string& message, MongoError error_code) {
     static_assert(
             std::is_base_of<mongocxx::operation_exception, exception_type>::value,
             "exception_type must be a subclass of mongocxx::operation_exception"
@@ -35,7 +35,7 @@ MongoFailure create_failure(const std::string& message, MongoError error_code) {
     return {exception_type(ec, std::move(empty_doc_value), message)};
 }
 
-MongoFailure get_failure(const std::string& message, StorageOperation operation, MongoError error_code) {
+static MongoFailure get_failure(const std::string& message, StorageOperation operation, MongoError error_code) {
     switch (operation) {
     case StorageOperation::READ:
         return create_failure<mongocxx::query_exception>(message, error_code);
@@ -54,7 +54,7 @@ MongoFailure get_failure(const std::string& message, StorageOperation operation,
     }
 }
 
-std::optional<MongoFailure> has_failure_trigger(const MongoKey& key, StorageOperation operation) {
+static std::optional<MongoFailure> has_failure_trigger(const MongoKey& key, StorageOperation operation) {
     auto key_id = key.doc_key_.id_string();
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = key_id.rfind(failure_string_for_operation);
@@ -77,7 +77,7 @@ std::optional<MongoFailure> has_failure_trigger(const MongoKey& key, StorageOper
     }
 }
 
-bool matches_prefix(
+static bool matches_prefix(
         const MongoKey& key, const std::string& database_name, const std::string& collection_name,
         const std::string& prefix
 ) {
@@ -86,7 +86,7 @@ bool matches_prefix(
            key.doc_key_.id_string().find(prefix) == 0;
 }
 
-void throw_if_exception(MongoFailure& failure) {
+static void throw_if_exception(MongoFailure& failure) {
     if (!failure.is_no_ack_failure()) {
         throw failure.get_exception();
     }

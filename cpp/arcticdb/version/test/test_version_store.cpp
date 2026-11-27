@@ -31,7 +31,7 @@ struct VersionStoreTest : arcticdb::TestStore {
     std::string get_name() override { return "test.version_store"; }
 };
 
-auto write_version_frame(
+static auto write_version_frame(
         const arcticdb::StreamId& stream_id, arcticdb::VersionId v_id, arcticdb::version_store::PythonVersionStore& pvs,
         size_t rows = 1000000, bool update_version_map = false, size_t start_val = 0,
         const std::optional<arcticdb::entity::AtomKey>& previous_key = std::nullopt, bool prune_previous = false,
@@ -276,7 +276,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     for (size_t i = 0; i < 10; ++i) {
         auto dropped_column = (i % 4) + 1;
         for (size_t j = 0; j < 20; ++j) {
-            auto idx = seg.scalar_at<uint64_t>(count, 0);
+            auto idx = seg.scalar_at<uint64_t>(count, 0u);
             ASSERT_EQ(idx.value(), count);
             auto v1 = seg.scalar_at<uint64_t>(count, col1_pos);
             auto expected = dropped_column == 1 ? 0 : j;
@@ -365,7 +365,7 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
 
     for (size_t i = 0; i < num_incompletes; ++i) {
         for (size_t j = 0; j < num_rows_per_incomplete; ++j) {
-            auto idx = seg.scalar_at<uint64_t>(count, 0);
+            auto idx = seg.scalar_at<uint64_t>(count, 0u);
             ASSERT_EQ(idx.value(), count);
             auto v1 = seg.scalar_at<uint64_t>(count, col1_pos);
             ASSERT_EQ(v1.value(), j);
@@ -737,7 +737,7 @@ TEST(VersionStore, UpdateWithin) {
 
     for (auto i = 0u; i < num_rows; ++i) {
         const uint8_t expected = update_range.contains(i) ? i + update_val : i;
-        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        const auto value = seg.scalar_at<uint8_t>(i, 1u).value();
         EXPECT_EQ(expected, value);
     }
 }
@@ -782,7 +782,7 @@ TEST(VersionStore, UpdateBefore) {
 
     for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
-        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        const auto value = seg.scalar_at<uint8_t>(i, 1u).value();
         ASSERT_EQ(value, expected);
     }
 }
@@ -827,7 +827,7 @@ TEST(VersionStore, UpdateAfter) {
 
     for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
-        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        const auto value = seg.scalar_at<uint8_t>(i, 1u).value();
         ASSERT_EQ(value, expected);
     }
 }
@@ -872,7 +872,7 @@ TEST(VersionStore, UpdateIntersectBefore) {
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
-        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        const auto value = seg.scalar_at<uint8_t>(i, 1u).value();
         ASSERT_EQ(value, expected);
     }
 }
@@ -917,7 +917,7 @@ TEST(VersionStore, UpdateIntersectAfter) {
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
-        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        const auto value = seg.scalar_at<uint8_t>(i, 1u).value();
         ASSERT_EQ(value, expected);
     }
 }
@@ -972,15 +972,15 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = update_range.contains(i) ? i + update_val : i;
-        const auto val1 = seg.scalar_at<uint8_t>(i, 1).value();
+        const auto val1 = seg.scalar_at<uint8_t>(i, 1u).value();
         check_value(val1, expected);
 
         expected = update_range.contains(i) ? 0 : i;
-        const auto val2 = seg.scalar_at<uint16_t>(i, 4).value();
+        const auto val2 = seg.scalar_at<uint16_t>(i, 4u).value();
         check_value(val2, expected);
 
         expected = !update_range.contains(i) ? 0 : i + update_val;
-        const auto val3 = seg.scalar_at<uint16_t>(i, 5).value();
+        const auto val3 = seg.scalar_at<uint16_t>(i, 5u).value();
         check_value(val3, expected);
     }
 }
@@ -1037,15 +1037,15 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = update_range.contains(i) ? i + update_val : i;
-        const auto val1 = seg.scalar_at<uint8_t>(i, 1).value();
+        const auto val1 = seg.scalar_at<uint8_t>(i, 1u).value();
         check_value(val1, expected);
 
         expected = update_range.contains(i) ? 0 : i;
-        const auto val2 = seg.scalar_at<uint16_t>(i, 4).value();
+        const auto val2 = seg.scalar_at<uint16_t>(i, 4u).value();
         check_value(val2, expected);
 
         expected = !update_range.contains(i) ? 0 : i + update_val;
-        const auto val3 = seg.scalar_at<uint32_t>(i, 5).value();
+        const auto val3 = seg.scalar_at<uint32_t>(i, 5u).value();
         check_value(val3, expected);
     }
 }

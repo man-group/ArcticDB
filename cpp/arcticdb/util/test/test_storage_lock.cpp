@@ -77,14 +77,14 @@ TEST(StorageLock, MetadataSegmentBackwardCompatible) {
     // unchanged, so old clients can still read new locks.
     store->write_sync(KeyType::LOCK, name, lock_segment(name, 12345u, make_meta("payload")));
     auto kv = store->read_sync(RefKey{name, KeyType::LOCK}, storage::ReadKeyOpts{});
-    ASSERT_EQ(kv.second.template scalar_at<timestamp>(0, 0).value(), 12345);
+    ASSERT_EQ(kv.second.template scalar_at<timestamp>(0, 0u).value(), 12345);
     ASSERT_TRUE(kv.second.metadata() != nullptr);
 
     // An old-format segment (today's lock_segment output) carries no metadata, so new code reads old locks and
     // reports no metadata.
     store->write_sync(KeyType::LOCK, name, lock_segment(name, 999u));
     auto kv2 = store->read_sync(RefKey{name, KeyType::LOCK}, storage::ReadKeyOpts{});
-    ASSERT_EQ(kv2.second.template scalar_at<timestamp>(0, 0).value(), 999);
+    ASSERT_EQ(kv2.second.template scalar_at<timestamp>(0, 0u).value(), 999);
     ASSERT_TRUE(kv2.second.metadata() == nullptr);
 }
 
@@ -313,7 +313,7 @@ TEST(StorageLock, Timeouts) {
     ASSERT_TRUE(lock_data->timedout_);
 }
 
-int count_occurrences(std::string search, std::string pattern) {
+static int count_occurrences(std::string search, std::string pattern) {
     if (search.size() < pattern.size())
         return false;
     int count = 0;

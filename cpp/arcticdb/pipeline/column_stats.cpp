@@ -178,7 +178,7 @@ SegmentInMemory build_column_stats_segment(
     return seg;
 }
 
-std::string type_to_operator_string(ColumnStatTypeInternal type) {
+static std::string type_to_operator_string(ColumnStatTypeInternal type) {
     switch (type) {
     case ColumnStatTypeInternal::MIN_V1:
         return "v1_MIN";
@@ -268,20 +268,13 @@ std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& s
     return column_stats_rows;
 }
 
-std::string type_to_name(ColumnStatType type) {
+static std::string type_to_name(ColumnStatType type) {
     switch (type) {
     case ColumnStatType::MINMAX:
         return "MINMAX";
     default:
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type requested");
     }
-}
-
-std::optional<ColumnStatType> name_to_type(const std::string& name) {
-    if (name == "MINMAX") {
-        return ColumnStatType::MINMAX;
-    }
-    return std::nullopt;
 }
 
 std::string to_segment_column_name(std::string_view column, ColumnStatTypeInternal type) {

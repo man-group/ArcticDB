@@ -144,7 +144,7 @@ struct TestScenario {
     bool single_thread{false};
 };
 
-auto get_test_scenarios_single_thread(std::vector<TestScenario> test_scenarios) {
+static auto get_test_scenarios_single_thread(std::vector<TestScenario> test_scenarios) {
     for (auto& scenario : test_scenarios) {
         scenario.single_thread = true;
     }

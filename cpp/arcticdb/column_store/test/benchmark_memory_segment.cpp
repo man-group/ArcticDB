@@ -17,21 +17,21 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
-std::vector<bool> get_sparse_bits(size_t num_rows, size_t num_set, std::mt19937 g) {
+static std::vector<bool> get_sparse_bits(size_t num_rows, size_t num_set, std::mt19937 g) {
     auto sparse_bits = std::vector<bool>(num_rows, false);
     std::fill(sparse_bits.begin(), sparse_bits.begin() + num_set, true);
     std::shuffle(sparse_bits.begin(), sparse_bits.end(), g);
     return sparse_bits;
 }
 
-std::vector<uint64_t> get_random_permutation(size_t num_rows, std::mt19937 g) {
+static std::vector<uint64_t> get_random_permutation(size_t num_rows, std::mt19937 g) {
     auto result = std::vector<uint64_t>(num_rows);
     std::iota(result.begin(), result.end(), 1);
     std::shuffle(result.begin(), result.end(), g);
     return result;
 }
 
-SegmentInMemory get_shuffled_segment(
+static SegmentInMemory get_shuffled_segment(
         const StreamId& id, size_t num_rows, size_t num_columns, std::optional<float> sparsity_percentage = std::nullopt
 ) {
     // We use a seed to get the same shuffled segment for given arguments.
@@ -108,13 +108,13 @@ static void BM_sort_sparse(benchmark::State& state) {
 
 static void BM_iterate_with_scalar_at(benchmark::State& state) {
     auto num_rows = state.range(0);
-    auto num_cols = state.range(1);
+    const size_t num_cols = state.range(1);
     auto segment = get_shuffled_segment("test", num_rows, num_cols);
     // Accumulate result to not get optimized away
     [[maybe_unused]] auto acc = 0ull;
     for (auto _ : state) {
         // Starting col from 1 to skip the index
-        for (auto col = 1; col <= num_cols; ++col) {
+        for (size_t col = 1; col <= num_cols; ++col) {
             for (auto row = 0; row < num_rows; ++row) {
                 acc += segment.scalar_at<uint64_t>(row, col).value_or(0);
             }
@@ -124,13 +124,13 @@ static void BM_iterate_with_scalar_at(benchmark::State& state) {
 
 static void BM_iterate_with_iterator(benchmark::State& state) {
     auto num_rows = state.range(0);
-    auto num_cols = state.range(1);
+    const size_t num_cols = state.range(1);
     auto segment = get_shuffled_segment("test", num_rows, num_cols);
     // Accumulate result to not get optimized away
     [[maybe_unused]] auto acc = 0ull;
     for (auto _ : state) {
         // Starting col from 1 to skip the index
-        for (auto col = 1; col <= num_cols; ++col) {
+        for (size_t col = 1; col <= num_cols; ++col) {
             auto data = segment.column(col).data();
             using tdt = ScalarTagType<DataTypeTag<DataType::UINT64>>;
             std::for_each(

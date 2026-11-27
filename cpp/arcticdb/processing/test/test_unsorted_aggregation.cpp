@@ -147,7 +147,7 @@ TEST_P(AggregationResult, Mean) {
             const SegmentInMemory result = aggregator_data.finalize(ColumnName{"output"}, false, group_count);
             ASSERT_EQ(result.field(0).type(), make_scalar_type(OutputDataTypeTag::data_type()));
             ASSERT_EQ(result.field(0).name(), "output");
-            const Column& aggregated_column = result.column(0);
+            const Column& aggregated_column = result.column(0u);
             if constexpr (!is_empty_type(TypeTag::data_type)) {
                 ASSERT_EQ(aggregated_column.row_count(), group_count);
             } else {

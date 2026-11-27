@@ -15,7 +15,7 @@ struct VersionMapBatchStore : arcticdb::TestStore {
 
 namespace arcticdb {
 
-AtomKey test_index_key(const StreamId& id, VersionId version_id) {
+static AtomKey test_index_key(const StreamId& id, VersionId version_id) {
     return atom_key_builder()
             .version_id(version_id)
             .creation_ts(PilotedClock::nanos_since_epoch())
@@ -25,7 +25,7 @@ AtomKey test_index_key(const StreamId& id, VersionId version_id) {
             .build(id, KeyType::TABLE_INDEX);
 }
 
-void add_versions_for_stream(
+static void add_versions_for_stream(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, const StreamId& stream_id,
         size_t num_versions, size_t start = 0u
 ) {

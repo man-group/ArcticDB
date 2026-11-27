@@ -41,7 +41,7 @@ std::optional<Aws::S3::S3Error> has_object_failure_trigger(
     }
 }
 
-Aws::S3::S3Error create_error(
+static Aws::S3::S3Error create_error(
         Aws::S3::S3Errors error_type, const std::string& exception_name = "", const std::string& exception_message = "",
         bool is_retriable = false, std::optional<Aws::Http::HttpResponseCode> response_code = std::nullopt
 ) {
