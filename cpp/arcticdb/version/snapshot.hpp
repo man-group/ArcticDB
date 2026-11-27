@@ -8,12 +8,14 @@
 
 #pragma once
 
+#include <ankerl/unordered_dense.h>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/store.hpp>
 
 namespace arcticdb {
@@ -133,4 +135,35 @@ MasterSnapshotMap get_master_snapshots_map(
 MasterSnapshotMapAndKeys get_master_snapshots_map_and_keys_in_given_snapshot(
         std::shared_ptr<Store> store, const SnapshotVariantKey& given_snapshot
 );
+
+// Snapshot sync / change-detection primitives.
+struct SnapshotEntry {
+    entity::VariantKey key;
+    // Populated when the backing store supports Store::visit_object_metadata().
+    std::optional<storage::ObjectMetadata> metadata;
+};
+
+// Extracts all index keys (is_index_key_type) referenced by a decoded snapshot segment.
+[[nodiscard]] ankerl::unordered_dense::set<entity::AtomKey> extract_snapshot_index_keys(
+        const SegmentInMemory& snapshot_segment
+);
+
+// Finds all legacy KeyType::SNAPSHOT atom keys whose exact name matches `snap_name`.
+[[nodiscard]] std::vector<entity::VariantKey> find_legacy_snapshot_keys(
+        const std::shared_ptr<Store>& store, const SnapshotId& snap_name
+);
+
+// Lists SNAPSHOT_REF and legacy SNAPSHOT keys in parallel on io_executor() with ref-preferred
+// deduplication (a legacy atom key is omitted when a SNAPSHOT_REF with the same name exists).
+[[nodiscard]] folly::SemiFuture<std::vector<entity::VariantKey>> list_snapshot_keys_parallel(
+        const std::shared_ptr<Store>& store
+);
+
+// Lists snapshot keys and, when Store::supports_object_metadata_listing() is true, per-object
+// metadata (ETag, size, last_modified_ms) in parallel via visit_object_metadata() at zero extra
+// HTTP cost. Falls back to list_snapshot_keys_parallel() with metadata == std::nullopt otherwise.
+[[nodiscard]] folly::SemiFuture<std::vector<SnapshotEntry>> list_snapshot_keys_with_metadata(
+        const std::shared_ptr<Store>& store
+);
+
 } // namespace arcticdb

@@ -37,6 +37,22 @@ struct StreamSource {
             const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
     ) = 0;
 
+    // Reads a compressed segment asynchronously, turning KeyNotFoundException into std::nullopt
+    // and rethrowing any other exception from read_compressed().
+    [[nodiscard]] folly::Future<std::optional<storage::KeySegmentPair>> read_compressed_optional(
+            const entity::VariantKey& key,
+            storage::ReadKeyOpts opts = storage::ReadKeyOpts{.dont_warn_about_missing_key = true}
+    ) {
+        return read_compressed(key, opts).thenTryInline(
+                [](folly::Try<storage::KeySegmentPair>&& res) -> std::optional<storage::KeySegmentPair> {
+                    if (res.hasException<storage::KeyNotFoundException>()) {
+                        return std::nullopt;
+                    }
+                    return std::move(res).value();
+                }
+        );
+    }
+
     virtual storage::KeySegmentPair read_compressed_sync(
             const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
     ) = 0;
