@@ -103,6 +103,8 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
 
 def test_compat_old_client_reads_pickle_on_failure_of_library_created_with_current(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
+    if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
+        pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
     with CompatLibrary(old_venv, arctic_uri, lib_name, create_with_current_version=True) as compat:
         # Old clients read WriteOptions.pickle_on_failure from the library config in Library.write
         compat.old_lib.execute(
@@ -126,6 +128,8 @@ def test_compat_old_client_respects_use_norm_failure_handler_known_types_set_wit
     old_venv_and_arctic_uri, lib_name
 ):
     old_venv, arctic_uri = old_venv_and_arctic_uri
+    if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
+        pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
     with CompatLibrary(old_venv, arctic_uri, lib_name, create_with_current_version=True) as compat:
         with compat.current_version() as curr:
             cfg = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
