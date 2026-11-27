@@ -280,18 +280,15 @@ struct FailedDelete {
 
 inline void raise_if_failed_deletes(const boost::container::small_vector<FailedDelete, 1>& failed_deletes) {
     if (!failed_deletes.empty()) {
-        auto failed_deletes_message = std::ostringstream();
-        for (auto i = 0u; i < failed_deletes.size(); ++i) {
-            auto& failed = failed_deletes[i];
-            failed_deletes_message << fmt::format(
-                    "'{}' failed with '{}'", failed.failed_key_name, failed.error_message
-            );
-            if (i != failed_deletes.size()) {
-                failed_deletes_message << ", ";
-            }
-        }
-        auto error_message = fmt::format("Failed to delete some of the objects: {}.", failed_deletes_message.str());
-        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
+        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(fmt::format(
+                "Failed to delete some of the objects: {}.",
+                summarise_objects(
+                        failed_deletes,
+                        [](const FailedDelete& failed) {
+                            return fmt::format("'{}' failed with '{}'", failed.failed_key_name, failed.error_message);
+                        }
+                )
+        ));
     }
 }
 
@@ -316,9 +313,8 @@ inline std::vector<s3::FailedDelete> delete_objects_with_retry(
     for (size_t attempt = 1;; ++attempt) {
         auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
         if (!delete_object_result.is_success()) {
-            auto& error = delete_object_result.get_error();
-            std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-            raise_s3_exception(error, failed_objects);
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "DeleteObjects failed for objects: {}", fmt::join(to_delete, ", "));
+            raise_s3_exception(delete_object_result.get_error(), summarise_objects(to_delete));
         }
 
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects", to_delete.size());

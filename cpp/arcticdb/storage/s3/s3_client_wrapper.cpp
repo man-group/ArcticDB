@@ -13,6 +13,7 @@
 #include <aws/s3/S3Errors.h>
 
 #include <algorithm>
+#include <thread>
 
 namespace arcticdb::storage {
 
@@ -31,6 +32,22 @@ std::string S3ClientTestWrapper::get_failure_trigger(
             static_cast<int>(error_to_fail_with),
             static_cast<int>(retryable)
     );
+}
+
+std::string S3ClientTestWrapper::get_delay_trigger(
+        const std::string& s3_object_name, StorageOperation operation_to_delay, std::chrono::milliseconds delay
+) {
+    return fmt::format("{}#Delay_{}_{}", s3_object_name, operation_to_string(operation_to_delay), delay.count());
+}
+
+void S3ClientTestWrapper::delay_if_triggered(std::span<const std::string> s3_object_names, StorageOperation operation) {
+    std::chrono::milliseconds delay{0};
+    for (const auto& s3_object_name : s3_object_names) {
+        delay = std::max(delay, has_object_delay_trigger(s3_object_name, operation).value_or(delay));
+    }
+    if (delay.count() > 0) {
+        std::this_thread::sleep_for(delay);
+    }
 }
 
 void S3ClientTestWrapper::add_list_objects_failure_unretryable(Aws::S3::S3Errors error) {
@@ -101,6 +118,7 @@ std::optional<Aws::S3::S3Error> S3ClientTestWrapper::has_bucket_failure_trigger(
 S3Result<std::monostate> S3ClientTestWrapper::head_object(
         const std::string& s3_object_name, const std::string& bucket_name
 ) const {
+    delay_if_triggered({&s3_object_name, 1}, StorageOperation::EXISTS);
     if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::EXISTS)) {
         return {*maybe_error};
     }
@@ -110,6 +128,7 @@ S3Result<std::monostate> S3ClientTestWrapper::head_object(
 
 S3Result<Segment> S3ClientTestWrapper::get_object(const std::string& s3_object_name, const std::string& bucket_name)
         const {
+    delay_if_triggered({&s3_object_name, 1}, StorageOperation::READ);
     if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::READ)) {
         return {*maybe_error};
     }
@@ -120,6 +139,7 @@ S3Result<Segment> S3ClientTestWrapper::get_object(const std::string& s3_object_n
 folly::Future<S3Result<Segment>> S3ClientTestWrapper::get_object_async(
         const std::string& s3_object_name, const std::string& bucket_name
 ) const {
+    delay_if_triggered({&s3_object_name, 1}, StorageOperation::READ);
     if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::READ)) {
         return folly::makeFuture<S3Result<Segment>>({*maybe_error});
     }
@@ -130,6 +150,7 @@ folly::Future<S3Result<Segment>> S3ClientTestWrapper::get_object_async(
 S3Result<std::monostate> S3ClientTestWrapper::put_object(
         const std::string& s3_object_name, Segment& segment, const std::string& bucket_name, PutHeader header
 ) {
+    delay_if_triggered({&s3_object_name, 1}, StorageOperation::WRITE);
     if (auto maybe_bucket_error = has_bucket_failure_trigger(bucket_name)) {
         return {*maybe_bucket_error};
     }
@@ -152,6 +173,7 @@ S3Result<std::monostate> S3ClientTestWrapper::put_object(
 S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(
         const std::vector<std::string>& s3_object_names, const std::string& bucket_name
 ) {
+    delay_if_triggered(s3_object_names, StorageOperation::DELETE);
     if (auto maybe_bucket_error = has_bucket_failure_trigger(bucket_name)) {
         return {*maybe_bucket_error};
     }
@@ -198,6 +220,7 @@ S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(
 folly::Future<S3Result<std::monostate>> S3ClientTestWrapper::delete_object(
         const std::string& s3_object_name, const std::string& bucket_name
 ) {
+    delay_if_triggered({&s3_object_name, 1}, StorageOperation::DELETE);
     if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::DELETE)) {
         return folly::makeFuture(S3Result<std::monostate>{*maybe_error});
     } else if (auto maybe_object_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL)) {

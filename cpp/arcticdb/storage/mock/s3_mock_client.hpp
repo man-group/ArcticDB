@@ -11,6 +11,8 @@
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
 
+#include <chrono>
+
 namespace arcticdb::storage::s3 {
 
 extern const Aws::S3::S3Error not_found_error;
@@ -18,6 +20,10 @@ extern const Aws::S3::S3Error precondition_failed_error;
 extern const Aws::S3::S3Error not_implemented_error;
 
 std::optional<Aws::S3::S3Error> has_object_failure_trigger(
+        const std::string& s3_object_name, StorageOperation operation
+);
+
+std::optional<std::chrono::milliseconds> has_object_delay_trigger(
         const std::string& s3_object_name, StorageOperation operation
 );
 

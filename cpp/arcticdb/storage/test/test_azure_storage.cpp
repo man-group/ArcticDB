@@ -71,6 +71,28 @@ TEST_F(AzureMockStorageFixture, test_remove) {
     ASSERT_EQ(list_in_store(store), remaining);
 }
 
+TEST_F(AzureMockStorageFixture, failed_batch_delete_names_a_bounded_sample_of_objects) {
+    std::vector<std::string> symbols;
+    for (size_t i = 0; i < BATCH_SUBREQUEST_LIMIT; ++i) {
+        symbols.emplace_back(fmt::format("symbol_{}", i));
+    }
+    symbols.back() = MockAzureClient::get_failure_trigger(
+            symbols.back(),
+            StorageOperation::DELETE,
+            AzureErrorCode_to_string(AzureErrorCode::UnauthorizedBlobOverwrite),
+            Azure::Core::Http::HttpStatusCode::InternalServerError
+    );
+
+    try {
+        remove_in_store(store, symbols);
+        FAIL() << "Expected the batch delete to fail";
+    } catch (const arcticdb::ArcticException& e) {
+        const std::string message = e.what();
+        ASSERT_LT(message.size(), 2000) << message;
+        ASSERT_NE(message.find(fmt::format("{} objects", BATCH_SUBREQUEST_LIMIT)), std::string::npos) << message;
+    }
+}
+
 TEST_F(AzureMockStorageFixture, test_list) {
     auto symbols = std::set<std::string>();
     for (int i = 10; i < 25; ++i) {

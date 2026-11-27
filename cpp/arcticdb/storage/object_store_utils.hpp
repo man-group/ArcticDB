@@ -8,10 +8,14 @@
 
 #pragma once
 
+#include <algorithm>
+#include <functional>
+#include <ranges>
 #include <string_view>
 #include <optional>
 #include <arcticdb/storage/library_path.hpp>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
@@ -34,6 +38,21 @@ inline auto object_path(std::string_view folder, const VariantKey& key) {
 
 inline auto key_type_folder(const std::string& root_folder, KeyType key_type) {
     return fmt::format("{}/{}", root_folder, key_type_long_name(key_type));
+}
+
+inline constexpr size_t MAX_OBJECTS_IN_ERROR_MESSAGE = 5;
+
+// Names at most MAX_OBJECTS_IN_ERROR_MESSAGE of the objects. A batch request can hold a thousand objects, and naming
+// all of them makes an error message, and the log line it is written to, hundreds of KB long.
+template<std::ranges::random_access_range Objects, typename Describe = std::identity>
+std::string summarise_objects(const Objects& objects, Describe describe = {}) {
+    const auto count = std::ranges::size(objects);
+    const auto shown = std::min(count, MAX_OBJECTS_IN_ERROR_MESSAGE);
+    auto sample = objects | std::views::take(shown) | std::views::transform(describe);
+    if (shown == count) {
+        return fmt::format("{}", fmt::join(sample, ", "));
+    }
+    return fmt::format("{} objects, the first {}: {}", count, shown, fmt::join(sample, ", "));
 }
 
 } // namespace arcticdb::storage::object_store_utils
