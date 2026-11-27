@@ -109,12 +109,14 @@ def test_compat_old_client_reads_pickle_on_failure_of_library_created_with_curre
             [
                 "assert lib._nvs._lib_cfg.lib_desc.version.write_options.pickle_on_failure is False",
                 "df = pd.DataFrame([[1]], columns=[pd.Timestamp(0)])",
-                "try:",
-                "    lib.write('sym', df)",
-                "except Exception:",
-                "    pass",
-                "else:",
-                "    raise AssertionError('Write must not fall back to pickling')",
+                """
+try:
+    lib.write('sym', df)
+except Exception:
+    pass
+else:
+    raise AssertionError('Write must not fall back to pickling')
+""",
                 "assert not lib.has_symbol('sym')",
             ]
         )
@@ -135,8 +137,8 @@ def test_compat_old_client_respects_use_norm_failure_handler_known_types_set_wit
             [
                 "assert lib._nvs._lib_cfg.lib_desc.version.use_norm_failure_handler_known_types is True",
                 "df = pd.DataFrame([[1]], columns=[pd.Timestamp(0)])",
-                "lib.write('sym', df)",
-                "pd.testing.assert_frame_equal(lib.read('sym').data, df)",
+                "lib._nvs.write('sym', df)",
+                "pd.testing.assert_frame_equal(lib._nvs.read('sym').data, df)",
             ]
         )
 
