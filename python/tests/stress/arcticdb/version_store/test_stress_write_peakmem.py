@@ -5,6 +5,9 @@ import pytest
 import tracemalloc
 import sys
 
+# About 0.5 GB each: keep them out of the way of the multi-GB stress_heavy tests (tests/util/stress_heavy_lock.py).
+pytestmark = pytest.mark.xdist_group(name="stress_heavy")
+
 
 def create_numeric_df(num_rows=100_000, num_columns=100):
     df = pd.DataFrame(
