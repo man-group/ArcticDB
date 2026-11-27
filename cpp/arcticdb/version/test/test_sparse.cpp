@@ -103,14 +103,6 @@ TEST(PythonEmptyHandler, DefaultInitializeKeepsEmptyAsNone) {
     EXPECT_EQ(*buffer.ptr_cast<PyObject*>(0, sizeof(PyObject*)), Py_None);
 }
 
-TEST(PythonHandlerData, GetMissingValue) {
-    using namespace arcticdb;
-
-    PythonHandlerData handler_data;
-    EXPECT_EQ(handler_data.get_missing_value(PandasMissingValue::None), Py_None);
-    EXPECT_EQ(handler_data.get_missing_value(PandasMissingValue::NaN), handler_data.non_owning_nan_handle());
-}
-
 TEST(PythonStringHandler, DefaultInitializeRespectsStringType) {
     using namespace arcticdb;
 

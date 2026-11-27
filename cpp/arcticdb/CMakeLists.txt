@@ -1235,6 +1235,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
+            python/test/test_python_handler_data.cpp
     )
     set_pdb_name_per_translation_unit(${unit_test_srcs})
 
