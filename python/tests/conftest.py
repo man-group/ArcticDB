@@ -32,6 +32,7 @@ from tempfile import mkdtemp
 from arcticdb import LibraryOptions
 from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzureContainer, AzureStorageFixtureFactory, AzuriteStorageFixtureFactory
+from arcticdb.storage_fixtures.file_backed import FileBackedStorageFixture
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.storage_fixtures.s3 import (
     BaseGCPStorageFixtureFactory,
@@ -66,6 +67,7 @@ from tests.util.stress_heavy_lock import serialise_stress_heavy_tests  # noqa: F
 from .util.mark import (
     EXTENDED_MARKS,
     LMDB_TESTS_MARK,
+    FILE_TESTS_MARK,
     LOCAL_STORAGE_TESTS_ENABLED,
     MEM_TESTS_MARK,
     REAL_AZURE_TESTS_MARK,
@@ -803,6 +805,13 @@ def mongo_storage(mongo_server):
 
 
 @pytest.fixture(scope="function")
+def file_storage(tmp_path) -> Generator[FileBackedStorageFixture, None, None]:
+    check_local_storage_enabled()
+    with FileBackedStorageFixture(tmp_path) as f:
+        yield f
+
+
+@pytest.fixture(scope="function")
 def mongo_server_fn_scope():
     with ManagedMongoDBServer() as s:
         yield s
@@ -849,6 +858,7 @@ def filter_out_unwanted_mark(request, current_param):
         # Make sure that mem and lmdb are first so we have faster startup
         pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("lmdb", marks=LMDB_TESTS_MARK),
+        pytest.param("file", marks=FILE_TESTS_MARK),
         pytest.param("s3", marks=SIM_S3_TESTS_MARK),
         pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
         pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
@@ -873,6 +883,7 @@ def arctic_client(request, encoding_version) -> Arctic:
         pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
         pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
         pytest.param("lmdb", marks=LMDB_TESTS_MARK),
+        pytest.param("file", marks=FILE_TESTS_MARK),
         pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),

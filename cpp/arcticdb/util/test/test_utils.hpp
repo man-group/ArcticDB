@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/library_path.hpp>
+#include <arcticdb/storage/file_backed/file_backed_storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
@@ -228,7 +229,17 @@ class StorageGenerator {
         } else if (storage_ == "mem") {
             arcticdb::proto::memory_storage::Config cfg;
             return std::make_unique<storage::memory::MemoryStorage>(library_path, storage::OpenMode::WRITE, cfg);
-        } else if (storage_ == "azure") {
+        }
+#ifdef __linux__
+        else if (storage_ == "file_backed") {
+            arcticdb::proto::file_storage::Config cfg;
+            cfg.set_dir_path(TEST_DATABASES_PATH);
+            return std::make_unique<storage::file_backed::FileBackedStorage>(
+                    library_path, storage::OpenMode::WRITE, cfg
+            );
+        }
+#endif
+        else if (storage_ == "azure") {
             arcticdb::proto::azure_storage::Config cfg;
             cfg.set_use_mock_storage_for_testing(true);
             return std::make_unique<storage::azure::AzureStorage>(library_path, storage::OpenMode::WRITE, cfg);
@@ -245,6 +256,11 @@ class StorageGenerator {
         } else {
             throw std::runtime_error(fmt::format("Unknown backend generator type {}.", storage_));
         }
+    }
+
+    void create_database_dir() const {
+        delete_any_test_databases();
+        fs::create_directories(TEST_DATABASES_PATH);
     }
 
     void delete_any_test_databases() const {

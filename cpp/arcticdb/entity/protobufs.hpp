@@ -18,10 +18,13 @@
 #include <nfs_backed_storage.pb.h>
 #include <azure_storage.pb.h>
 #include <mapped_file_storage.pb.h>
+#include <file_storage.pb.h>
 #include <config.pb.h>
 #include <utils.pb.h>
 
 namespace arcticdb::proto {
+
+// NOLINTBEGIN(misc-unused-alias-decls)
 
 namespace descriptors = arcticc::pb2::descriptors_pb2;
 namespace encoding = arcticc::pb2::encoding_pb2;
@@ -35,6 +38,9 @@ namespace memory_storage = arcticc::pb2::in_memory_storage_pb2;
 namespace azure_storage = arcticc::pb2::azure_storage_pb2;
 namespace config = arcticc::pb2::config_pb2;
 namespace nfs_backed_storage = arcticc::pb2::nfs_backed_storage_pb2;
+namespace file_storage = arcticc::pb2::file_storage_pb2;
 namespace utils = arcticc::pb2::utils_pb2;
+
+// NOLINTEND(misc-unused-alias-decls)
 
 } // namespace arcticdb::proto

@@ -1,11 +1,12 @@
 import pytest
-from arcticdb.adapters import S3LibraryAdapter, GCPXMLLibraryAdapter
+from arcticdb.adapters import FileLibraryAdapter, S3LibraryAdapter, GCPXMLLibraryAdapter
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.exceptions import UserInputException
 from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb_ext.storage import AWSAuthMethod
+from tests.util.mark import WINDOWS
 
 
 def _add_s3_library(aws_auth, aws_profile, is_nfs_layout=False):
@@ -149,3 +150,9 @@ def test_gcp_path_prefix():
         "gcpxml://my_endpoint:my_bucket?aws_auth=true&path_prefix=my_prefix", encoding_version=EncodingVersion.V1
     )
     assert adapter.path_prefix == "my_prefix"
+
+
+def test_file_library_parser():
+    path = "/home/some_user/arctic_data" if not WINDOWS else r"c:\data\arctic_storage"
+    adapter = FileLibraryAdapter(f"experimental_file://{path}", encoding_version=EncodingVersion.V1)
+    assert adapter._dir_path == path

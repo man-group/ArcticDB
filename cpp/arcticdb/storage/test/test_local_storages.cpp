@@ -12,8 +12,6 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
-#include <filesystem>
-#include <stdexcept>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
@@ -26,7 +24,7 @@ namespace ac = arcticdb;
 namespace as = arcticdb::storage;
 
 class LocalStorageTestSuite : public testing::TestWithParam<StorageGenerator> {
-    void SetUp() override { GetParam().delete_any_test_databases(); }
+    void SetUp() override { GetParam().create_database_dir(); }
 
     void TearDown() override { GetParam().delete_any_test_databases(); }
 };
@@ -155,7 +153,13 @@ TEST_P(LocalStorageTestSuite, Strings) {
 
 using namespace std::string_literals;
 
-std::vector<StorageGenerator> get_storage_generators() { return {"lmdb"s, "mem"s}; }
+std::vector<StorageGenerator> get_storage_generators() {
+#ifdef __linux__
+    return {"lmdb"s, "mem"s, "file_backed"s};
+#else
+    return {"lmdb"s, "mem"s};
+#endif
+}
 
 INSTANTIATE_TEST_SUITE_P(
         TestLocalStorages, LocalStorageTestSuite, testing::ValuesIn(get_storage_generators()),

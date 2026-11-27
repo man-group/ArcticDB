@@ -1,0 +1,70 @@
+/* Copyright 2026 Man Group Operations Limited
+ *
+ * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+ *
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
+ */
+
+#pragma once
+
+#include <arcticdb/storage/file_backed/posix_interface.hpp>
+
+#include <mutex>
+#include <optional>
+#include <queue>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace arcticdb::storage::file_backed {
+
+enum class SyscallId : std::uint8_t { OPEN, CLOSE, WRITE, READ, SYNC, RENAME, LINK, MKDIR, STAT, UNLINK };
+
+using PosixError = int;
+
+/**
+ * Interface interacts with the file system, but has additional public APIs to inject faults.
+ * Relying on a real filesystem means don't have to mock complex side effects such as files
+ * lingering due to lack of cleanup on stack unwinds. There may be downsides too.
+ */
+class FaultyPosix : public PosixInterface {
+  public:
+    int open(const char* pathname, int flags, mode_t mode) override;
+    int openat(int dirfd, const char* pathname, int flags, mode_t mode) override;
+    int close(int fd) override;
+    ssize_t write(int fd, const void* buf, size_t count) override;
+    ssize_t read(int fd, void* buf, size_t count) override;
+    int fsync(int fd) override;
+    int rename(const char* oldpath, const char* newpath) override;
+    int renameat(int olddirfd, const char* oldpath, int newdirfd, const char* newpath) override;
+    int link(const char* oldpath, const char* newpath) override;
+    int mkdir(const char* pathname, mode_t mode) override;
+    int mkdirat(int fd, const char* pathname, mode_t mode) override;
+    int stat(const char* pathname, struct stat* statbuf) override;
+    int fstat(int fd, struct stat* statbuf) override;
+    DIR* opendir(const char* name) override;
+    struct dirent* readdir(DIR* dirp) override;
+    int closedir(DIR* dirp) override;
+    int unlink(const char* pathname) override;
+    int unlinkat(int dirfd, const char* pathname, int flags) override;
+
+  private:
+    template<typename ResultType>
+    ResultType propagate_fault_if_exists(SyscallId syscall_id, ResultType true_syscall_result);
+
+    // Fault injection API
+  public:
+    void inject_fault(SyscallId, std::optional<PosixError>);
+    void set_all_open_fds_to_stale();
+    bool uncosumed_faults() const noexcept;
+    size_t num_open_file_descriptors() const noexcept;
+
+  private:
+    // Need to protect class members since APIs will potentially be called from folly futures.
+    std::mutex data_mutex_;
+    std::unordered_map<SyscallId, std::queue<std::optional<PosixError>>> faults_;
+    std::unordered_set<int> open_file_descriptors_;
+    std::unordered_set<int> stale_file_descriptors_;
+};
+
+} // namespace arcticdb::storage::file_backed

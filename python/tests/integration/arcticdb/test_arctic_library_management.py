@@ -302,6 +302,8 @@ def test_modify_options_background_deletion(lmdb_storage, lib_name, delete_op):
 
 
 @pytest.mark.storage
+# The file backend deliberately rejects slashes in library names.
+@pytest.mark.skip_fixture_params(["file"])
 def test_create_library_with_invalid_name(arctic_client_v1, lib_name):
     ac = arctic_client_v1
     try:

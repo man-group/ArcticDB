@@ -10,21 +10,18 @@
 
 #include <arcticdb/codec/codec.hpp>
 
-#include <filesystem>
-#include <stdexcept>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/util/random.h>
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 
 namespace ac = arcticdb;
-namespace as = arcticdb::storage;
 namespace ae = arcticdb::entity;
 
 namespace {
 
 class StorageTestSuite : public testing::TestWithParam<StorageGenerator> {
-    void SetUp() override { GetParam().delete_any_test_databases(); }
+    void SetUp() override { GetParam().create_database_dir(); }
 
     void TearDown() override { GetParam().delete_any_test_databases(); }
 };
