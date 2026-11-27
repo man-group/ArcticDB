@@ -11,34 +11,76 @@
 
 #include <aws/s3/S3Errors.h>
 
+#include <charconv>
+#include <string_view>
+
 namespace arcticdb::storage {
 
 using namespace object_store_utils;
 
 namespace s3 {
 
+namespace {
+
+// The text following the last occurrence of `prefix` in the object name, if any
+std::optional<std::string_view> trigger_arguments(std::string_view s3_object_name, std::string_view prefix) {
+    auto position = s3_object_name.rfind(prefix);
+    if (position == std::string_view::npos) {
+        return std::nullopt;
+    }
+    return s3_object_name.substr(position + prefix.size());
+}
+
+// Parses the integer at the start of `text`, and advances `text` past it. Anything after the digits, such as the
+// rest of the key or another trigger, is left in `text`.
+std::optional<int> consume_int(std::string_view& text) {
+    int value = 0;
+    auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (ec != std::errc{}) {
+        return std::nullopt;
+    }
+    text.remove_prefix(end - text.data());
+    return value;
+}
+
+} // namespace
+
 std::optional<Aws::S3::S3Error> has_object_failure_trigger(
         const std::string& s3_object_name, StorageOperation operation
 ) {
-    auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
-    auto position = s3_object_name.rfind(failure_string_for_operation);
-    if (position == std::string::npos)
-        return std::nullopt;
-
-    try {
-        auto start = position + failure_string_for_operation.size();
-        auto failure_code_string = s3_object_name.substr(start, s3_object_name.find_last_of('_') - start);
-        auto failure_code = Aws::S3::S3Errors(std::stoi(failure_code_string));
-        bool retryable = std::stoi(s3_object_name.substr(s3_object_name.find_last_of('_') + 1));
-        return Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
-                failure_code,
-                "Simulated error",
-                fmt::format("Simulated error message for object {}", s3_object_name),
-                retryable
-        ));
-    } catch (std::exception&) {
+    auto arguments = trigger_arguments(s3_object_name, "#Failure_" + operation_to_string(operation) + "_");
+    if (!arguments) {
         return std::nullopt;
     }
+    auto failure_code = consume_int(*arguments);
+    if (!failure_code || !arguments->starts_with('_')) {
+        return std::nullopt;
+    }
+    arguments->remove_prefix(1);
+    auto retryable = consume_int(*arguments);
+    if (!retryable) {
+        return std::nullopt;
+    }
+    return Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+            Aws::S3::S3Errors(*failure_code),
+            "Simulated error",
+            fmt::format("Simulated error message for object {}", s3_object_name),
+            *retryable != 0
+    ));
+}
+
+std::optional<std::chrono::milliseconds> has_object_delay_trigger(
+        const std::string& s3_object_name, StorageOperation operation
+) {
+    auto arguments = trigger_arguments(s3_object_name, "#Delay_" + operation_to_string(operation) + "_");
+    if (!arguments) {
+        return std::nullopt;
+    }
+    auto delay_ms = consume_int(*arguments);
+    if (!delay_ms) {
+        return std::nullopt;
+    }
+    return std::chrono::milliseconds(*delay_ms);
 }
 
 static Aws::S3::S3Error create_error(
@@ -110,16 +152,13 @@ S3Result<DeleteObjectsOutput> MockS3Client::delete_objects(
         const std::vector<std::string>& s3_object_names, const std::string& bucket_name
 ) {
     std::scoped_lock<std::mutex> lock(mutex_);
-    DeleteObjectsOutput output;
+    // As in S3, deleting an object which does not exist succeeds
     for (const auto& s3_object_name : s3_object_names) {
-        auto pos = s3_contents_.find({bucket_name, s3_object_name});
-        if (pos == s3_contents_.end() || !pos->second.has_value()) {
-            output.failed_deletes.emplace_back(s3_object_name, "KeyNotFound");
-        } else {
+        if (auto pos = s3_contents_.find({bucket_name, s3_object_name}); pos != s3_contents_.end()) {
             pos->second = std::nullopt;
         }
     }
-    return {output};
+    return {DeleteObjectsOutput{}};
 }
 
 folly::Future<S3Result<std::monostate>> MockS3Client::delete_object(

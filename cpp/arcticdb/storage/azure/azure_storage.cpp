@@ -226,8 +226,8 @@ static void do_remove_impl(
     try {
         azure_client.delete_blobs(to_delete, request_timeout);
     } catch (const Azure::Core::RequestFailedException& e) {
-        std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-        raise_azure_exception(e, failed_objects);
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Batch delete failed for objects: {}", fmt::join(to_delete, ", "));
+        raise_azure_exception(e, summarise_objects(to_delete));
     }
 }
 

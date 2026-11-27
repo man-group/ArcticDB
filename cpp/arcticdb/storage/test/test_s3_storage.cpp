@@ -29,6 +29,7 @@
 
 #include <spdlog/sinks/ostream_sink.h>
 
+#include <chrono>
 #include <set>
 #include <sstream>
 
@@ -398,6 +399,61 @@ TEST_F(S3StorageFixture, test_remove) {
     ASSERT_EQ(list_in_store(store), remaining);
 }
 
+TEST_F(S3StorageFixture, delay_trigger_delays_the_operation) {
+    using namespace std::chrono_literals;
+    const auto symbol = S3ClientTestWrapper::get_delay_trigger("symbol", StorageOperation::DELETE, 200ms);
+    write_in_store(store, symbol);
+
+    const auto start = std::chrono::steady_clock::now();
+    remove_in_store(store, {symbol});
+
+    ASSERT_GE(std::chrono::steady_clock::now() - start, 200ms);
+    ASSERT_TRUE(list_in_store(store).empty());
+}
+
+TEST_F(S3StorageFixture, delay_and_failure_triggers_combine_in_either_order) {
+    using namespace std::chrono_literals;
+    const auto delay = [](const std::string& name) {
+        return S3ClientTestWrapper::get_delay_trigger(name, StorageOperation::DELETE, 200ms);
+    };
+    const auto fail = [](const std::string& name) {
+        return S3ClientTestWrapper::get_failure_trigger(
+                name, StorageOperation::DELETE, Aws::S3::S3Errors::NETWORK_CONNECTION, false
+        );
+    };
+
+    for (const auto& symbol : {fail(delay("symbol")), delay(fail("symbol"))}) {
+        const auto start = std::chrono::steady_clock::now();
+        ASSERT_THROW(remove_in_store(store, {symbol}), UnexpectedS3ErrorException);
+        ASSERT_GE(std::chrono::steady_clock::now() - start, 200ms);
+    }
+}
+
+std::vector<std::string> numbered_symbols(size_t count) {
+    std::vector<std::string> symbols;
+    for (size_t i = 0; i < count; ++i) {
+        symbols.emplace_back(fmt::format("symbol_{}", i));
+    }
+    return symbols;
+}
+
+TEST_F(S3StorageFixture, failed_delete_objects_request_names_a_bounded_sample_of_objects) {
+    auto symbols = numbered_symbols(s3::detail::DELETE_OBJECTS_LIMIT);
+    symbols.back() = S3ClientTestWrapper::get_failure_trigger(
+            symbols.back(), StorageOperation::DELETE, Aws::S3::S3Errors::NETWORK_CONNECTION, false
+    );
+
+    try {
+        remove_in_store(store, symbols);
+        FAIL() << "Expected the DeleteObjects request to fail";
+    } catch (const UnexpectedS3ErrorException& e) {
+        const std::string message = e.what();
+        ASSERT_LT(message.size(), 2000) << message;
+        ASSERT_NE(message.find(fmt::format("{} objects", s3::detail::DELETE_OBJECTS_LIMIT)), std::string::npos)
+                << message;
+    }
+}
+
 // S3 can accept a DeleteObjects request but reject some of the objects in it
 class S3AndNfsRemoveRetryFixture : public S3AndNfsStorageFixture {
   protected:
@@ -450,6 +506,21 @@ TEST_P(S3AndNfsRemoveRetryFixture, does_not_retry_objects_rejected_with_non_retr
     ASSERT_THROW(remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"}), UnexpectedS3ErrorException);
 
     ASSERT_EQ(list_in_store(*storage), std::set<std::string>{"symbol_1"});
+}
+
+TEST_P(S3AndNfsRemoveRetryFixture, objects_rejected_by_delete_objects_are_named_in_a_bounded_sample) {
+    const auto symbols = numbered_symbols(s3::detail::DELETE_OBJECTS_LIMIT);
+    client->add_delete_objects_failure("symbol_", "AccessDenied", symbols.size());
+
+    try {
+        remove_in_store(*storage, symbols);
+        FAIL() << "Expected the rejected objects to raise";
+    } catch (const UnexpectedS3ErrorException& e) {
+        const std::string message = e.what();
+        ASSERT_LT(message.size(), 2000) << message;
+        ASSERT_NE(message.find(fmt::format("{} objects", s3::detail::DELETE_OBJECTS_LIMIT)), std::string::npos)
+                << message;
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(S3AndNfs, S3AndNfsRemoveRetryFixture, testing::Values("s3", "nfs"));

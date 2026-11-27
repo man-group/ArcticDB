@@ -1077,6 +1077,7 @@ ReadResult PythonVersionStore::batch_read_and_join(
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_snapshot");
+    py::gil_scoped_release release_gil;
     auto opt_snapshot = get_snapshot(store(), snap_name);
     if (!opt_snapshot) {
         throw NoDataFoundException(snap_name);
@@ -1199,6 +1200,7 @@ void PythonVersionStore::delete_version(const StreamId& stream_id, VersionId ver
 
 void PythonVersionStore::delete_versions(const StreamId& stream_id, const std::vector<VersionId>& version_ids) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_versions");
+    py::gil_scoped_release release_gil;
     if (version_ids.empty()) {
         log::version().info("No version ids passed for delete_versions for stream {}, skipping", stream_id);
         return;
@@ -1218,6 +1220,7 @@ void PythonVersionStore::delete_versions(const StreamId& stream_id, const std::v
 std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
         const std::vector<StreamId>& stream_ids, const std::vector<std::vector<VersionId>>& version_ids
 ) {
+    py::gil_scoped_release release_gil;
     // This error can only be triggered when the function is called from batch_delete_versions
     // The other code paths make checks that prevents us getting to this point
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -1302,6 +1305,7 @@ void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) 
 }
 
 void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
+    py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: prune_previous_versions stream_id={}", stream_id);
     const std::shared_ptr<VersionMapEntry>& entry = version_map()->check_reload(
             store(), stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
@@ -1321,6 +1325,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
 }
 
 void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
+    py::gil_scoped_release release_gil;
     ARCTICDB_SAMPLE(DeleteAllVersions, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");

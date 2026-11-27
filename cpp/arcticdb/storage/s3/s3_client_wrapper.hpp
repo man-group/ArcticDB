@@ -10,7 +10,9 @@
 
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 
+#include <chrono>
 #include <map>
+#include <span>
 
 namespace arcticdb::storage::s3 {
 
@@ -34,6 +36,13 @@ class S3ClientTestWrapper : public S3ClientInterface {
     static std::string get_failure_trigger(
             const std::string& s3_object_name, StorageOperation operation_to_fail, Aws::S3::S3Errors error_to_fail_with,
             bool retryable = true
+    );
+
+    // Like get_failure_trigger, but sleeps for `delay` before the operation runs. The returned name looks like
+    // "{s3_object_name}#Delay_{operation_to_delay}_{delay_ms}". It can be combined with a failure trigger: for example,
+    // "symbol_1#Delay_Delete_300#Failure_Delete_99_0" fails a delete with code 99 after 300ms.
+    static std::string get_delay_trigger(
+            const std::string& s3_object_name, StorageOperation operation_to_delay, std::chrono::milliseconds delay
     );
 
     [[nodiscard]] S3Result<std::monostate> head_object(
@@ -80,6 +89,8 @@ class S3ClientTestWrapper : public S3ClientInterface {
     std::optional<Aws::S3::S3Error> has_failure_trigger(
             const std::string& s3_object_name, const std::string& bucket_name, StorageOperation operation
     ) const;
+    // Sleeps once, for the longest delay any of the objects triggers
+    static void delay_if_triggered(std::span<const std::string> s3_object_names, StorageOperation operation);
 
     std::unique_ptr<S3ClientInterface> actual_client_;
     // Failing listing operations based on symbol names isn't sufficient for testing the express bucket fallback
