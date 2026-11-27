@@ -13,7 +13,7 @@ import threading
 import pandas as pd
 import pytest
 
-from arcticdb_ext.exceptions import StorageException
+from arcticdb.exceptions import StorageException
 
 # Every delete of this symbol's keys fails - failures are logged to stderr
 SYMBOL = "sym#Failure_Delete_99_0"
@@ -60,7 +60,7 @@ def delete_snapshot(lib, symbol):
     lib.delete_version(symbol, 0)  # The snapshot still references version 0's keys, so this deletes none of them
     lib.delete_snapshot("snap")
 
-
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "delete",
     [
