@@ -9,6 +9,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 
 namespace arcticdb {
 using namespace arcticdb::stream;
@@ -25,9 +26,9 @@ struct TestSegment {
 
     const Column& column(position_t pos) const {
         switch (pos) {
-        case int(pipelines::index::Fields::start_index):
+        case util::lossless_cast<size_t>(pipelines::index::Fields::start_index):
             return start_;
-        case int(pipelines::index::Fields::end_index):
+        case util::lossless_cast<size_t>(pipelines::index::Fields::end_index):
             return end_;
         default:
             util::raise_rte("Unknown index");

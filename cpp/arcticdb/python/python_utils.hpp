@@ -32,7 +32,7 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
         auto& segment = row_ref_.segment();
         segment.check_magic();
         auto row_pos = static_cast<position_t>(row_ref_.row_pos());
-        for (position_t col = 0; col < position_t(segment.num_columns()); ++col) {
+        for (size_t col = 0; col < segment.num_columns(); ++col) {
             visit_field(segment.column_descriptor(col), [this, &segment, &col, row_pos](auto impl) {
                 using T = std::decay_t<decltype(impl)>;
                 using RawType = typename T::DataTypeTag::raw_type;

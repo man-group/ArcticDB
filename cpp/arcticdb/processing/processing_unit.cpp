@@ -57,11 +57,9 @@ VariantData ProcessingUnit::get(const ColumnName& column_name) {
     for (const auto& segment : *segments_) {
         segment->init_column_map();
         if (const auto opt_idx = segment->column_index_with_name_demangling(column_name.value)) {
-            return VariantData(ColumnWithStrings(
-                    segment->column_ptr(static_cast<position_t>(*opt_idx)),
-                    segment->string_pool_ptr(),
-                    column_name.value
-            ));
+            return VariantData(
+                    ColumnWithStrings(segment->column_ptr(*opt_idx), segment->string_pool_ptr(), column_name.value)
+            );
         }
     }
 

@@ -308,7 +308,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // to process is responsible for calculating All segments in a given row slice contain the same index column, so
     // just grab info from the first one
     const auto& index_column_name = front_slice.segments_->at(0)->field(0).name();
-    const auto& first_row_slice_index_col = front_slice.segments_->at(0)->column(0);
+    const auto& first_row_slice_index_col = front_slice.segments_->at(0)->column(0u);
     // Resampling only makes sense for timestamp indexes
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             is_time_type(first_row_slice_index_col.type().data_type()),
@@ -323,7 +323,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
             row_slices.size() == 1
                     ? first_row_slice_index_col.template scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1)
                               .value()
-                    : row_slices.back().segments_->at(0)->column(0).template scalar_at<timestamp>(0).value();
+                    : row_slices.back().segments_->at(0)->column(0u).template scalar_at<timestamp>(0).value();
     auto bucket_boundaries = generate_bucket_boundaries(first_ts, last_ts, responsible_for_first_overlapping_bucket);
     if (bucket_boundaries.size() < 2) {
         return {};
@@ -331,7 +331,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     std::vector<std::shared_ptr<Column>> input_index_columns;
     input_index_columns.reserve(row_slices.size());
     for (const auto& row_slice : row_slices) {
-        input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
+        input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0u));
     }
     const auto [output_index_column, mapping] = generate_output_index_column<closed_boundary>(
             input_index_columns, bucket_boundaries, *date_range_, label_boundary_

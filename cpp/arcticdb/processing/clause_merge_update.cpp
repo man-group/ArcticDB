@@ -612,7 +612,7 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
     };
     if (row_slices.front().entity_fetch_count_) {
         if (row_slices.front().entity_fetch_count_->front() > 1) {
-            const ColumnData index = row_slices.front().segments_->front()->column(0).data();
+            const ColumnData index = row_slices.front().segments_->front()->column(0u).data();
             const std::optional<ssize_t> first_different = first_different_index_value_position(index);
             util::check(
                     first_different.has_value(),
@@ -621,7 +621,7 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
             result.start_row_in_first_row_slice = *first_different;
         }
         if (row_slices.size() > 1 && row_slices.back().entity_fetch_count_->back() > 1) {
-            const ColumnData index = row_slices.back().segments_->back()->column(0).data();
+            const ColumnData index = row_slices.back().segments_->back()->column(0u).data();
             result.end_row_in_last_row_slice = first_different_index_value_position(index).value_or(
                     row_slices.back().segments_->back()->row_count()
             );
@@ -964,12 +964,11 @@ std::vector<ColumnWithSparseIndex> source_columns_to_match(
     const StreamDescriptor& desc = source.descriptor();
     auto columns = util::reserve_vector<ColumnWithSparseIndex>(on_field_indices.size());
     for (const size_t field_index : on_field_indices) {
-        const auto position = static_cast<position_t>(field_index);
         columns.emplace_back(
                 ColumnWithStrings{
-                        source.column_ptr(position), source.string_pool_ptr(), desc.field(field_index).name()
+                        source.column_ptr(field_index), source.string_pool_ptr(), desc.field(field_index).name()
                 },
-                sparse_index(source.column(position))
+                sparse_index(source.column(field_index))
         );
     }
     return columns;
@@ -984,9 +983,9 @@ std::vector<ColumnWithSparseIndex> target_columns_to_match(
     auto columns = util::reserve_vector<ColumnWithSparseIndex>(source_columns.size());
     const size_t index_field_count = row_slice.segments_->front()->descriptor().index().field_count();
     for (const size_t field_index : on_field_indices) {
-        const auto [segment, position] = [&]() -> std::pair<const SegmentInMemory*, position_t> {
+        const auto [segment, position] = [&]() -> std::pair<const SegmentInMemory*, size_t> {
             if (field_index < index_field_count) {
-                return {row_slice.segments_->front().get(), static_cast<position_t>(field_index)};
+                return {row_slice.segments_->front().get(), field_index};
             }
             const auto col_slice =
                     std::ranges::find_if(*row_slice.col_ranges_, [&](const std::shared_ptr<ColRange>& range) {
@@ -996,7 +995,7 @@ std::vector<ColumnWithSparseIndex> target_columns_to_match(
                     col_slice != row_slice.col_ranges_->end(), "Dynamic schema is not supported yet"
             );
             return {(*row_slice.segments_)[std::distance(row_slice.col_ranges_->begin(), col_slice)].get(),
-                    static_cast<position_t>(field_index - (*col_slice)->first + index_field_count)};
+                    field_index - (*col_slice)->first + index_field_count};
         }();
         const Column& column = segment->column(position);
         const DataType source_type = source_columns[columns.size()].first.column_->type().data_type();
@@ -1025,7 +1024,7 @@ RowRange target_rows_in_source_index_range(
     if (rows.empty()) {
         return rows;
     }
-    const ColumnData index = row_slice.segments_->front()->column(0).data();
+    const ColumnData index = row_slice.segments_->front()->column(0u).data();
     const auto first = index.citerator_at<IndexType, IteratorType::ENUMERATED>(rows.first);
     const auto last = rows.second == static_cast<size_t>(row_slice.segments_->front()->row_count())
                               ? index.cend<IndexType, IteratorType::ENUMERATED>()
@@ -1391,7 +1390,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
     std::vector<ColumnWithStrings> target_index_datas;
     target_index_datas.reserve(row_slices.size());
     std::ranges::transform(row_slices, std::back_inserter(target_index_datas), [&](const auto& proc) {
-        return ColumnWithStrings(proc.segments_->front()->column_ptr(0), nullptr, target_descriptor.field(0).name());
+        return ColumnWithStrings(proc.segments_->front()->column_ptr(0u), nullptr, target_descriptor.field(0).name());
     });
     bool has_string_column_in_column_slice = false;
     const TargetRange target_range = get_target_start_end(row_slices);
@@ -1581,9 +1580,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
                                         segment_contains_string_column |= util::scalar_sequence_type<TargetTDT>;
                                         if constexpr (std::same_as<TargetTDT, SourceTDT> &&
                                                       !is_arrow_output_only_type(SourceTDT::data_type())) {
-                                            Column& target_column =
-                                                    target_segment.column(static_cast<position_t>(column_index_in_slice)
-                                                    );
+                                            Column& target_column = target_segment.column(column_index_in_slice);
                                             const ColumnWithStrings source = get_source_column(source_field_pos);
                                             if (source.column_->is_sparse() || target_column.is_sparse()) {
                                                 target_segment.columns()[column_index_in_slice] =
@@ -1644,16 +1641,14 @@ const StreamDescriptor* MergeUpdateClause::get_source_descriptor() const { retur
 
 ColumnWithStrings MergeUpdateClause::get_source_column(const size_t field_index) const {
     return ColumnWithStrings(
-            source_.column_ptr(static_cast<position_t>(field_index)),
-            source_.string_pool_ptr(),
-            source_.descriptor().field(field_index).name()
+            source_.column_ptr(field_index), source_.string_pool_ptr(), source_.descriptor().field(field_index).name()
     );
 }
 
 std::span<const timestamp> MergeUpdateClause::get_source_index(const std::optional<std::pair<size_t, size_t>> range
 ) const {
     const auto [first, last] = range.value_or(std::pair<size_t, size_t>{0, source_row_count()});
-    const Column& index = source_.column(0);
+    const Column& index = source_.column(0u);
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE, !index.is_sparse(), "The index of the merge update source must be dense"
     );

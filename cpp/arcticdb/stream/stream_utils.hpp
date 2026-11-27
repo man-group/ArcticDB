@@ -21,6 +21,7 @@
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 
 #include <folly/gen/Base.h>
 #include <folly/Function.h>
@@ -120,29 +121,30 @@ inline entity::KeyType key_type_compat(uint8_t kt) {
 
 template<typename FieldType>
 inline KeyType key_type_from_segment(const SegmentInMemory& seg, ssize_t row) {
-    auto key_type_val = seg.scalar_at<uint8_t>(row, int(FieldType::key_type)).value();
+    auto key_type_val = seg.scalar_at<uint8_t>(row, util::lossless_cast<size_t>(FieldType::key_type)).value();
     return key_type_compat(key_type_val);
 }
 
 template<typename FieldType>
 inline StreamId stream_id_from_segment(const SegmentInMemory& seg, ssize_t row) {
-    if (const auto& fd = seg.descriptor()[int(FieldType::stream_id)]; is_sequence_type(fd.type().data_type()))
-        return std::string(seg.string_at(row, int(FieldType::stream_id)).value());
+    if (const auto& fd = seg.descriptor()[util::lossless_cast<size_t>(FieldType::stream_id)];
+        is_sequence_type(fd.type().data_type()))
+        return std::string(seg.string_at(row, util::lossless_cast<size_t>(FieldType::stream_id)).value());
     else
-        return seg.scalar_at<timestamp>(row, int(FieldType::stream_id)).value();
+        return seg.scalar_at<timestamp>(row, util::lossless_cast<size_t>(FieldType::stream_id)).value();
 }
 
 template<typename FieldType>
 inline VersionId version_id_from_segment(const SegmentInMemory& seg, ssize_t row) {
-    return seg.scalar_at<VersionId>(row, int(FieldType::version_id)).value();
+    return seg.scalar_at<VersionId>(row, util::lossless_cast<size_t>(FieldType::version_id)).value();
 }
 
 template<typename FieldType>
 auto read_key_row_into_builder(const SegmentInMemory& seg, ssize_t i) {
     return atom_key_builder()
-            .gen_id(seg.scalar_at<VersionId>(i, int(FieldType::version_id)).value())
-            .creation_ts(seg.scalar_at<timestamp>(i, int(FieldType::creation_ts)).value())
-            .content_hash(seg.scalar_at<uint64_t>(i, int(FieldType::content_hash)).value())
+            .gen_id(seg.scalar_at<VersionId>(i, util::lossless_cast<size_t>(FieldType::version_id)).value())
+            .creation_ts(seg.scalar_at<timestamp>(i, util::lossless_cast<size_t>(FieldType::creation_ts)).value())
+            .content_hash(seg.scalar_at<uint64_t>(i, util::lossless_cast<size_t>(FieldType::content_hash)).value())
             .start_index(pipelines::index::index_start_from_segment<SegmentInMemory, FieldType>(seg, i))
             .end_index(pipelines::index::index_end_from_segment<SegmentInMemory, FieldType>(seg, i));
 }

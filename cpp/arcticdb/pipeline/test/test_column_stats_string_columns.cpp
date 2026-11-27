@@ -52,10 +52,10 @@ ColumnStatsRow string_minmax_row(uint64_t start_row, uint64_t end_row, std::stri
     };
 }
 
-position_t column_index(const SegmentInMemory& seg, std::string_view name) {
+size_t column_index(const SegmentInMemory& seg, std::string_view name) {
     auto idx = seg.column_index(name);
     util::check(idx.has_value(), "column {} missing", name);
-    return static_cast<position_t>(*idx);
+    return *idx;
 }
 } // namespace
 

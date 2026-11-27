@@ -25,6 +25,7 @@
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 #include <pipeline/column_stats_filter.hpp>
 
 namespace {
@@ -586,7 +587,8 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, 
                 std::optional<timestamp> start_index;
                 std::optional<timestamp> end_index;
                 if (seg.row_count() > 0) {
-                    const auto& start_index_column = seg.column(position_t(index::Fields::start_index));
+                    const auto& start_index_column =
+                            seg.column(util::lossless_cast<size_t>(index::Fields::start_index));
                     entity::details::visit_type(
                             start_index_column.type().data_type(),
                             [&start_index_column, &start_index](auto column_desc_tag) {
@@ -597,7 +599,7 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, 
                             }
                     );
 
-                    const auto& end_index_column = seg.column(position_t(index::Fields::end_index));
+                    const auto& end_index_column = seg.column(util::lossless_cast<size_t>(index::Fields::end_index));
                     entity::details::visit_type(
                             end_index_column.type().data_type(),
                             [&end_index_column, &end_index, row_count = seg.row_count()](auto column_desc_tag) {

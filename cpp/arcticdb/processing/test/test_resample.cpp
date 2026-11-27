@@ -419,8 +419,8 @@ TEST(Resample, ProcessMultipleSegments) {
                     *component_manager, resample.process(std::move(ids_0))
             );
     auto resampled_seg_0 = *resampled_0.segments_.value()[0];
-    auto& resampled_index_column_0 = resampled_seg_0.column(0);
-    auto& resampled_sum_column_0 = resampled_seg_0.column(1);
+    auto& resampled_index_column_0 = resampled_seg_0.column(0u);
+    auto& resampled_sum_column_0 = resampled_seg_0.column(1u);
     ASSERT_EQ(-5, resampled_index_column_0.scalar_at<int64_t>(0));
     ASSERT_EQ(6, resampled_index_column_0.scalar_at<int64_t>(1));
     ASSERT_EQ(0, resampled_sum_column_0.scalar_at<int64_t>(0));
@@ -431,8 +431,8 @@ TEST(Resample, ProcessMultipleSegments) {
                     *component_manager, resample.process(std::move(ids_1))
             );
     auto resampled_seg_1 = *resampled_1.segments_.value()[0];
-    auto& resampled_index_column_1 = resampled_seg_1.column(0);
-    auto& resampled_sum_column_1 = resampled_seg_1.column(1);
+    auto& resampled_index_column_1 = resampled_seg_1.column(0u);
+    auto& resampled_sum_column_1 = resampled_seg_1.column(1u);
     ASSERT_EQ(25, resampled_index_column_1.scalar_at<int64_t>(0));
     ASSERT_EQ(35, resampled_index_column_1.scalar_at<int64_t>(1));
     ASSERT_EQ(30, resampled_sum_column_1.scalar_at<int64_t>(0));
@@ -443,8 +443,8 @@ TEST(Resample, ProcessMultipleSegments) {
                     *component_manager, resample.process(std::move(ids_2))
             );
     auto resampled_seg_2 = *resampled_2.segments_.value()[0];
-    auto& resampled_index_column_2 = resampled_seg_2.column(0);
-    auto& resampled_sum_column_2 = resampled_seg_2.column(1);
+    auto& resampled_index_column_2 = resampled_seg_2.column(0u);
+    auto& resampled_sum_column_2 = resampled_seg_2.column(1u);
     ASSERT_EQ(46, resampled_index_column_2.scalar_at<int64_t>(0));
     ASSERT_EQ(50, resampled_sum_column_2.scalar_at<int64_t>(0));
 }

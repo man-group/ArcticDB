@@ -296,7 +296,7 @@ TEST(ArrowRead, ConvertSegmentBasic) {
     };
     auto segment = get_detachable_segment(fields, num_rows, chunk_size, ReadOptions{});
     // Verify the index column has the expected number of chunks
-    EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
+    EXPECT_EQ(segment.column(0u).num_blocks(), num_chunks);
 
     proto::descriptors::NormalizationMetadata norm_meta;
     auto arrow_data = segment_to_arrow_data(segment, norm_meta);
@@ -332,7 +332,7 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
     };
     auto segment = get_detachable_segment(fields, num_rows, chunk_size, ReadOptions{});
     // Verify the index column has the expected number of chunks
-    EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
+    EXPECT_EQ(segment.column(0u).num_blocks(), num_chunks);
 
     std::string tz_str{"Europe/Amsterdam"};
     proto::descriptors::NormalizationMetadata norm_meta;
@@ -413,10 +413,10 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
     auto segment = get_detachable_segment(fields, num_rows, chunk_size, read_options);
     auto string_pool = std::make_shared<StringPool>();
     fill_chunked_string_column(
-            segment.column(2), "str_1", num_rows, chunk_size, string_pool, string_values[0], read_options
+            segment.column(2u), "str_1", num_rows, chunk_size, string_pool, string_values[0], read_options
     );
     fill_chunked_string_column(
-            segment.column(3), "str_2", num_rows, chunk_size, string_pool, string_values[1], read_options
+            segment.column(3u), "str_2", num_rows, chunk_size, string_pool, string_values[1], read_options
     );
     segment.set_string_pool(string_pool);
 

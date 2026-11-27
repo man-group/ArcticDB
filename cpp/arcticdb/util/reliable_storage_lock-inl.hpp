@@ -30,7 +30,7 @@ inline StreamDescriptor lock_stream_descriptor(const StreamId& stream_id) {
 
 inline SegmentInMemory lock_segment(const StreamId& name, timestamp expiration) {
     SegmentInMemory output{lock_stream_descriptor(name)};
-    output.set_scalar(0, expiration);
+    output.set_scalar(0u, expiration);
     output.end_row();
     return output;
 }
@@ -102,7 +102,7 @@ std::pair<std::vector<AcquiredLockId>, std::optional<AcquiredLockId>> ReliableSt
 template<class ClockType>
 timestamp ReliableStorageLock<ClockType>::get_expiration(RefKey lock_key) const {
     auto kv = store_->read_sync(lock_key, storage::ReadKeyOpts{});
-    return kv.second.template scalar_at<timestamp>(0, 0).value();
+    return kv.second.template scalar_at<timestamp>(0, 0u).value();
 }
 
 template<class ClockType>

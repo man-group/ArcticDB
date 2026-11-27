@@ -27,7 +27,7 @@ class FixedSchema {
 
     [[nodiscard]] StreamDescriptor default_descriptor() const;
 
-    static position_t get_column_idx_by_name(
+    static size_t get_column_idx_by_name(
             SegmentInMemory& seg, std::string_view col_name, TypeDescriptor, size_t, size_t
     );
 
@@ -50,7 +50,7 @@ class DynamicSchema {
 
     void check(std::size_t pos, TypeDescriptor td) const;
 
-    static position_t get_column_idx_by_name(
+    static size_t get_column_idx_by_name(
             SegmentInMemory& seg, std::string_view col_name, TypeDescriptor desc, size_t expected_size,
             size_t existing_size
     );

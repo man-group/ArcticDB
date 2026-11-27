@@ -96,7 +96,7 @@ static void handle_modified_descriptor(const std::shared_ptr<PipelineContext>& c
             if (!col_index)
                 continue;
 
-            auto& column = output.column(static_cast<position_t>(*col_index));
+            auto& column = output.column(*col_index);
             if (field.type().data_type() != column.type().data_type())
                 column.set_orig_type(field.type());
         }
@@ -234,7 +234,7 @@ static void decode_index_field(
 
             data += size;
         } else {
-            auto& buffer = frame.column(0).data().buffer();
+            auto& buffer = frame.column(0u).data().buffer();
             auto& frame_field_descriptor = frame.field(0);
             auto sz = data_type_size(frame_field_descriptor.type());
             const auto& slice_and_key = context.slice_and_key();
@@ -470,7 +470,7 @@ static ColumnTruncation get_truncate_range(
                     timestamp _first_ts;
                     timestamp _last_ts;
                     if (context.fetch_index()) {
-                        _index_column = frame.column_ptr(0);
+                        _index_column = frame.column_ptr(0u);
                         _first_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.first);
                         _last_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.second - 1);
                     } else {
@@ -668,7 +668,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
         };
 
         if (context.fetch_index() && index_fieldcount > 0) {
-            handle_truncation(frame.column(0), truncate_range_for(frame.column(0).type()));
+            handle_truncation(frame.column(0u), truncate_range_for(frame.column(0u).type()));
         }
 
         StaticColumnMappingIterator it(context, index_fieldcount);
@@ -688,7 +688,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
                     fields.size()
             );
             auto field_name = context.descriptor().fields(it.source_field_pos()).name();
-            auto& column = frame.column(static_cast<ssize_t>(it.dest_col()));
+            auto& column = frame.column(it.dest_col());
             ColumnMapping mapping{
                     frame, it.dest_col(), it.source_field_pos(), context
             }; // where to write in the output frame
@@ -781,7 +781,7 @@ static void decode_into_frame_dynamic(
 
         // Index-only frames have no columns
         if (index_fieldcount > 0) {
-            handle_truncation(frame.column(0), truncate_range_for(frame.column(0).type()));
+            handle_truncation(frame.column(0u), truncate_range_for(frame.column(0u).type()));
         }
         auto truncated_column_indices = std::unordered_set<size_t>{};
 
@@ -796,7 +796,7 @@ static void decode_into_frame_dynamic(
             }
 
             auto dst_col = *column_output_destination;
-            auto& column = frame.column(static_cast<position_t>(dst_col));
+            auto& column = frame.column(dst_col);
             ColumnMapping mapping{frame, dst_col, field_col, context};
             check_mapping_type_compatibility(mapping);
             const auto& column_truncation = truncate_range_for(mapping.dest_type_desc_);
@@ -835,7 +835,7 @@ static void decode_into_frame_dynamic(
         if (!std::holds_alternative<std::monostate>(read_query.row_filter)) {
             for (auto frame_col = index_fieldcount; frame_col < frame.descriptor().field_count(); ++frame_col) {
                 if (!truncated_column_indices.contains(frame_col)) {
-                    auto& column = frame.column(static_cast<position_t>(frame_col));
+                    auto& column = frame.column(frame_col);
                     handle_truncation(column, truncate_range_for(column.type()));
                 }
             }
@@ -992,7 +992,7 @@ struct ReduceColumnTask : async::BaseTask {
     folly::Unit operator()() {
         const auto& frame_field = frame_.field(column_index_);
         const auto field_type = frame_field.type().data_type();
-        auto& column = frame_.column(static_cast<position_t>(column_index_));
+        auto& column = frame_.column(column_index_);
         const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
         const auto column_data = slice_map_->columns_.find(frame_field.name());
         const auto& name = frame_field.name();

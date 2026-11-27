@@ -13,6 +13,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/util/lossless_cast.hpp>
 #include <folly/futures/Future.h>
 
 namespace arcticdb {
@@ -58,16 +59,16 @@ std::optional<IndexValue> index_start_from_row(const RowType& row, IndexDescript
 
 template<typename SegmentType, typename FieldType = pipelines::index::Fields>
 IndexValue index_value_from_segment(const SegmentType& seg, size_t row_id, FieldType field) {
-    auto index_type = seg.template scalar_at<uint8_t>(row_id, int(FieldType::index_type));
+    auto index_type = seg.template scalar_at<uint8_t>(row_id, util::lossless_cast<size_t>(FieldType::index_type));
     IndexValue index_value;
     auto type = IndexDescriptor::Type(index_type.value());
     switch (type) {
     case IndexDescriptorImpl::Type::TIMESTAMP:
     case IndexDescriptorImpl::Type::ROWCOUNT:
-        index_value = seg.template scalar_at<timestamp>(row_id, int(field)).value();
+        index_value = seg.template scalar_at<timestamp>(row_id, util::lossless_cast<size_t>(field)).value();
         break;
     case IndexDescriptorImpl::Type::STRING:
-        index_value = std::string(seg.string_at(row_id, int(field)).value());
+        index_value = std::string(seg.string_at(row_id, util::lossless_cast<size_t>(field)).value());
         break;
     default:
         util::raise_rte(

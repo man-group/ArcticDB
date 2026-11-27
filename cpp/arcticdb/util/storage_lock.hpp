@@ -34,7 +34,7 @@ SegmentInMemory lock_segment(
         const StreamId& name, uint64_t timestamp, std::optional<google::protobuf::Any> metadata = std::nullopt
 ) {
     SegmentInMemory output{lock_stream_descriptor(name)};
-    output.set_scalar(0, timestamp);
+    output.set_scalar(0u, timestamp);
     output.end_row();
     if (metadata.has_value()) {
         output.set_metadata(std::move(*metadata));
@@ -48,7 +48,7 @@ struct LockSegmentData {
 };
 
 LockSegmentData extract_lock_segment_data(const SegmentInMemory& segment) {
-    auto acquire_time = segment.template scalar_at<timestamp>(0, 0).value();
+    auto acquire_time = segment.template scalar_at<timestamp>(0, 0u).value();
     std::optional<google::protobuf::Any> metadata;
     if (const auto* meta = segment.metadata()) {
         metadata = *meta;
@@ -245,7 +245,7 @@ class StorageLock {
     std::optional<timestamp> read_timestamp(const std::shared_ptr<Store>& store) const {
         try {
             auto key_seg = store->read_sync(ref_key(), {.dont_warn_about_missing_key = true});
-            return key_seg.second.template scalar_at<timestamp>(0, 0).value();
+            return key_seg.second.template scalar_at<timestamp>(0, 0u).value();
         } catch (const std::invalid_argument&) {
             return std::nullopt;
         } catch (const storage::KeyNotFoundException&) {

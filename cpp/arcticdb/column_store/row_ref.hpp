@@ -48,7 +48,7 @@ class RowRef {
     SegmentInMemory& segment() { return segment_; }
 
     [[nodiscard]] std::optional<std::string_view> string_at(std::size_t col) const {
-        return segment_.string_at(row_pos_, static_cast<ssize_t>(col));
+        return segment_.string_at(row_pos_, col);
     }
 
   private:

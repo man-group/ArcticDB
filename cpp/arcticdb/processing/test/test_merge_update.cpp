@@ -61,8 +61,8 @@ std::vector<RangesAndKey> generate_ranges_and_keys(
             if (source_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT) {
                 return {0, 0};
             }
-            return {*segments[i].scalar_at<timestamp>(0, 0),
-                    *segments[i].scalar_at<timestamp>(segments[i].row_count() - 1, 0)};
+            return {*segments[i].scalar_at<timestamp>(0, 0u),
+                    *segments[i].scalar_at<timestamp>(segments[i].row_count() - 1, 0u)};
         }();
         ranges_and_keys.emplace_back(
                 row_ranges[i],

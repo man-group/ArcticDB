@@ -62,13 +62,13 @@ class SegmentInMemory {
 
     template<typename T>
     requires std::integral<T> || std::floating_point<T>
-    void set_scalar(position_t idx, T val) {
+    void set_scalar(size_t idx, T val) {
         impl_->set_scalar(idx, val);
     }
 
     template<typename T>
     requires std::same_as<std::decay_t<T>, std::string>
-    void set_scalar(position_t idx, const T& val) {
+    void set_scalar(size_t idx, const T& val) {
         impl_->set_string(idx, val);
     }
 
@@ -92,48 +92,48 @@ class SegmentInMemory {
 
     template<class T, template<class> class Tensor>
     requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, Tensor<T>& val) {
+    void set_array(size_t pos, Tensor<T>& val) {
         impl_->set_array(pos, val);
     }
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, py::array_t<T>& val) {
+    void set_array(size_t pos, py::array_t<T>& val) {
         impl_->set_array(pos, val);
     }
 
-    void set_string(position_t pos, std::string_view str);
+    void set_string(size_t pos, std::string_view str);
 
-    void set_string_at(position_t col, position_t row, const char* str, size_t size);
+    void set_string_at(size_t col, position_t row, const char* str, size_t size);
 
-    void set_string_array(position_t idx, size_t string_size, size_t num_strings, char* data);
+    void set_string_array(size_t idx, size_t string_size, size_t num_strings, char* data);
 
-    void set_string_list(position_t idx, const std::vector<std::string>& input);
+    void set_string_list(size_t idx, const std::vector<std::string>& input);
 
-    void set_value(position_t idx, const SegmentInMemoryImpl::Location& loc);
+    void set_value(size_t idx, const SegmentInMemoryImpl::Location& loc);
 
     // pybind11 can't resolve const and non-const version of column()
-    Column& column_ref(position_t idx);
+    Column& column_ref(size_t idx);
 
-    Column& column(position_t idx);
+    Column& column(size_t idx);
 
-    [[nodiscard]] const Column& column(position_t idx) const;
+    [[nodiscard]] const Column& column(size_t idx) const;
 
     std::vector<std::shared_ptr<Column>>& columns();
 
     [[nodiscard]] const std::vector<std::shared_ptr<Column>>& columns() const;
 
-    position_t add_column(const Field& field, size_t num_rows, AllocationType presize);
+    size_t add_column(const Field& field, size_t num_rows, AllocationType presize);
 
-    position_t add_column(const Field& field, const std::shared_ptr<Column>& column);
+    size_t add_column(const Field& field, const std::shared_ptr<Column>& column);
 
-    position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
+    size_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
 
-    position_t add_column(std::string_view name, const std::shared_ptr<Column>& column);
+    size_t add_column(std::string_view name, const std::shared_ptr<Column>& column);
 
-    position_t add_column(FieldRef field_ref, size_t num_rows, AllocationType presize);
+    size_t add_column(FieldRef field_ref, size_t num_rows, AllocationType presize);
 
-    position_t add_column(const Field& field, Column&& column);
+    size_t add_column(const Field& field, Column&& column);
 
     [[nodiscard]] size_t num_blocks() const;
 
@@ -144,18 +144,18 @@ class SegmentInMemory {
     void drop_column(std::string_view name);
 
     template<typename T>
-    std::optional<T> scalar_at(position_t row, position_t col) const {
+    std::optional<T> scalar_at(position_t row, size_t col) const {
         return impl_->scalar_at<T>(row, col);
     }
 
     template<typename T>
-    std::optional<TensorType<T>> tensor_at(position_t row, position_t col) const {
+    std::optional<TensorType<T>> tensor_at(position_t row, size_t col) const {
         return impl_->tensor_at<T>(row, col);
     }
 
-    [[nodiscard]] std::optional<std::string_view> string_at(position_t row, position_t col) const;
+    [[nodiscard]] std::optional<std::string_view> string_at(position_t row, size_t col) const;
 
-    std::optional<Column::StringArrayData> string_array_at(position_t row, position_t col);
+    std::optional<Column::StringArrayData> string_array_at(position_t row, size_t col);
 
     void set_timeseries_descriptor(const TimeseriesDescriptor& tsd);
 
@@ -177,19 +177,19 @@ class SegmentInMemory {
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_dense_block(position_t idx, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
+    void set_dense_block(size_t idx, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
         impl_->set_dense_block(idx, val, size, copy_mode);
     }
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_sparse_block(position_t idx, T* val, size_t rows_to_write) {
+    void set_sparse_block(size_t idx, T* val, size_t rows_to_write) {
         impl_->set_sparse_block(idx, val, rows_to_write);
     }
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset);
+    void set_sparse_block(size_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset);
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset);
+    void set_sparse_block(size_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset);
 
     void set_offset(ssize_t offset);
 
@@ -241,7 +241,7 @@ class SegmentInMemory {
 
     void sort(const std::vector<position_t>& columns);
 
-    void sort(position_t column);
+    void sort(size_t column);
 
     [[nodiscard]] SegmentInMemory clone() const;
 
@@ -278,7 +278,7 @@ class SegmentInMemory {
     // Not currently used but might be useful in the future
     void compact_blocks();
 
-    std::shared_ptr<Column> column_ptr(position_t idx) const;
+    std::shared_ptr<Column> column_ptr(size_t idx) const;
 
     template<typename RowType>
     RowType make_row_ref(std::size_t row_id) {

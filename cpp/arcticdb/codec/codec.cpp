@@ -433,7 +433,7 @@ void decode_v2(const Segment& segment, const SegmentHeader& hdr, SegmentInMemory
             const auto& field_name = desc.fields(i).name();
             util::check(data != end, "Reached end of input block with {} fields to decode", fields_size - i);
             if (auto col_index = res.column_index(field_name)) {
-                auto& col = res.column(static_cast<position_t>(*col_index));
+                auto& col = res.column(*col_index);
 
                 data += decode_field(
                         res.field(*col_index).type(),
@@ -506,7 +506,7 @@ void decode_v1(
                     fields_size - i
             );
             if (auto col_index = res.column_index(field_name)) {
-                auto& col = res.column(static_cast<position_t>(*col_index));
+                auto& col = res.column(*col_index);
                 data += decode_field(
                         res.field(*col_index).type(), field, data, col, col.opt_sparse_map(), hdr.encoding_version()
                 );
