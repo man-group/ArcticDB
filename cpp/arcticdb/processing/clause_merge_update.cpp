@@ -612,7 +612,7 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
     };
     if (row_slices.front().entity_fetch_count_) {
         if (row_slices.front().entity_fetch_count_->front() > 1) {
-            const ColumnData index = row_slices.front().segments_->front()->column(0).data();
+            const ColumnData index = row_slices.front().segments_->front()->column(0u).data();
             const std::optional<ssize_t> first_different = first_different_index_value_position(index);
             util::check(
                     first_different.has_value(),
@@ -621,7 +621,7 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
             result.start_row_in_first_row_slice = *first_different;
         }
         if (row_slices.size() > 1 && row_slices.back().entity_fetch_count_->back() > 1) {
-            const ColumnData index = row_slices.back().segments_->back()->column(0).data();
+            const ColumnData index = row_slices.back().segments_->back()->column(0u).data();
             result.end_row_in_last_row_slice = first_different_index_value_position(index).value_or(
                     row_slices.back().segments_->back()->row_count()
             );
@@ -1024,7 +1024,7 @@ RowRange target_rows_in_source_index_range(
     if (rows.empty()) {
         return rows;
     }
-    const ColumnData index = row_slice.segments_->front()->column(0).data();
+    const ColumnData index = row_slice.segments_->front()->column(0u).data();
     const auto first = index.citerator_at<IndexType, IteratorType::ENUMERATED>(rows.first);
     const auto last = rows.second == static_cast<size_t>(row_slice.segments_->front()->row_count())
                               ? index.cend<IndexType, IteratorType::ENUMERATED>()
@@ -1390,7 +1390,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
     std::vector<ColumnWithStrings> target_index_datas;
     target_index_datas.reserve(row_slices.size());
     std::ranges::transform(row_slices, std::back_inserter(target_index_datas), [&](const auto& proc) {
-        return ColumnWithStrings(proc.segments_->front()->column_ptr(0), nullptr, target_descriptor.field(0).name());
+        return ColumnWithStrings(proc.segments_->front()->column_ptr(0u), nullptr, target_descriptor.field(0).name());
     });
     bool has_string_column_in_column_slice = false;
     const TargetRange target_range = get_target_start_end(row_slices);
@@ -1648,7 +1648,7 @@ ColumnWithStrings MergeUpdateClause::get_source_column(const size_t field_index)
 std::span<const timestamp> MergeUpdateClause::get_source_index(const std::optional<std::pair<size_t, size_t>> range
 ) const {
     const auto [first, last] = range.value_or(std::pair<size_t, size_t>{0, source_row_count()});
-    const Column& index = source_.column(0);
+    const Column& index = source_.column(0u);
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE, !index.is_sparse(), "The index of the merge update source must be dense"
     );

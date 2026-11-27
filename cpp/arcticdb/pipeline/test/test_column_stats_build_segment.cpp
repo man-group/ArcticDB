@@ -93,8 +93,8 @@ TEST(ColumnStatsBuildSegmentTest, IndexColumnsAndRowOrder) {
 
     const auto min_col = column_index(seg, "v1_MIN(price)");
     for (auto&& [row, expected_start] : folly::enumerate(std::vector<uint64_t>{100, 200, 300})) {
-        EXPECT_EQ(seg.scalar_at<uint64_t>(static_cast<position_t>(row), 0), expected_start);
-        EXPECT_EQ(seg.scalar_at<uint64_t>(static_cast<position_t>(row), 1), expected_start + 99);
+        EXPECT_EQ(seg.scalar_at<uint64_t>(static_cast<position_t>(row), 0u), expected_start);
+        EXPECT_EQ(seg.scalar_at<uint64_t>(static_cast<position_t>(row), 1u), expected_start + 99);
         EXPECT_EQ(seg.scalar_at<int64_t>(static_cast<position_t>(row), min_col), static_cast<int64_t>(row) + 1);
     }
 }
@@ -192,8 +192,8 @@ TEST(ColumnStatsBuildSegmentTest, StatAbsentFromSomeComponentsIsSparse) {
     EXPECT_EQ(seg.scalar_at<int64_t>(2, col), 33);
     EXPECT_FALSE(seg.scalar_at<int64_t>(3, col).has_value());
     // The row-range columns stay dense across all rows
-    EXPECT_EQ(seg.scalar_at<uint64_t>(3, 0), 400);
-    EXPECT_EQ(seg.scalar_at<uint64_t>(3, 1), 499);
+    EXPECT_EQ(seg.scalar_at<uint64_t>(3, 0u), 400);
+    EXPECT_EQ(seg.scalar_at<uint64_t>(3, 1u), 499);
 }
 
 TEST(ColumnStatsBuildSegmentTest, DuplicateRowRangeRaises) {

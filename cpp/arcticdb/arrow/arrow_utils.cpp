@@ -426,7 +426,7 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(
         // which needs special handling in python.
         return std::vector<sparrow::record_batch>();
     }
-    const auto column_blocks = segment.column(0).num_blocks();
+    const auto column_blocks = segment.column(0u).num_blocks();
     util::check(total_blocks == column_blocks * num_columns, "Expected regular block size");
 
     // column_blocks == 0 is a special case where we are returning a zero-row structure (e.g. if date_range is

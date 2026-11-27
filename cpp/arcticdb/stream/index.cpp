@@ -71,7 +71,7 @@ void TimeseriesIndex::check(const FieldCollection& fields) const {
 IndexValue TimeseriesIndex::start_value_for_segment(const SegmentInMemory& segment) {
     if (segment.row_count() == 0)
         return {NumericIndex{min_index_value()}};
-    auto first_ts = segment.template scalar_at<timestamp>(0, 0).value();
+    auto first_ts = segment.template scalar_at<timestamp>(0, 0u).value();
     return {first_ts};
 }
 
@@ -79,7 +79,7 @@ IndexValue TimeseriesIndex::end_value_for_segment(const SegmentInMemory& segment
     auto row_count = segment.row_count();
     if (row_count == 0)
         return {NumericIndex{min_index_value()}};
-    auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, 0).value();
+    auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, 0u).value();
     return {last_ts};
 }
 
@@ -122,13 +122,13 @@ void TableIndex::check(const FieldCollection& fields) const {
 }
 
 IndexValue TableIndex::start_value_for_segment(const SegmentInMemory& segment) {
-    auto string_index = segment.string_at(0, 0).value();
+    auto string_index = segment.string_at(0, 0u).value();
     return {std::string{string_index}};
 }
 
 IndexValue TableIndex::end_value_for_segment(const SegmentInMemory& segment) {
     auto last_rowid = segment.row_count() - 1;
-    auto string_index = segment.string_at(last_rowid, 0).value();
+    auto string_index = segment.string_at(last_rowid, 0u).value();
     return {std::string{string_index}};
 }
 

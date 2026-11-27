@@ -55,8 +55,8 @@ TEST(SegmentAggregator, Basic) {
     count = 0;
     for (size_t i = 0; i < 10; ++i) {
         for (size_t j = 0; j < 20; ++j) {
-            ASSERT_EQ(seg.scalar_at<uint64_t>(count, 1), j);
-            auto str = seg.string_at(count, 2).value();
+            ASSERT_EQ(seg.scalar_at<uint64_t>(count, 1u), j);
+            auto str = seg.string_at(count, 2u).value();
             ASSERT_EQ(str, fmt::format("{}", i + j));
             ++count;
         }

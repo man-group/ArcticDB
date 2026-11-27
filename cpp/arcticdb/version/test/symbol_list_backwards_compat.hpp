@@ -24,13 +24,13 @@ void backwards_compat_read_list_from_storage(
         auto data_type = field_desc.type().data_type();
         if (data_type == DataType::UINT64) {
             for (auto row : key_seg) {
-                auto num_id = key_seg.scalar_at<uint64_t>(row.row_id_, 0).value();
+                auto num_id = key_seg.scalar_at<uint64_t>(row.row_id_, 0u).value();
                 ARCTICDB_DEBUG(log::version(), "Reading numeric symbol {}", num_id);
                 symbols.emplace(safe_convert_to_numeric_id(num_id));
             }
         } else if (data_type == DataType::ASCII_DYNAMIC64) {
             for (auto row : key_seg) {
-                auto sym = key_seg.string_at(row.row_id_, 0).value();
+                auto sym = key_seg.string_at(row.row_id_, 0u).value();
                 ARCTICDB_DEBUG(log::version(), "Reading string symbol '{}'", sym);
                 symbols.emplace(std::string{sym});
             }
@@ -126,14 +126,14 @@ folly::Future<VariantKey> backwards_compat_write(
                             std::holds_alternative<StringId>(symbol),
                             "Cannot write string symbol name, existing symbols are numeric"
                     );
-                    list_segment.set_string(0, std::get<StringId>(symbol));
+                    list_segment.set_string(0u, std::get<StringId>(symbol));
                 },
                 [&](const NumericId&) {
                     util::check(
                             std::holds_alternative<NumericId>(symbol),
                             "Cannot write numeric symbol name, existing symbols are strings"
                     );
-                    list_segment.set_scalar(0, std::get<NumericId>(symbol));
+                    list_segment.set_scalar(0u, std::get<NumericId>(symbol));
                 }
         );
         list_segment.end_row();
@@ -157,8 +157,8 @@ void extremely_backwards_compat_write_journal(
     SegmentInMemory seg{backward_compat_journal_stream_descriptor(action, symbol)};
     util::variant_match(
             symbol,
-            [&seg](const StringId& id) { seg.set_string(0, id); },
-            [&seg](const NumericId& id) { seg.set_scalar<uint64_t>(0, id); }
+            [&seg](const StringId& id) { seg.set_string(0u, id); },
+            [&seg](const NumericId& id) { seg.set_scalar<uint64_t>(0u, id); }
     );
 
     seg.end_row();

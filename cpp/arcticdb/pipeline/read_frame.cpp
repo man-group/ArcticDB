@@ -234,7 +234,7 @@ static void decode_index_field(
 
             data += size;
         } else {
-            auto& buffer = frame.column(0).data().buffer();
+            auto& buffer = frame.column(0u).data().buffer();
             auto& frame_field_descriptor = frame.field(0);
             auto sz = data_type_size(frame_field_descriptor.type());
             const auto& slice_and_key = context.slice_and_key();
@@ -470,7 +470,7 @@ static ColumnTruncation get_truncate_range(
                     timestamp _first_ts;
                     timestamp _last_ts;
                     if (context.fetch_index()) {
-                        _index_column = frame.column_ptr(0);
+                        _index_column = frame.column_ptr(0u);
                         _first_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.first);
                         _last_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.second - 1);
                     } else {
@@ -668,7 +668,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
         };
 
         if (context.fetch_index() && index_fieldcount > 0) {
-            handle_truncation(frame.column(0), truncate_range_for(frame.column(0).type()));
+            handle_truncation(frame.column(0u), truncate_range_for(frame.column(0u).type()));
         }
 
         StaticColumnMappingIterator it(context, index_fieldcount);
@@ -781,7 +781,7 @@ static void decode_into_frame_dynamic(
 
         // Index-only frames have no columns
         if (index_fieldcount > 0) {
-            handle_truncation(frame.column(0), truncate_range_for(frame.column(0).type()));
+            handle_truncation(frame.column(0u), truncate_range_for(frame.column(0u).type()));
         }
         auto truncated_column_indices = std::unordered_set<size_t>{};
 

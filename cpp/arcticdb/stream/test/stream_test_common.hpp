@@ -220,7 +220,7 @@ inline void fill_test_frame(
     if (frame.has_index()) {
         visit_field(*field, [&](auto type_desc_tag) {
             using DTT = typename decltype(type_desc_tag)::DataTypeTag;
-            field_tensors.emplace_back(fill_test_column(segment.column(0), DTT{}, num_rows, start_val, true));
+            field_tensors.emplace_back(fill_test_column(segment.column(0u), DTT{}, num_rows, start_val, true));
         });
         std::advance(field, 1);
         ++col;

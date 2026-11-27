@@ -157,7 +157,7 @@ class SegmentInMemoryImpl {
         template<class IndexType>
         [[nodiscard]] auto index() const {
             using RawType = typename IndexType::TypeDescTag::DataTypeTag::raw_type;
-            return parent_->scalar_at<RawType>(row_id_, 0).value();
+            return parent_->scalar_at<RawType>(row_id_, 0u).value();
         }
 
         friend void swap(Row& left, Row& right) noexcept;

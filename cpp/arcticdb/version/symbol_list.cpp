@@ -146,7 +146,7 @@ static std::vector<SymbolListEntry> read_old_style_list_from_storage(const Segme
     const auto data_type = get_symbol_data_type(seg);
 
     for (auto row : seg)
-        output.emplace_back(stream_id_from_segment(data_type, seg, row.row_id_, 0), 0, 0, ActionType::ADD);
+        output.emplace_back(stream_id_from_segment(data_type, seg, row.row_id_, 0u), 0, 0, ActionType::ADD);
 
     return output;
 }
@@ -163,18 +163,18 @@ static std::vector<SymbolListEntry> read_new_style_list_from_storage(const Segme
     // next three are the same for the deletions. Old-style symbol lists will ignore everything but the first column
     // which will mean that they can't do any conflict resolution but will get the correct data.
     util::check(
-            seg.column(0).row_count() == seg.column(1).row_count() &&
-                    seg.column(0).row_count() == seg.column(2).row_count(),
+            seg.column(0u).row_count() == seg.column(1u).row_count() &&
+                    seg.column(0u).row_count() == seg.column(2u).row_count(),
             "Column mismatch in symbol segment additions: {} {} {}",
-            seg.column(0).row_count(),
-            seg.column(1).row_count(),
-            seg.column(2).row_count()
+            seg.column(0u).row_count(),
+            seg.column(1u).row_count(),
+            seg.column(2u).row_count()
     );
 
-    for (auto i = 0L; i < seg.column(0).row_count(); ++i) {
-        auto stream_id = stream_id_from_segment(data_type, seg, i, 0);
-        auto reference_id = VersionId{scalar_at<uint64_t>(seg, i, 1)};
-        auto reference_time = timestamp{scalar_at<int64_t>(seg, i, 2)};
+    for (auto i = 0L; i < seg.column(0u).row_count(); ++i) {
+        auto stream_id = stream_id_from_segment(data_type, seg, i, 0u);
+        auto reference_id = VersionId{scalar_at<uint64_t>(seg, i, 1u)};
+        auto reference_time = timestamp{scalar_at<int64_t>(seg, i, 2u)};
         ARCTICDB_RUNTIME_DEBUG(
                 log::symbol(), "Reading added symbol {}: {}@{}", stream_id, reference_id, reference_time
         );
@@ -183,18 +183,18 @@ static std::vector<SymbolListEntry> read_new_style_list_from_storage(const Segme
 
     if (seg.descriptor().field_count() == 6) {
         util::check(
-                seg.column(3).row_count() == seg.column(4).row_count() &&
-                        seg.column(3).row_count() == seg.column(5).row_count(),
+                seg.column(3u).row_count() == seg.column(4u).row_count() &&
+                        seg.column(3u).row_count() == seg.column(5u).row_count(),
                 "Column mismatch in symbol segment deletions: {} {} {}",
-                seg.column(3).row_count(),
-                seg.column(4).row_count(),
-                seg.column(5).row_count()
+                seg.column(3u).row_count(),
+                seg.column(4u).row_count(),
+                seg.column(5u).row_count()
         );
 
-        for (auto i = 0L; i < seg.column(3).row_count(); ++i) {
-            auto stream_id = stream_id_from_segment(data_type, seg, i, 3);
-            auto reference_id = VersionId{scalar_at<uint64_t>(seg, i, 4)};
-            auto reference_time = timestamp{scalar_at<int64_t>(seg, i, 5)};
+        for (auto i = 0L; i < seg.column(3u).row_count(); ++i) {
+            auto stream_id = stream_id_from_segment(data_type, seg, i, 3u);
+            auto reference_id = VersionId{scalar_at<uint64_t>(seg, i, 4u)};
+            auto reference_time = timestamp{scalar_at<int64_t>(seg, i, 5u)};
             ARCTICDB_RUNTIME_DEBUG(
                     log::symbol(), "Reading deleted symbol {}: {}@{}", stream_id, reference_id, reference_time
             );
@@ -608,11 +608,11 @@ static void write_journal(
     util::variant_match(
             symbol,
             [&seg, &version_indicator](const StringId& id) {
-                seg.set_string(0, id);
+                seg.set_string(0u, id);
                 version_indicator = StringIndex{version_string};
             },
             [&seg, &version_indicator](const NumericId& id) {
-                seg.set_scalar<uint64_t>(0, id);
+                seg.set_scalar<uint64_t>(0u, id);
                 version_indicator = version_identifier;
             }
     );
@@ -732,9 +732,9 @@ static void write_symbol_at(
 }
 
 static void write_entry(const StreamId& type_holder, SegmentInMemory& segment, const SymbolListEntry& entry) {
-    write_symbol_at(type_holder, segment, entry, 0);
-    segment.set_scalar(1, entry.reference_id_);
-    segment.set_scalar(2, entry.timestamp_);
+    write_symbol_at(type_holder, segment, entry, 0u);
+    segment.set_scalar(1u, entry.reference_id_);
+    segment.set_scalar(2u, entry.timestamp_);
     segment.end_row();
 }
 
@@ -762,17 +762,17 @@ static SegmentInMemory write_entries_to_symbol_segment(
                 added_segment.descriptor().field_count()
         );
 
-        auto& src = added_segment.column(3).data().buffer();
+        auto& src = added_segment.column(3u).data().buffer();
         CursoredBuffer<ChunkedBuffer> cursor{src.bytes(), AllocationType::DYNAMIC};
         merge_string_column(src, deleted_segment.string_pool_ptr(), added_segment.string_pool_ptr(), cursor, false);
         std::swap(src, cursor.buffer());
     }
 
     util::check(
-            added_segment.row_count() == static_cast<size_t>(added_segment.column(0).row_count()),
+            added_segment.row_count() == static_cast<size_t>(added_segment.column(0u).row_count()),
             "Segment row_count should match initial column row_count {} != {}",
             added_segment.row_count(),
-            added_segment.column(0).row_count()
+            added_segment.column(0u).row_count()
     );
 
     return added_segment;

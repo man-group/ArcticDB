@@ -59,10 +59,10 @@ PartialKey WriteToSegmentTask::generate_partial_key(const SegmentInMemory& seg) 
         return {};
     }
     const auto start_index = frame_->has_index()
-                                     ? *seg.column(0).scalar_at<timestamp>(0)
+                                     ? *seg.column(0u).scalar_at<timestamp>(0)
                                      : entity::safe_convert_to_numeric_index(slice_.row_range.first, "Rows");
     const auto end_index = frame_->has_index()
-                                   ? end_index_generator(*seg.column(0).scalar_at<timestamp>(seg.row_count() - 1))
+                                   ? end_index_generator(*seg.column(0u).scalar_at<timestamp>(seg.row_count() - 1))
                                    : entity::safe_convert_to_numeric_index(slice_.row_range.second, "Rows");
     return {typed_stream_version_->type,
             typed_stream_version_->version_id,

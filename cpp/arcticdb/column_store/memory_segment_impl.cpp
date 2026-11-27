@@ -68,7 +68,7 @@ const StreamDescriptor& SegmentInMemoryImpl::Row::descriptor() const { return pa
 bool SegmentInMemoryImpl::Row::operator<(const Row& other) const {
     return entity::visit_field(parent_->field(0), [this, &other](auto type_desc_tag) {
         using RawType = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
-        return parent_->scalar_at<RawType>(row_id_, 0) < other.parent_->scalar_at<RawType>(other.row_id_, 0);
+        return parent_->scalar_at<RawType>(row_id_, 0u) < other.parent_->scalar_at<RawType>(other.row_id_, 0u);
     });
 }
 

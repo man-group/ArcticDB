@@ -99,17 +99,17 @@ TEST_P(LocalStorageTestSuite, CoreFunctions) {
 TEST_P(LocalStorageTestSuite, Strings) {
     auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>();
     SegmentInMemory s{StreamDescriptor{std::move(tsd)}};
-    s.set_scalar(0, timestamp(123));
-    s.set_string(1, "happy");
-    s.set_string(2, "muppets");
-    s.set_string(3, "happy");
-    s.set_string(4, "trousers");
+    s.set_scalar(0u, timestamp(123));
+    s.set_string(1u, "happy");
+    s.set_string(2u, "muppets");
+    s.set_string(3u, "happy");
+    s.set_string(4u, "trousers");
     s.end_row();
-    s.set_scalar(0, timestamp(124));
-    s.set_string(1, "soggy");
-    s.set_string(2, "muppets");
-    s.set_string(3, "baggy");
-    s.set_string(4, "trousers");
+    s.set_scalar(0u, timestamp(124));
+    s.set_string(1u, "soggy");
+    s.set_string(2u, "muppets");
+    s.set_string(3u, "baggy");
+    s.set_string(4u, "trousers");
     s.end_row();
 
     google::protobuf::Any any;
@@ -147,10 +147,10 @@ TEST_P(LocalStorageTestSuite, Strings) {
     );
 
     SegmentInMemory res_mem = decode_segment(*res.segment_ptr());
-    ASSERT_EQ(s.string_at(0, 1), res_mem.string_at(0, 1));
-    ASSERT_EQ(std::string("happy"), res_mem.string_at(0, 1));
-    ASSERT_EQ(s.string_at(1, 3), res_mem.string_at(1, 3));
-    ASSERT_EQ(std::string("baggy"), res_mem.string_at(1, 3));
+    ASSERT_EQ(s.string_at(0, 1u), res_mem.string_at(0, 1u));
+    ASSERT_EQ(std::string("happy"), res_mem.string_at(0, 1u));
+    ASSERT_EQ(s.string_at(1, 3u), res_mem.string_at(1, 3u));
+    ASSERT_EQ(std::string("baggy"), res_mem.string_at(1, 3u));
 }
 
 using namespace std::string_literals;

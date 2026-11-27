@@ -193,13 +193,13 @@ TEST(Sparse, Simple) {
 
     auto segment = wrapper.segment();
     ASSERT_EQ(segment.row_count(), 2);
-    auto val1 = segment.scalar_at<uint32_t>(0, 1);
+    auto val1 = segment.scalar_at<uint32_t>(0, 1u);
     ASSERT_EQ(val1, 5);
-    auto val2 = segment.scalar_at<uint32_t>(0, 2);
+    auto val2 = segment.scalar_at<uint32_t>(0, 2u);
     ASSERT_EQ(static_cast<bool>(val2), false);
-    auto val3 = segment.scalar_at<uint32_t>(1, 1);
+    auto val3 = segment.scalar_at<uint32_t>(1, 1u);
     ASSERT_EQ(static_cast<bool>(val3), false);
-    auto val4 = segment.scalar_at<uint32_t>(1, 2);
+    auto val4 = segment.scalar_at<uint32_t>(1, 2u);
     ASSERT_EQ(val4, 6);
 }
 
@@ -240,13 +240,13 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     ;
 
     ASSERT_EQ(frame.row_count(), 2);
-    auto val1 = frame.scalar_at<uint32_t>(0, 1);
+    auto val1 = frame.scalar_at<uint32_t>(0, 1u);
     ASSERT_EQ(val1, 5);
-    auto val2 = frame.scalar_at<uint64_t>(0, 2);
+    auto val2 = frame.scalar_at<uint64_t>(0, 2u);
     ASSERT_EQ(val2, 0);
-    auto val3 = frame.scalar_at<uint32_t>(1, 1);
+    auto val3 = frame.scalar_at<uint32_t>(1, 1u);
     ASSERT_EQ(val3, 0);
-    auto val4 = frame.scalar_at<uint64_t>(1, 2);
+    auto val4 = frame.scalar_at<uint64_t>(1, 2u);
     ASSERT_EQ(val4, 6);
 }
 
@@ -325,13 +325,13 @@ TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
     ;
 
     ASSERT_EQ(frame.row_count(), 2);
-    auto val1 = frame.scalar_at<uint32_t>(0, 1);
+    auto val1 = frame.scalar_at<uint32_t>(0, 1u);
     ASSERT_EQ(val1, 5);
-    auto val2 = frame.scalar_at<uint64_t>(0, 2);
+    auto val2 = frame.scalar_at<uint64_t>(0, 2u);
     ASSERT_EQ(val2, 0);
-    auto val3 = frame.scalar_at<uint32_t>(1, 1);
+    auto val3 = frame.scalar_at<uint32_t>(1, 1u);
     ASSERT_EQ(val3, 0);
-    auto val4 = frame.scalar_at<uint64_t>(1, 2);
+    auto val4 = frame.scalar_at<uint64_t>(1, 2u);
     ASSERT_EQ(val4, 6);
 }
 
@@ -379,12 +379,12 @@ TEST_F(SparseTestStore, DenseToSparse) {
 
     ASSERT_EQ(frame.row_count(), 7);
     for (int i = 0; i < 5; ++i) {
-        auto val1 = frame.scalar_at<uint32_t>(i, 1);
+        auto val1 = frame.scalar_at<uint32_t>(i, 1u);
         ASSERT_EQ(val1, i + 1);
     }
-    auto val2 = frame.scalar_at<uint64_t>(5, 2);
+    auto val2 = frame.scalar_at<uint64_t>(5, 2u);
     ASSERT_EQ(val2, 6);
-    auto val3 = frame.scalar_at<uint32_t>(6, 1);
+    auto val3 = frame.scalar_at<uint32_t>(6, 1u);
     ASSERT_EQ(val3, 7);
 }
 
@@ -430,17 +430,17 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     apply_global_refcounts(*handler_data, OutputFormat::PANDAS);
 
     ASSERT_EQ(frame.row_count(), 2);
-    auto val1 = frame.scalar_at<PyObject*>(0, 1);
+    auto val1 = frame.scalar_at<PyObject*>(0, 1u);
     auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
     ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
     ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, "five"), 0);
 
-    auto val2 = frame.string_at(0, 2);
+    auto val2 = frame.string_at(0, 2u);
     ASSERT_EQ(val2.value()[0], char{0});
 
-    auto val3 = frame.scalar_at<PyObject*>(1, 1);
+    auto val3 = frame.scalar_at<PyObject*>(1, 1u);
     ASSERT_TRUE(is_py_none(val3.value()));
-    auto val4 = frame.string_at(1, 2);
+    auto val4 = frame.string_at(1, 2u);
     ASSERT_EQ(val4, "six");
 }
 
@@ -490,13 +490,13 @@ TEST_F(SparseTestStore, Multiblock) {
 
     for (size_t i = 0; i < num_rows; i += 2) {
         ASSERT_EQ(frame.row_count(), num_rows);
-        auto val1 = frame.scalar_at<uint32_t>(i, 1);
+        auto val1 = frame.scalar_at<uint32_t>(i, 1u);
         ASSERT_EQ(val1, i + 1);
-        auto val2 = frame.scalar_at<uint64_t>(i, 2);
+        auto val2 = frame.scalar_at<uint64_t>(i, 2u);
         ASSERT_EQ(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1u);
         ASSERT_EQ(val3, 0);
-        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
+        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2u);
         ASSERT_EQ(val4, i + 2);
     }
 }
@@ -548,13 +548,13 @@ TEST_F(SparseTestStore, Segment) {
 
     for (size_t i = 0; i < num_rows; i += 2) {
         ASSERT_EQ(frame.row_count(), num_rows);
-        auto val1 = frame.scalar_at<uint32_t>(i, 1);
+        auto val1 = frame.scalar_at<uint32_t>(i, 1u);
         ASSERT_EQ(val1, i + 1);
-        auto val2 = frame.scalar_at<uint64_t>(i, 2);
+        auto val2 = frame.scalar_at<uint64_t>(i, 2u);
         ASSERT_EQ(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1u);
         ASSERT_EQ(val3, 0);
-        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
+        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2u);
         ASSERT_EQ(val4, i + 2);
     }
 }
@@ -617,13 +617,13 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
 
     ASSERT_EQ(frame.row_count(), num_rows);
     for (size_t i = 0; i < num_rows; i += 2) {
-        auto val1 = frame.scalar_at<uint32_t>(i, 1);
+        auto val1 = frame.scalar_at<uint32_t>(i, 1u);
         check_value(val1, i + 1);
-        auto val2 = frame.scalar_at<uint64_t>(i, 2);
+        auto val2 = frame.scalar_at<uint64_t>(i, 2u);
         check_value(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1u);
         check_value(val3, 0);
-        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
+        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2u);
         check_value(val4, i + 2);
     }
 }
@@ -688,9 +688,9 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     ASSERT_EQ(frame.descriptor().field_count(), 2);
 
     for (size_t i = 0; i < num_rows; i += 2) {
-        auto val1 = frame.scalar_at<uint32_t>(i, 1);
+        auto val1 = frame.scalar_at<uint32_t>(i, 1u);
         ASSERT_EQ(val1, i + 1);
-        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1u);
         ASSERT_EQ(val3, 0);
     }
 }
@@ -752,13 +752,13 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
 
     ASSERT_EQ(frame.row_count(), 4000);
     for (size_t i = 0; i < frame.row_count(); i += 2) {
-        auto val1 = frame.scalar_at<uint32_t>(i, 1);
+        auto val1 = frame.scalar_at<uint32_t>(i, 1u);
         ASSERT_EQ(val1, i + 3001);
-        auto val2 = frame.scalar_at<uint64_t>(i, 2);
+        auto val2 = frame.scalar_at<uint64_t>(i, 2u);
         ASSERT_EQ(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1u);
         ASSERT_EQ(val3, 0);
-        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
+        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2u);
         ASSERT_EQ(val4, i + 3002);
     }
 }
@@ -812,13 +812,13 @@ TEST_F(SparseTestStore, Compact) {
 
     ASSERT_EQ(frame.row_count(), num_rows);
     for (size_t i = 0; i < num_rows; i += 2) {
-        auto val1 = frame.scalar_at<uint32_t>(i, 1);
+        auto val1 = frame.scalar_at<uint32_t>(i, 1u);
         ASSERT_EQ(val1, i + 1);
-        auto val2 = frame.scalar_at<uint64_t>(i, 2);
+        auto val2 = frame.scalar_at<uint64_t>(i, 2u);
         ASSERT_EQ(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1u);
         ASSERT_EQ(val3, 0);
-        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
+        auto val4 = frame.scalar_at<uint64_t>(i + 1, 2u);
         ASSERT_EQ(val4, i + 2);
     }
 }
@@ -877,20 +877,20 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     ASSERT_EQ(frame.row_count(), num_rows);
 
     for (size_t i = 0; i < num_rows; i += 2) {
-        auto val1 = frame.scalar_at<PyObject*>(i, 1);
+        auto val1 = frame.scalar_at<PyObject*>(i, 1u);
         std::optional<ScopedGILLock> scoped_gil_lock;
         auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
         auto expected = fmt::format("{}", i + 1);
         ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
         ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, expected.data()), 0);
 
-        auto val2 = frame.string_at(i, 2);
+        auto val2 = frame.string_at(i, 2u);
         ASSERT_EQ(val2.value()[0], char{0});
 
-        auto val3 = frame.scalar_at<PyObject*>(i + 1, 1);
+        auto val3 = frame.scalar_at<PyObject*>(i + 1, 1u);
         ASSERT_TRUE(is_py_none(val3.value()));
 
-        auto val4 = frame.string_at(i + 1, 2);
+        auto val4 = frame.string_at(i + 1, 2u);
 
         expected = fmt::format("{}", i + 2);
         ASSERT_EQ(strncmp(val4.value().data(), expected.data(), expected.size()), 0);

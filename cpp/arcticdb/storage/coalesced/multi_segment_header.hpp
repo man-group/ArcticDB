@@ -91,7 +91,7 @@ class MultiSegmentHeader {
         segment_.end_row();
     }
 
-    void sort() { segment_.sort(0); }
+    void sort() { segment_.sort(0u); }
 
     [[nodiscard]] const SegmentInMemory& segment() const { return segment_; }
 
@@ -99,7 +99,7 @@ class MultiSegmentHeader {
 
     [[nodiscard]] std::optional<std::pair<size_t, size_t>> get_offset_for_key(const AtomKey& key) const {
         ARCTICDB_DEBUG(log::storage(), "Multi segment header searching for key {}", key);
-        const auto& time_symbol_column = segment_.column(0);
+        const auto& time_symbol_column = segment_.column(0u);
         const auto time_symbol = time_symbol_from_key(key);
         auto start_pos = std::lower_bound(
                 time_symbol_column.begin<TimeSymbolTag>(), time_symbol_column.end<TimeSymbolTag>(), time_symbol.data()

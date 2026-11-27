@@ -23,8 +23,8 @@ static SegmentInMemory get_segment_for_merge(const StreamId& id, size_t num_rows
             get_test_descriptor<stream::TimeseriesIndex>(id, std::array{scalar_field(DataType::UINT8, "column")}),
             num_rows
     };
-    auto& index_col = segment.column(0);
-    auto& value_col = segment.column(1);
+    auto& index_col = segment.column(0u);
+    auto& value_col = segment.column(1u);
     for (auto i = 0u; i < num_rows; ++i) {
         index_col.push_back(static_cast<int64_t>(start + i * step));
         value_col.push_back(static_cast<uint8_t>(i));
