@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <limits>
 #include <type_traits>
 
 TEST(MemSegment, Empty) {
@@ -30,6 +31,17 @@ TEST(MemSegment, Empty) {
     ASSERT_NO_THROW(s.clear());
     // Even though this index is out of bounds it will not throw as there are no columns to visit
     //    ASSERT_NO_THROW(s.visit(5, [] (auto&& ) { std::cout << "testing" << std::endl;}));
+}
+
+TEST(MemSegment, ColumnIndexOutOfBounds) {
+    using namespace arcticdb;
+
+    auto frame_wrapper = get_test_timeseries_frame("test_column_index_out_of_bounds", 10, 0);
+    auto& segment = frame_wrapper.segment_;
+    ASSERT_GT(segment.num_columns(), 0u);
+    ASSERT_NO_THROW(segment.column(segment.num_columns() - 1));
+    ASSERT_THROW(segment.column(segment.num_columns()), ArcticCategorizedException<ErrorCategory::INTERNAL>);
+    ASSERT_THROW(segment.column(std::numeric_limits<size_t>::max()), ArcticCategorizedException<ErrorCategory::INTERNAL>);
 }
 
 template<typename TDT>
