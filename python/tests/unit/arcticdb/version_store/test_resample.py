@@ -68,6 +68,33 @@ def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_
     assert_frame_equal(expected, received, check_dtype=False)
 
 
+@pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Pandas < 1.3.0 do not support end_day")
+@pytest.mark.parametrize("label", ["left", "right"])
+def test_resample_dynamic_schema_empty_reference(lmdb_version_store_dynamic_schema_v1, any_output_format, label):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_resample_dynamic_schema_empty_reference"
+    data = pd.DataFrame(
+        {"col": np.array([0], dtype=np.int8), "_empty_bucket_tracker_": np.array([0], dtype=np.int64)},
+        index=pd.DatetimeIndex(["1960-01-01 00:00:01"], name="index"),
+    )
+    lib.append(sym, data)
+    expected_types = {f"to_{agg}": expected_aggregation_type(agg, [data], "col") for agg in ALL_AGGREGATIONS}
+    generic_resample_test(
+        lib,
+        sym,
+        "1min",
+        all_aggregations_dict("col"),
+        data,
+        closed="right",
+        label=label,
+        offset="1s",
+        origin="end_day",
+        drop_empty_buckets_for="_empty_bucket_tracker_",
+        expected_types=expected_types,
+    )
+
+
 @pytest.mark.parametrize("freq", ("min", "h", "D", "1h30min"))
 @pytest.mark.parametrize(
     "date_range", (None, (pd.Timestamp("2024-01-02T12:00:00"), pd.Timestamp("2024-01-03T12:00:00")))
