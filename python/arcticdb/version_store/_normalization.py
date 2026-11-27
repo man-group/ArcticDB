@@ -1372,12 +1372,17 @@ class MsgPackNormalizer(Normalizer):
     Fall back plan for the time being to store arbitrary data
     """
 
-    def __init__(self, cfg=None):
+    def __init__(self, cfg: Optional[VersionStoreConfig.MsgPack] = None):
+        """
+        Parameters
+        ----------
+        cfg : VersionStoreConfig.MsgPack
+            The VersionStoreConfig.MsgPack protobuf object
+        """
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
-    def normalize(self, obj, **kwargs):
-        disallow_pickle = kwargs.get("disallow_pickle", None)
-        packed, nbytes = self._msgpack_padded_packb(obj, disallow_pickle=disallow_pickle)
+    def normalize(self, obj, enable_python_native_pickling=None):
+        packed, nbytes = self._msgpack_padded_packb(obj, enable_python_native_pickling=enable_python_native_pickling)
 
         norm_meta = NormalizationMetadata()
         norm_meta.msg_pack_frame.version = 1
@@ -1412,7 +1417,7 @@ class MsgPackNormalizer(Normalizer):
         col_data = np_arr.view(np.uint8)[:sb]
         return self._msgpack_unpackb(memoryview(col_data))
 
-    def _custom_pack(self, obj, disallow_pickle=None):
+    def _custom_pack(self, obj, enable_python_native_pickling=True):
         if isinstance(obj, pd.Timestamp):
             tz = _ensure_str_timezone(get_timezone(obj.tz)) if obj.tz is not None else None
             return ExtType(MsgPackSerialization.PD_TIMESTAMP, packb([obj.value, tz]))
@@ -1423,10 +1428,10 @@ class MsgPackNormalizer(Normalizer):
         if isinstance(obj, datetime.timedelta):
             return ExtType(MsgPackSerialization.PY_TIMEDELTA, packb(pd.Timedelta(obj).value))
 
-        if disallow_pickle:
-            raise TypeError("Normalizing data by pickling has been disabled.")
-        else:
+        if enable_python_native_pickling:
             return ExtType(MsgPackSerialization.PY_PICKLE_3, packb(Pickler.write(obj)))
+        else:
+            raise TypeError("Normalizing data by pickling has been disabled.")
 
     def _ext_hook(self, code, data):
         if code == MsgPackSerialization.PD_TIMESTAMP:
@@ -1456,19 +1461,27 @@ class MsgPackNormalizer(Normalizer):
 
         return ExtType(code, data)
 
-    def _should_disallow_pickle(self, disallow_pickle):
-        # `disallow_pickle` set by function parameter, has priority
+    def _is_python_native_pickling_enabled(self, enable_python_native_pickling):
+        # `enable_python_native_pickling` set by function parameter, has priority
         # Otherwise fallback to library option `strict_mode`
-        return self.strict_mode if disallow_pickle is None else disallow_pickle
+        return not self.strict_mode if enable_python_native_pickling is None else enable_python_native_pickling
 
-    def _msgpack_packb(self, obj, disallow_pickle=None):
+    def _msgpack_packb(self, obj, enable_python_native_pickling=None):
         return packb(
-            obj, default=partial(self._custom_pack, disallow_pickle=self._should_disallow_pickle(disallow_pickle))
+            obj,
+            default=partial(
+                self._custom_pack,
+                enable_python_native_pickling=self._is_python_native_pickling_enabled(enable_python_native_pickling),
+            ),
         )
 
-    def _msgpack_padded_packb(self, obj, disallow_pickle=None):
+    def _msgpack_padded_packb(self, obj, enable_python_native_pickling=None):
         return padded_packb(
-            obj, default=partial(self._custom_pack, disallow_pickle=self._should_disallow_pickle(disallow_pickle))
+            obj,
+            default=partial(
+                self._custom_pack,
+                enable_python_native_pickling=self._is_python_native_pickling_enabled(enable_python_native_pickling),
+            ),
         )
 
     def _msgpack_unpackb(self, buff, raw=False):
@@ -1533,41 +1546,13 @@ class TimeFrameNormalizer(Normalizer):
         )
 
 
-class KnownTypeFallbackOnError(Normalizer):
-    def __init__(self, delegate, nfh):
-        # type: (Normalizer, Normalizer)->None
-        self._delegate = delegate
-        self._failure_handler = nfh
-
-    def set_skip_df_consolidation(self):
-        if isinstance(self._delegate, DataFrameNormalizer):
-            self._delegate.set_skip_df_consolidation()
-
-    def normalize(self, item, **kwargs):
-        try:
-            return self._delegate.normalize(item, **kwargs)
-        except:
-            log.error("First class type({}) normalization failed, falling back to generic serialization.", type(item))
-            log.debug("item {}:", item)
-            return self._failure_handler.normalize(item, **kwargs)
-
-    def denormalize(self, item, norm_meta):
-        return self._delegate.denormalize(item, norm_meta)
-
-
 class CompositeNormalizer(Normalizer):
-    def __init__(self, fallback_normalizer=None, use_norm_failure_handler_known_types=False):
+    def __init__(self, fallback_normalizer=None):
         self.df = DataFrameNormalizer()
         self.series = SeriesNormalizer()
         self.tf = TimeFrameNormalizer()
         self.np = NdArrayNormalizer()
         self.pa = ArrowTableNormalizer()
-
-        if use_norm_failure_handler_known_types and fallback_normalizer is not None:
-            self.df = KnownTypeFallbackOnError(self.df, fallback_normalizer)
-            self.series = KnownTypeFallbackOnError(self.series, fallback_normalizer)
-            self.tf = KnownTypeFallbackOnError(self.tf, fallback_normalizer)
-            self.np = KnownTypeFallbackOnError(self.np, fallback_normalizer)
 
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer
@@ -1583,6 +1568,7 @@ class CompositeNormalizer(Normalizer):
         coerce_columns=None,
         empty_types=False,
         index_column=False,
+        enable_python_native_pickling=None,
         **kwargs,
     ):
         normalizer = self.get_normalizer_for_type(item)
@@ -1591,6 +1577,8 @@ class CompositeNormalizer(Normalizer):
             return item, None
 
         log.debug("Normalizer used: {}".format(normalizer))
+        if self.fallback_normalizer is not None and normalizer == self.fallback_normalizer.normalize:
+            return normalizer(item, enable_python_native_pickling=enable_python_native_pickling)
         return normalizer(
             item,
             string_max_len=string_max_len,
@@ -1604,22 +1592,9 @@ class CompositeNormalizer(Normalizer):
     def get_normalizer_for_type(self, item):
         # TODO: this should use customcompositenormalizer as well.
         if isinstance(item, DataFrame):
-            if (
-                item.empty
-                and not isinstance(self.df, KnownTypeFallbackOnError)
-                and self.fallback_normalizer is not None
-            ):
-                return KnownTypeFallbackOnError(self.df, self.fallback_normalizer).normalize
             return self.df.normalize
 
         if isinstance(item, Series):
-            if (
-                item.empty
-                and not isinstance(self.series, KnownTypeFallbackOnError)
-                and self.fallback_normalizer is not None
-            ):
-                return KnownTypeFallbackOnError(self.series, self.fallback_normalizer).normalize
-
             return self.series.normalize
 
         if isinstance(item, TimeFrame):
@@ -1645,6 +1620,7 @@ class CompositeNormalizer(Normalizer):
         dynamic_strings=False,
         coerce_columns=None,
         empty_types=False,
+        enable_python_native_pickling=None,
         **kwargs,
     ):
         """
@@ -1661,13 +1637,16 @@ class CompositeNormalizer(Normalizer):
                 dynamic_strings=dynamic_strings,
                 coerce_columns=coerce_columns,
                 empty_types=empty_types,
+                enable_python_native_pickling=enable_python_native_pickling,
                 **kwargs,
             )
         except Exception as ex:
             log.debug("Could not normalize item of type: {} with the default normalizer due to {}", type(item), ex)
             if pickle_on_failure:
                 log.debug("pickle_on_failure flag set, normalizing the item with MsgPackNormalizer", type(item), ex)
-                return self.fallback_normalizer.normalize(item)
+                return self.fallback_normalizer.normalize(
+                    item, enable_python_native_pickling=enable_python_native_pickling
+                )
             else:
                 raise
 
@@ -1756,7 +1735,9 @@ def normalize_recursive_metastruct(metastruct: Dict[Any, Any]) -> UserDefinedMet
     meta_structure_v2 = get_config_int("VersionStore.RecursiveNormalizerMetastructure") != 1
 
     # Prevent arbitrary large object serialization, as it is indicative of a poor data layout
-    packed = _msgpack_metadata._msgpack_packb(metastruct, disallow_pickle=True if meta_structure_v2 else None)
+    packed = _msgpack_metadata._msgpack_packb(
+        metastruct, enable_python_native_pickling=False if meta_structure_v2 else None
+    )
     size = len(packed)
     if size > _MAX_RECURSIVE_METASTRUCT:
         raise ArcticDbNotYetImplemented(

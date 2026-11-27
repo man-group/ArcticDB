@@ -402,21 +402,28 @@ class NativeVersionStore:
         self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg, runtime_options)
 
     def _init_norm_failure_handler(self):
-        # init normalization failure handler
-        nfh = self._cfg.WhichOneof("norm_failure_handler") if self._cfg is not None else None
-        if nfh is None or nfh == "msg_pack":
-            if nfh is not None:
-                nfh = getattr(self._cfg, nfh, None)
+        self._normalizer = CompositeNormalizer(self._get_normalization_failure_handler())
 
-            use_norm_failure_handler_known_types = (
-                self._cfg.use_norm_failure_handler_known_types if self._cfg is not None else False
-            )
-
-            self._normalizer = CompositeNormalizer(
-                MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
-            )
-        else:
+    def _get_normalization_failure_handler(self):
+        selected_normalization_failure_handler_id = (
+            self._cfg.WhichOneof("norm_failure_handler") if self._cfg is not None else None
+        )
+        if not NativeVersionStore._is_normalization_failure_handler_allowed(selected_normalization_failure_handler_id):
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
+        normalization_failure_handler_options = (
+            None
+            if selected_normalization_failure_handler_id is None
+            else getattr(self._cfg, selected_normalization_failure_handler_id, None)
+        )
+        return MsgPackNormalizer(normalization_failure_handler_options)
+
+    @staticmethod
+    def _is_normalization_failure_handler_allowed(normalization_failure_handler_id):
+        allowed_normalization_failure_handlers = ["msg_pack"]
+        return (
+            normalization_failure_handler_id is None
+            or normalization_failure_handler_id in allowed_normalization_failure_handlers
+        )
 
     def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None, runtime_options=None):
         self._library = library
@@ -582,7 +589,7 @@ class NativeVersionStore:
         coerce_columns,
         norm_failure_options_msg="",
         index_column=False,
-        recursive_normalize_msgpack_no_pickle_fallback=None,
+        enable_python_native_pickling=None,
         **kwargs,
     ):
         dynamic_schema = resolve_defaults(
@@ -594,7 +601,11 @@ class NativeVersionStore:
             opt_custom = self._custom_normalizer.normalize(dataframe)
             if opt_custom is not None:
                 item, custom_norm_meta = opt_custom
-                item, norm_meta = self._normalizer.normalize(item)
+                item, norm_meta = self._normalizer.normalize(
+                    item,
+                    pickle_on_failure=pickle_on_failure,
+                    enable_python_native_pickling=enable_python_native_pickling,
+                )
                 norm_meta.custom.CopyFrom(custom_norm_meta)
             else:
                 item, norm_meta = self._normalizer.normalize(
@@ -605,7 +616,7 @@ class NativeVersionStore:
                     dynamic_schema=dynamic_schema,
                     empty_types=empty_types,
                     index_column=index_column,
-                    disallow_pickle=recursive_normalize_msgpack_no_pickle_fallback,
+                    enable_python_native_pickling=enable_python_native_pickling,
                     **kwargs,
                 )
         except ArcticDbNotYetImplemented as ex:
@@ -642,7 +653,7 @@ class NativeVersionStore:
         pickle_on_failure,
         dynamic_strings,
         prune_previous,
-        recursive_normalize_msgpack_no_pickle_fallback,
+        enable_python_native_pickling,
     ):
         is_recursive_normalize_preferred, metastruct, to_write = self._try_flatten(data, symbol)
         if is_recursive_normalize_preferred:
@@ -656,7 +667,7 @@ class NativeVersionStore:
                     pickle_on_failure,
                     dynamic_strings,
                     None,
-                    recursive_normalize_msgpack_no_pickle_fallback=recursive_normalize_msgpack_no_pickle_fallback,
+                    enable_python_native_pickling=enable_python_native_pickling,
                 )
                 items.append(item)
                 norm_metas.append(norm_meta)
@@ -849,7 +860,7 @@ class NativeVersionStore:
                 "parallel",
                 "incomplete",
                 "recursive_normalizers",
-                "recursive_normalize_msgpack_no_pickle_fallback",
+                "enable_python_native_pickling",
                 "coerce_columns",
                 "sparsify_floats",
                 "norm_failure_options_msg",
@@ -860,8 +871,8 @@ class NativeVersionStore:
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
 
-        pickle_on_failure = resolve_defaults(
-            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
+        pickle_on_failure = self._resolve_pickle_on_failure(
+            self._cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
@@ -869,9 +880,7 @@ class NativeVersionStore:
         parallel = resolve_defaults("parallel", proto_cfg, global_default=False, uppercase=False, **kwargs)
         incomplete = resolve_defaults("incomplete", proto_cfg, global_default=False, uppercase=False, **kwargs)
         recursive_normalizers = self._is_recursive_normalizers_enabled(**kwargs)
-        recursive_normalize_msgpack_no_pickle_fallback = kwargs.get(
-            "recursive_normalize_msgpack_no_pickle_fallback", None
-        )
+        enable_python_native_pickling = kwargs.get("enable_python_native_pickling", None)
 
         # TODO remove me when dynamic strings is the default everywhere
         if parallel:
@@ -899,7 +908,7 @@ class NativeVersionStore:
                 pickle_on_failure,
                 dynamic_strings,
                 prune_previous_version,
-                recursive_normalize_msgpack_no_pickle_fallback,
+                enable_python_native_pickling,
             )
             if isinstance(vit, VersionedItem):
                 return vit
@@ -913,7 +922,7 @@ class NativeVersionStore:
             coerce_columns,
             norm_failure_options_msg,
             index_column,
-            recursive_normalize_msgpack_no_pickle_fallback,
+            enable_python_native_pickling,
         )
         if self._valid_item_type(item):
             if parallel or incomplete:
@@ -934,6 +943,26 @@ class NativeVersionStore:
             return self._convert_thin_cxx_item_to_python(vit, metadata)
         else:
             log.warning("The data could not be normalized to an ArcticDB format and has not been written")
+
+    @staticmethod
+    def _resolve_pickle_on_failure(proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
+        if existing_value is not None:
+            return existing_value
+
+        param_value = kwargs.get("pickle_on_failure")
+        if param_value is not None:
+            return param_value
+
+        env_value = os.getenv("PICKLE_ON_FAILURE" if uppercase else "pickle_on_failure")
+        if env_value is not None:
+            return env_value not in ("", "0") and not env_value.lower().startswith("f")
+
+        # For legacy reasons there were two protobuf fields with different names. use_norm_failure_handler_known_types
+        # has a public API, so it is the correct one to check.
+        if proto_cfg is not None:
+            return proto_cfg.use_norm_failure_handler_known_types
+
+        return global_default
 
     def _resolve_dynamic_strings(self, kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1970,8 +1999,8 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = resolve_defaults(
-            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
+        pickle_on_failure = self._resolve_pickle_on_failure(
+            self._cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
@@ -3773,11 +3802,11 @@ class NativeVersionStore:
                 dynamic_strings=False,  # TODO: Enable it when on by default.
                 coerce_columns=None,
             )
+            result = norm_meta.WhichOneof("input_type") == "msg_pack_frame"
         except Exception:
             # This will also log the exception inside composite normalizer's normalize
             result = True
 
-        result |= norm_meta.WhichOneof("input_type") == "msg_pack_frame"
         log_warning_message = get_config_int("VersionStore.WillItemBePickledWarningMsg") != 0 and log.is_active(
             _LogLevel.WARN
         )

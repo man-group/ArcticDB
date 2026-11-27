@@ -20,6 +20,7 @@ import dateutil as du
 import pytest
 import pytz
 from arcticdb_ext.types import IndexKind
+from arcticdb.version_store.library import Library
 
 if sys.version_info >= (3, 9):
     import zoneinfo
@@ -40,6 +41,7 @@ from arcticdb.version_store._custom_normalizers import (
     get_custom_normalizer,
     clear_registered_normalizers,
     CompositeCustomNormalizer,
+    CustomNormalizer,
 )
 from arcticdb.version_store._normalization import (
     BlockManagerUnconsolidated,
@@ -272,6 +274,181 @@ def test_empty_df():
     assert_frame_equal(d, D)
 
 
+@pytest.mark.parametrize("use_norm_failure_handler_known_types", [True, False])
+@pytest.mark.parametrize("api", ["v1", "v2"])
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(),
+        pd.DataFrame({"a": []}),
+        pd.DataFrame(columns=[None]),
+        pd.DataFrame(columns=[pd.NaT]),
+        pd.DataFrame(columns=[np.nan]),
+    ],
+)
+def test_write_empty_df_is_not_pickled(in_memory_store_factory, use_norm_failure_handler_known_types, api, df):
+    lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types)
+    lib = lib if api == "v1" else Library("test_write_empty_df_is_not_pickled", lib)
+    lib.write("test", df)
+    is_pickled = lib.is_symbol_pickled("test") if api == "v1" else lib._nvs.is_symbol_pickled("test")
+    assert is_pickled == False
+
+
+@pytest.mark.parametrize("use_norm_failure_handler_known_types", [True, False])
+@pytest.mark.parametrize("api", ["v1", "v2"])
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(columns=[pd.Timestamp("2026-10-10")]),
+        pd.DataFrame([[1.0]], columns=[pd.Timestamp("2026-10-10")]),
+        pd.DataFrame(
+            np.arange(0, 9).reshape(3, 3),
+            index=pd.date_range("2025-01-01", "2025-01-3"),
+            columns=pd.date_range("2025-01-01", "2025-01-3"),
+        ),
+    ],
+    ids=["empty", "non-empty", "multiindex"],
+)
+def test_non_normalizable_column_names_require_pickling(
+    in_memory_store_factory, use_norm_failure_handler_known_types, api, df
+):
+    """
+    When the dataframe contains columns whose name is not normalizable (not a string, int or None) it must be pickled.
+    Make sure that if the global option is not set pickling does not happen. Older version of ArcticDB (pre v7) used
+    to unconditionally allow pickling of empty dataframes with non-normalizable names. V2 API's write allows only
+    msgpack and does not allow python pickling
+    """
+    lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types)
+    assert lib.will_item_be_pickled(df)
+    lib = lib if api == "v1" else Library("test_non_normalizable_column_names_require_pickling", lib)
+    is_python_pickling_allowed_on_write = use_norm_failure_handler_known_types and api == "v1"
+    if is_python_pickling_allowed_on_write:
+        lib.write("test", df)
+    else:
+        with pytest.raises(ArcticException, match="normalizing"):
+            lib.write("test", df)
+
+
+@pytest.mark.parametrize("use_norm_failure_handler_known_types_lib_config", [True, False])
+@pytest.mark.parametrize("use_norm_failure_handler_known_types_env_var", ["1", "0", None])
+@pytest.mark.parametrize("pickle_on_failure_env_var", ["1", "0", None])
+@pytest.mark.parametrize("pickle_on_failure_kwarg", [True, False, None])
+@pytest.mark.parametrize("data_kind", ["dataframe", "recursive_leaf"])
+def test_pickle_on_failure_precedence(
+    in_memory_store_factory,
+    monkeypatch,
+    use_norm_failure_handler_known_types_lib_config,
+    use_norm_failure_handler_known_types_env_var,
+    pickle_on_failure_env_var,
+    pickle_on_failure_kwarg,
+    data_kind,
+):
+    """Precedence is kwarg > PICKLE_ON_FAILURE env var > library's use_norm_failure_handler_known_types."""
+    if use_norm_failure_handler_known_types_env_var is not None:
+        # There is no such env var, setting it must have no effect
+        monkeypatch.setenv("USE_NORM_FAILURE_HANDLER_KNOWN_TYPES", use_norm_failure_handler_known_types_env_var)
+    if pickle_on_failure_env_var is not None:
+        monkeypatch.setenv("PICKLE_ON_FAILURE", pickle_on_failure_env_var)
+    lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types_lib_config)
+
+    if pickle_on_failure_kwarg is not None:
+        expect_pickling = pickle_on_failure_kwarg
+    elif pickle_on_failure_env_var is not None:
+        expect_pickling = pickle_on_failure_env_var == "1"
+    else:
+        expect_pickling = use_norm_failure_handler_known_types_lib_config
+
+    df = pd.DataFrame([[1.0]], columns=[pd.Timestamp("2026-10-10")])
+    if data_kind == "dataframe":
+        data, kwargs, expected_type = df, {}, "pickled"
+    else:
+        data, kwargs, expected_type = {"key": df}, {"recursive_normalizers": True}, "recursive_normalized"
+
+    if expect_pickling:
+        lib.write("sym", data, pickle_on_failure=pickle_on_failure_kwarg, **kwargs)
+        assert lib.get_info("sym")["type"] == expected_type
+    else:
+        with pytest.raises(ArcticException, match="normalizing"):
+            lib.write("sym", data, pickle_on_failure=pickle_on_failure_kwarg, **kwargs)
+        assert not lib.has_symbol("sym")
+
+
+class _UnnormalizableDfThing:
+    def __init__(self, value):
+        self.value = value
+
+
+class _UnnormalizableDfNormalizer(CustomNormalizer):
+    """Converts to a DataFrame which the native DataFrameNormalizer rejects (Timestamp column name)."""
+
+    def normalize(self, item, **kwargs):
+        if isinstance(item, _UnnormalizableDfThing):
+            df = pd.DataFrame([[item.value]], columns=[pd.Timestamp("2026-10-10")])
+            return df, descriptors_pb2.NormalizationMetadata.CustomNormalizerMeta()
+
+    def denormalize(self, item, norm_meta):
+        return _UnnormalizableDfThing(item.iloc[0, 0])
+
+
+@pytest.fixture
+def unnormalizable_df_custom_normalizer():
+    register_normalizer(_UnnormalizableDfNormalizer())
+    try:
+        yield
+    finally:
+        clear_registered_normalizers()
+
+
+@pytest.mark.parametrize("use_norm_failure_handler_known_types_lib_config", [True, False])
+@pytest.mark.parametrize("pickle_on_failure_env_var", ["1", "0", None])
+@pytest.mark.parametrize("pickle_on_failure_kwarg", [True, False, None])
+def test_custom_normalizer_pickle_on_failure_precedence(
+    unnormalizable_df_custom_normalizer,
+    in_memory_store_factory,
+    monkeypatch,
+    use_norm_failure_handler_known_types_lib_config,
+    pickle_on_failure_env_var,
+    pickle_on_failure_kwarg,
+):
+    """The output of a custom normalizer goes through the native normalizers, so it is subject to pickle_on_failure."""
+    if pickle_on_failure_env_var is not None:
+        monkeypatch.setenv("PICKLE_ON_FAILURE", pickle_on_failure_env_var)
+    lib = in_memory_store_factory(use_norm_failure_handler_known_types=use_norm_failure_handler_known_types_lib_config)
+
+    if pickle_on_failure_kwarg is not None:
+        expect_pickling = pickle_on_failure_kwarg
+    elif pickle_on_failure_env_var is not None:
+        expect_pickling = pickle_on_failure_env_var == "1"
+    else:
+        expect_pickling = use_norm_failure_handler_known_types_lib_config
+
+    if expect_pickling:
+        lib.write("sym", _UnnormalizableDfThing(1.0), pickle_on_failure=pickle_on_failure_kwarg)
+        assert lib.is_symbol_pickled("sym")
+    else:
+        with pytest.raises(ArcticException, match="normalizing"):
+            lib.write("sym", _UnnormalizableDfThing(1.0), pickle_on_failure=pickle_on_failure_kwarg)
+        assert not lib.has_symbol("sym")
+
+
+@pytest.mark.parametrize("enable_python_native_pickling", [True, False, None])
+def test_custom_normalizer_pickle_on_failure_respects_enable_python_native_pickling(
+    unnormalizable_df_custom_normalizer, in_memory_store_factory, enable_python_native_pickling
+):
+    lib = in_memory_store_factory()
+    kwargs = {}
+    if enable_python_native_pickling is not None:
+        kwargs["enable_python_native_pickling"] = enable_python_native_pickling
+    # A DataFrame is not msgpack serializable, so the MsgPack fallback needs Python native pickling
+    if enable_python_native_pickling is False:
+        with pytest.raises(ArcticException):
+            lib.write("sym", _UnnormalizableDfThing(1.0), pickle_on_failure=True, **kwargs)
+        assert not lib.has_symbol("sym")
+    else:
+        lib.write("sym", _UnnormalizableDfThing(1.0), pickle_on_failure=True, **kwargs)
+        assert lib.is_symbol_pickled("sym")
+
+
 timezone_params = [
     "UTC",
     "Europe/Amsterdam",
@@ -423,7 +600,7 @@ def get_multiindex_df_with_tz(tz):
 @pytest.mark.parametrize("tz", [pytz.timezone("America/New_York"), pytz.UTC])
 def test_multiindex_with_tz(tz):
     d = get_multiindex_df_with_tz(tz)
-    norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(d)
     fd = FrameData.from_pandas_data(df)
     denorm = norm.denormalize(fd, norm_meta)
@@ -438,7 +615,7 @@ def test_multiindex_with_tz(tz):
 @pytest.mark.parametrize("tz", [pytz.timezone("America/New_York"), pytz.UTC])
 def test_empty_df_with_multiindex_with_tz(tz):
     orig_df = get_multiindex_df_with_tz(tz)
-    norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
     norm_df, norm_meta = norm.normalize(orig_df)
 
     # Slice the normalized df to an empty df (this can happen after date range slicing)
@@ -537,8 +714,8 @@ NT = namedtuple("NT", ["X", "Y"])
 
 def test_namedtuple_inside_df():
     d = pd.DataFrame({"A": [NT(1, "b"), NT(2, "a")]})
-    norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
-    df, norm_meta = norm.normalize(d)
+    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
+    df, norm_meta = norm.normalize(d, pickle_on_failure=True)
     fd = FrameData.from_pandas_data(df)
     denorm = norm.denormalize(fd, norm_meta)
     if pd.__version__.startswith("0"):
@@ -588,9 +765,8 @@ def test_serialize_custom_normalizer():
 def test_force_pickle_on_norm_failure():
     normal_df = pd.DataFrame({"a": [1, 2, 3]})
     mixed_type_df = pd.DataFrame({"a": [1, 2, "a"]})
-    # Turn off the global flag for the normalizer
-    norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
-    # This should work as before
+    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
+    # This should always work
     _d, _meta = norm.normalize(normal_df)
 
     # This should fail as the df has mixed type
@@ -600,14 +776,9 @@ def test_force_pickle_on_norm_failure():
     # Explicitly passing in pickle settings without global pickle flag being set should work
     _d, _meta = norm.normalize(mixed_type_df, pickle_on_failure=True)
 
-    norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
-
-    # Forcing it to pickle should work with the bool set.
-    _d, _meta = norm.normalize(mixed_type_df)
-
 
 def test_numpy_array_normalization_composite():
-    norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
     arr = np.random.rand(10, 10, 10)
     df, norm_meta = norm.normalize(arr)
     fd = FrameData.from_pandas_data(df)
@@ -671,7 +842,7 @@ def test_batch_read_numpy_string_array_with_arrow_backed_pandas_strings(lmdb_ver
 def test_dict_with_tuples():
     # This has to be pickled because msgpack doesn't differentiate between tuples and lists
     data = {(1, 2): [1, 24, 55]}
-    norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(data)
     fd = FrameData.from_pandas_data(df)
     denormalized_data = norm.denormalize(fd, norm_meta)
@@ -720,7 +891,7 @@ def test_will_item_pickled_msgpack(lmdb_version_store_v1):
 def test_numpy_ts_col_with_none(lmdb_version_store):
     df = pd.DataFrame(data={"a": [None, None]})
     df.loc[0, "a"] = pd.Timestamp(0)
-    norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(df)
     fd = FrameData.from_pandas_data(df)
     df_denormed = norm.denormalize(fd, norm_meta)
