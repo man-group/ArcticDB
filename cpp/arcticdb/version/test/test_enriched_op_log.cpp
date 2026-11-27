@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstring>
 #include <functional>
 #include <limits>
@@ -1055,11 +1056,10 @@ TEST(EnrichedOpLog, MalformedV2SegmentHeaderOverflowSparseMapAndOomRejected) {
         // 1. 32-bit wraparound in shapes_count_ + values_count_ (0xFFFF0000 + 0x00010000 wraps to 0 in uint32_t).
         {
             auto mutated = valid_bytes;
-            EncodedField ef{};
-            std::memcpy(&ef, mutated.data() + foff, EncodedFieldImpl::Size);
-            ef.shapes_count_ = 0xFFFF0000u;
-            ef.values_count_ = 0x00010000u;
-            std::memcpy(mutated.data() + foff, &ef, EncodedFieldImpl::Size);
+            const uint32_t shapes = 0xFFFF0000u;
+            const uint32_t values = 0x00010000u;
+            std::memcpy(mutated.data() + foff + offsetof(EncodedField, shapes_count_), &shapes, sizeof(shapes));
+            std::memcpy(mutated.data() + foff + offsetof(EncodedField, values_count_), &values, sizeof(values));
             EXPECT_FALSE(deserialize_segment_from_bytes(mutated).has_value());
         }
 
@@ -1067,21 +1067,20 @@ TEST(EnrichedOpLog, MalformedV2SegmentHeaderOverflowSparseMapAndOomRejected) {
         // OOB).
         for (uint32_t bad_sparse : {uint32_t{4}, uint32_t{12}}) {
             auto mutated = valid_bytes;
-            EncodedField ef{};
-            std::memcpy(&ef, mutated.data() + foff, EncodedFieldImpl::Size);
-            ef.sparse_map_bytes_ = bad_sparse;
-            std::memcpy(mutated.data() + foff, &ef, EncodedFieldImpl::Size);
+            std::memcpy(
+                    mutated.data() + foff + offsetof(EncodedField, sparse_map_bytes_), &bad_sparse, sizeof(bad_sparse)
+            );
             EXPECT_FALSE(deserialize_segment_from_bytes(mutated).has_value());
         }
 
         // 3. Unbounded in_bytes_ amplification (in_bytes_ = 0xFFFFFFFF, out_bytes_ = 0) rejected before allocation.
         {
             auto mutated = valid_bytes;
-            Block blk{};
-            std::memcpy(&blk, mutated.data() + foff + EncodedFieldImpl::Size, sizeof(Block));
-            blk.in_bytes_ = 0xFFFFFFFFu;
-            blk.out_bytes_ = 0u;
-            std::memcpy(mutated.data() + foff + EncodedFieldImpl::Size, &blk, sizeof(Block));
+            const uint32_t huge_in = 0xFFFFFFFFu;
+            const uint32_t zero_out = 0u;
+            const size_t blk_off = foff + EncodedFieldImpl::Size;
+            std::memcpy(mutated.data() + blk_off + offsetof(Block, in_bytes_), &huge_in, sizeof(huge_in));
+            std::memcpy(mutated.data() + blk_off + offsetof(Block, out_bytes_), &zero_out, sizeof(zero_out));
             EXPECT_FALSE(deserialize_segment_from_bytes(mutated).has_value());
         }
     }

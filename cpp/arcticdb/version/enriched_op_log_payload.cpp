@@ -18,6 +18,7 @@
 #include <xxhash.h>
 
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 
@@ -355,9 +356,12 @@ bool validate_v2_header_fields(const HeaderData& hdata, std::span<const uint8_t>
         if (field_pos > fields_bytes || fields_bytes - field_pos < EncodedFieldImpl::Size) {
             return false;
         }
-        EncodedField ef{};
-        std::memcpy(&ef, header_span.data() + sizeof(HeaderData) + field_pos, EncodedFieldImpl::Size);
-        const uint64_t total_blocks = uint64_t{ef.shapes_count_} + uint64_t{ef.values_count_};
+        uint32_t shapes_count = 0;
+        uint32_t values_count = 0;
+        const uint8_t* field_ptr = header_span.data() + sizeof(HeaderData) + field_pos;
+        std::memcpy(&shapes_count, field_ptr + offsetof(EncodedField, shapes_count_), sizeof(shapes_count));
+        std::memcpy(&values_count, field_ptr + offsetof(EncodedField, values_count_), sizeof(values_count));
+        const uint64_t total_blocks = uint64_t{shapes_count} + uint64_t{values_count};
         const size_t rem = fields_bytes - field_pos;
         if (total_blocks > static_cast<uint64_t>(std::numeric_limits<int>::max()) ||
             total_blocks > (rem - EncodedFieldImpl::Size) / sizeof(EncodedBlock) ||
