@@ -65,15 +65,21 @@ class TestStressTimeseriesMergeUpdate:
 
     @classmethod
     def setup_class(cls):
-        np.random.seed(102323)
-        random.seed(102323)
         cls.rows_per_segment = 100_000
         cls.cols_per_segment = 127
         cls.row_slices = 10
         cls.total_rows = cls.rows_per_segment * cls.row_slices
         cls.total_cols = 150
         cls.col_slices = math.ceil(cls.total_cols / cls.cols_per_segment)
-        cls.data = pd.DataFrame(
+
+    @pytest.fixture
+    def data(self):
+        # Built per test, not in setup_class: the ~600 MB frame then lives only inside the stress_heavy lock instead of
+        # once on every xdist worker that runs this class.
+        np.random.seed(102323)
+        random.seed(102323)
+        cls = self.__class__
+        return pd.DataFrame(
             {
                 f"col_{i}": np.random.randint(0, high=2**32, size=cls.total_rows, dtype=np.uint32).view(np.float32)
                 for i in range(cls.total_cols)
@@ -85,10 +91,10 @@ class TestStressTimeseriesMergeUpdate:
         "segments_to_update",
         [[0], [9], [5], [8, 9], [0, 1, 2], [2, 3, 4, 5], [0, 2, 4, 6, 8], [1, 3, 5, 7, 9], [1, 4, 5, 6, 9]],
     )
-    def test_merge_update(self, in_memory_store_factory, segments_to_update, clear_query_stats):
+    def test_merge_update(self, in_memory_store_factory, segments_to_update, clear_query_stats, data):
         lib = in_memory_store_factory()
-        lib.write("sym", self.__class__.data)
-        source = make_matching_source(self.__class__.data, segments_to_update, self.__class__.rows_per_segment)
+        lib.write("sym", data)
+        source = make_matching_source(data, segments_to_update, self.__class__.rows_per_segment)
         strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
         with qs.query_stats():
             lib.merge("sym", source, strategy=strategy, match_na=True)
@@ -100,19 +106,17 @@ class TestStressTimeseriesMergeUpdate:
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
 
         result = lib.read("sym").data
-        expected = merge(self.__class__.data, source, strategy=strategy)
+        expected = merge(data, source, strategy=strategy)
         assert_frame_equal(result, expected)
 
     @pytest.mark.parametrize("on_segments", [[], [1, 4, 5, 6, 9], [5, 6], [1, 9], [4, 5, 9]])
-    def test_merge_update_on(self, s3_version_store_v1, on_segments, clear_query_stats):
+    def test_merge_update_on(self, s3_version_store_v1, on_segments, clear_query_stats, data):
         segments_to_update = [1, 4, 5, 6, 9]
         on = ["col_1", "col_130"]
         qs.reset_stats()
         lib = s3_version_store_v1
-        lib.write("sym", self.__class__.data)
-        source = make_matching_source(
-            self.__class__.data, segments_to_update, self.__class__.rows_per_segment, on, on_segments
-        )
+        lib.write("sym", data)
+        source = make_matching_source(data, segments_to_update, self.__class__.rows_per_segment, on, on_segments)
         strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
         with qs.query_stats():
             lib.merge("sym", source, strategy=strategy, on=on, match_na=True)
@@ -130,5 +134,5 @@ class TestStressTimeseriesMergeUpdate:
         assert stats["storage_operations"]["S3_PutObject"]["TABLE_INDEX"]["count"] == 1
 
         result = lib.read("sym").data
-        expected = merge(self.__class__.data, source, strategy=strategy, on=on)
+        expected = merge(data, source, strategy=strategy, on=on)
         assert_frame_equal(result, expected)
